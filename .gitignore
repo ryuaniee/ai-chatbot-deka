@@ -1,0 +1,11 @@
+/project-1/
+/smartlock-deka/
+
+.DS_Store
+*.log
+
+chatbot-deka/ai-service/.env
+chatbot-deka/ai-service/.venv/
+chatbot-deka/ai-service/.ruff_cache/
+chatbot-deka/ai-service/__pycache__/
+chatbot-deka/ai-service/app/__pycache__/
