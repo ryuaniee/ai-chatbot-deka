@@ -8,11 +8,13 @@ Backend chatbot Deka saat ini sudah mencakup:
 - chat runtime backend
 - AI service internal
 - fallback model
+- kontrak redirect auth untuk admin dan user
 
 Status produk saat ini:
 
 - fondasi backend sudah siap
 - frontend custom belum dikerjakan di repo ini
+- starter frontend bawaan bukan fokus implementasi
 - knowledge khusus `deka.dev` belum di-ingest
 
 ## Stack
@@ -84,6 +86,7 @@ Aturan akses:
 - user baru otomatis mendapat role `user`
 - hanya `role=admin` yang bisa masuk panel admin
 - user biasa memakai auth API dan flow chat biasa
+- response auth menyertakan `redirect_to`
 
 ## Quick Start
 
@@ -142,6 +145,7 @@ Gunakan kontrak berikut:
 - ambil `GET /api/auth/csrf` sebelum flow auth jika dibutuhkan client flow
 - login/register memakai endpoint auth API yang sudah tersedia
 - gunakan field `role` dari response auth untuk memisahkan `admin` dan `user`
+- gunakan field `redirect_to` dari response auth sebagai target redirect final
 - user biasa diarahkan ke flow chat
 - admin diarahkan ke `/admin` jika memang memakai panel backend
 

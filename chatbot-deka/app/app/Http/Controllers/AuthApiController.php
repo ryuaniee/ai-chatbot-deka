@@ -39,6 +39,7 @@ class AuthApiController extends Controller
         return response()->json([
             'message' => 'Registration successful.',
             'user' => $this->userPayload($user),
+            'redirect_to' => $this->redirectPathFor($user),
         ], 201);
     }
 
@@ -63,6 +64,7 @@ class AuthApiController extends Controller
         return response()->json([
             'message' => 'Login successful.',
             'user' => $this->userPayload($user),
+            'redirect_to' => $this->redirectPathFor($user),
         ]);
     }
 
@@ -85,6 +87,7 @@ class AuthApiController extends Controller
 
         return response()->json([
             'user' => $this->userPayload($user),
+            'redirect_to' => $this->redirectPathFor($user),
         ]);
     }
 
@@ -103,5 +106,10 @@ class AuthApiController extends Controller
                 && $user->email_verified_at === null,
             'has_two_factor' => $user->two_factor_secret !== null,
         ];
+    }
+
+    private function redirectPathFor(User $user): string
+    {
+        return $user->isAdmin() ? '/admin' : '/chat';
     }
 }

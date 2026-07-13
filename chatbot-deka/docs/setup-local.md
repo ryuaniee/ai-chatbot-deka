@@ -7,6 +7,11 @@ Dokumen ini menjelaskan cara menjalankan project secara lokal dari nol sampai si
 - AI service
 - admin panel Filament
 
+Catatan:
+
+- repo ini difokuskan ke backend
+- frontend custom chat belum dikerjakan di repo ini
+
 ## 1. Gambaran Stack
 
 Project ini terdiri dari dua service utama:
@@ -245,6 +250,11 @@ Endpoint auth yang tersedia:
 - `GET /api/auth/me`
 - `POST /api/auth/logout`
 
+Field penting pada response auth:
+
+- `role`
+- `redirect_to`
+
 ### 8.1 Ambil CSRF Token
 
 ```bash
@@ -286,6 +296,11 @@ curl -i -b cookies.txt \
   -H "Accept: application/json" \
   http://127.0.0.1:8000/api/auth/me
 ```
+
+Perilaku response auth:
+
+- user biasa mendapat `redirect_to=/chat`
+- admin mendapat `redirect_to=/admin`
 
 ## 9. Tes AI Service Tanpa Frontend
 
@@ -379,6 +394,12 @@ Test auth API:
 php artisan test tests/Feature/AuthApiTest.php
 ```
 
+Test role helper:
+
+```bash
+php artisan test tests/Unit/UserRoleTest.php
+```
+
 Test chat:
 
 ```bash
@@ -388,7 +409,7 @@ php artisan test tests/Feature/ChatApiTest.php
 Test unit ringan:
 
 ```bash
-php artisan test tests/Unit/UserRoleTest.php tests/Unit/AiServiceClientTest.php
+php artisan test tests/Unit/AiServiceClientTest.php
 ```
 
 Catatan:
@@ -448,6 +469,7 @@ Penyebab umum:
 Solusi paling sederhana:
 
 - gunakan auth API JSON + cookie session
+- gunakan field `redirect_to` untuk menentukan redirect akhir
 - atau tes chat lewat `tinker`
 
 ### `MODEL_UNAVAILABLE`
@@ -499,6 +521,7 @@ Yang sudah siap dipakai lokal:
 - chat runtime backend
 - AI service internal
 - fallback model
+- redirect auth berbasis role
 
 Yang belum masuk tahap final:
 

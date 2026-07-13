@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
+Route::redirect('dashboard', '/chat')->name('dashboard');
 
 Route::prefix('api/auth')->name('api.auth.')->group(function () {
     Route::get('csrf', [\App\Http\Controllers\AuthApiController::class, 'csrf'])
@@ -26,7 +27,7 @@ Route::prefix('api/auth')->name('api.auth.')->group(function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('dashboard', 'dashboard')->name('dashboard');
+    Route::inertia('chat', 'dashboard')->name('chat');
 
     Route::prefix('api')->name('api.')->group(function () {
         Route::get('conversations', [\App\Http\Controllers\ConversationController::class, 'index'])
