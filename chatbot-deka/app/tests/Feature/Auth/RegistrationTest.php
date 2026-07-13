@@ -34,6 +34,21 @@ class RegistrationTest extends TestCase
         ]);
 
         $this->assertAuthenticated();
-        $response->assertRedirect(route('chat', absolute: false));
+        $response->assertRedirect(route('verification.notice', absolute: false));
+    }
+
+    public function test_new_users_are_not_redirected_to_admin_when_intended_url_points_to_admin(): void
+    {
+        $response = $this
+            ->withSession(['url.intended' => '/admin'])
+            ->post(route('register.store'), [
+                'name' => 'Test User',
+                'email' => 'test@example.com',
+                'password' => 'password',
+                'password_confirmation' => 'password',
+            ]);
+
+        $this->assertAuthenticated();
+        $response->assertRedirect(route('verification.notice', absolute: false));
     }
 }

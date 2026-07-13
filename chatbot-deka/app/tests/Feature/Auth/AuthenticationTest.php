@@ -32,6 +32,21 @@ class AuthenticationTest extends TestCase
         $response->assertRedirect(route('chat', absolute: false));
     }
 
+    public function test_users_are_not_redirected_to_admin_when_intended_url_points_to_admin(): void
+    {
+        $user = User::factory()->create();
+
+        $response = $this
+            ->withSession(['url.intended' => '/admin'])
+            ->post(route('login.store'), [
+                'email' => $user->email,
+                'password' => 'password',
+            ]);
+
+        $this->assertAuthenticatedAs($user);
+        $response->assertRedirect(route('chat', absolute: false));
+    }
+
     public function test_users_with_two_factor_enabled_are_redirected_to_two_factor_challenge()
     {
         $this->skipUnlessFortifyHas(Features::twoFactorAuthentication());

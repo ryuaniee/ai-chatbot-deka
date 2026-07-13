@@ -27,7 +27,7 @@ Route::prefix('api/auth')->name('api.auth.')->group(function () {
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::inertia('chat', 'dashboard')->name('chat');
+    Route::inertia('chat', 'chat')->name('chat');
 
     Route::prefix('api')->name('api.')->group(function () {
         Route::get('conversations', [\App\Http\Controllers\ConversationController::class, 'index'])
