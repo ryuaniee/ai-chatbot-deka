@@ -1,73 +1,161 @@
 # Chatbot Deka
 
-Setup awal project chatbot Deka dengan stack:
+Backend chatbot Deka saat ini sudah mencakup:
 
-- Laravel + Inertia React + shadcn/ui di `app/`
+- auth API berbasis session
+- role `admin` dan `user`
+- admin panel Filament
+- chat runtime backend
+- AI service internal
+- fallback model
+
+Status produk saat ini:
+
+- fondasi backend sudah siap
+- frontend custom belum dikerjakan di repo ini
+- knowledge khusus `deka.dev` belum di-ingest
+
+## Stack
+
+### Laravel App
+
+Lokasi:
+
+- `app/`
+
+Fungsi:
+
+- auth API
+- role `admin` dan `user`
+- admin panel Filament
+- workflow chat
+- persistence conversation dan message
+
+### AI Service
+
+Lokasi:
+
+- `ai-service/`
+
+Fungsi:
+
+- moderation
+- generate assistant response
+- generate conversation title
+- fallback model
+
+### Database
+
+Yang dipakai:
+
 - PostgreSQL via Docker Compose
-- FastAPI + LangChain Python di `ai-service/`
 
-Belum ada fitur frontend custom. Isi React yang ada hanya bawaan Laravel React starter kit.
+## Dokumentasi
 
-## Prasyarat
+Dokumen utama:
 
-- PHP 8.3+
-- Composer
-- Node.js + npm
-- Python 3.12+
-- uv
-- Docker
-- Ekstensi PHP `pdo_pgsql`
+- [Setup Local](docs/setup-local.md)
+- [Ringkasan Progres Backend](docs/backend-progress-summary.md)
+- [Arsitektur Backend Final](docs/deka-chatbot-backend-architecture.md)
 
-## Database
+## Status Backend
+
+Yang sudah ada:
+
+- `GET /api/auth/csrf`
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
+- `GET /api/conversations`
+- `POST /api/conversations`
+- `GET /api/conversations/{conversation}`
+- `POST /api/conversations/{conversation}/messages`
+- `GET /admin/login`
+- panel admin Filament di `/admin`
+
+Role yang dipakai hanya dua:
+
+- `admin`
+- `user`
+
+Aturan akses:
+
+- user baru otomatis mendapat role `user`
+- hanya `role=admin` yang bisa masuk panel admin
+- user biasa memakai auth API dan flow chat biasa
+
+## Quick Start
+
+### 1. Nyalakan Database
 
 ```bash
-cd chatbot-deka
-docker compose up -d postgres
+docker compose up -d
 ```
 
-Konfigurasi default:
-
-- Host: `127.0.0.1`
-- Port: `5433`
-- Database: `chatbot_deka`
-- Username: `chatbot_deka`
-- Password: `secret`
-
-## Laravel App
+### 2. Jalankan Laravel App
 
 ```bash
-cd chatbot-deka/app
+cd app
 cp .env.example .env
-php artisan key:generate
 composer install
 npm install
+php artisan key:generate
 php artisan migrate
-composer run dev
+php artisan db:seed --class=AdminUserSeeder
+php artisan serve
 ```
 
-`composer run dev` menjalankan Laravel server, queue listener, log watcher, dan Vite.
-
-## AI Service
+### 3. Jalankan AI Service
 
 ```bash
-cd chatbot-deka/ai-service
+cd ai-service
 cp .env.example .env
 uv sync
 uv run uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
 ```
 
-Cek service:
+### 4. Verifikasi
+
+Health check AI service:
 
 ```bash
 curl http://127.0.0.1:8001/health
 ```
 
-## Git Branch
+Admin panel:
 
-Branch setup yang dibuat:
+- `http://127.0.0.1:8000/admin/login`
 
-```bash
-setup/project-scaffold
-```
+Default admin dari `.env.example`:
 
-Folder lama `project-1/` dan `smartlock-deka/` di-ignore dari repo root agar tidak ikut ter-commit saat push project baru.
+- email: `admin@deka.dev`
+- password: `password`
+
+## Catatan untuk Frontend Agent
+
+Frontend tidak perlu menebak flow auth.
+
+Gunakan kontrak berikut:
+
+- auth memakai session cookie, bukan bearer token
+- ambil `GET /api/auth/csrf` sebelum flow auth jika dibutuhkan client flow
+- login/register memakai endpoint auth API yang sudah tersedia
+- gunakan field `role` dari response auth untuk memisahkan `admin` dan `user`
+- user biasa diarahkan ke flow chat
+- admin diarahkan ke `/admin` jika memang memakai panel backend
+
+## Tahap Berikutnya
+
+Yang belum dikerjakan:
+
+- crawl `deka.dev`
+- ingestion dokumen
+- vector store / `pgvector`
+- retrieval
+- inject context knowledge Deka ke AI service
+- pembatasan jawaban hanya ke knowledge Deka
+
+Secara singkat:
+
+> auth, admin, dan runtime chat sudah siap; knowledge chatbot Deka adalah fase berikutnya.
