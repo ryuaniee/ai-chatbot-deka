@@ -26,6 +26,7 @@ Kesimpulan status saat ini:
 - AI service sudah jalan
 - koneksi ke router model sudah jalan
 - fallback model sudah jalan
+- redirect auth admin dan user sudah konsisten
 - chatbot saat ini masih chatbot umum
 - knowledge khusus Deka belum di-ingest
 
@@ -94,6 +95,11 @@ Sudah dibuat endpoint untuk:
 - logout
 - ambil user aktif
 
+Kontrak response auth:
+
+- field `role`
+- field `redirect_to`
+
 Role yang disiapkan:
 
 - `admin`
@@ -104,6 +110,8 @@ Aturan saat ini:
 - user baru otomatis mendapat role `user`
 - hanya `role=admin` yang boleh masuk panel admin
 - user biasa tetap memakai auth biasa dan API chat
+- admin diarahkan ke `/admin`
+- user biasa diarahkan ke `/chat`
 
 File utama:
 
@@ -258,6 +266,7 @@ Artinya:
 
 - tidak ada tabel admin terpisah
 - admin dan user tetap satu entitas user
+- register publik tidak pernah membuat admin baru
 - pembeda hanya field `role`
 
 File utama:

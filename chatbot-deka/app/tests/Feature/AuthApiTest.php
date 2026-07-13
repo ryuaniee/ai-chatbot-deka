@@ -21,7 +21,8 @@ class AuthApiTest extends TestCase
 
         $response->assertCreated()
             ->assertJsonPath('user.email', 'tester-api@example.com')
-            ->assertJsonPath('user.role', 'user')
+            ->assertJsonPath('user.role', User::ROLE_USER)
+            ->assertJsonPath('redirect_to', '/chat')
             ->assertJsonPath('user.requires_email_verification', true);
 
         $this->assertAuthenticated();
@@ -45,7 +46,8 @@ class AuthApiTest extends TestCase
         $response->assertOk()
             ->assertJsonPath('user.id', $user->id)
             ->assertJsonPath('user.email', $user->email)
-            ->assertJsonPath('user.role', 'user');
+            ->assertJsonPath('user.role', User::ROLE_USER)
+            ->assertJsonPath('redirect_to', '/chat');
 
         $this->assertAuthenticatedAs($user);
     }
@@ -60,8 +62,26 @@ class AuthApiTest extends TestCase
             ->getJson(route('api.auth.me'))
             ->assertOk()
             ->assertJsonPath('user.id', $user->id)
-            ->assertJsonPath('user.role', 'user')
+            ->assertJsonPath('user.role', User::ROLE_USER)
+            ->assertJsonPath('redirect_to', '/chat')
             ->assertJsonPath('user.requires_email_verification', false);
+    }
+
+    public function test_admin_login_returns_admin_redirect_path(): void
+    {
+        $admin = User::factory()->admin()->create([
+            'email' => 'admin-api@example.com',
+            'password' => 'password',
+        ]);
+
+        $this->postJson(route('api.auth.login'), [
+            'email' => $admin->email,
+            'password' => 'password',
+        ])->assertOk()
+            ->assertJsonPath('user.role', User::ROLE_ADMIN)
+            ->assertJsonPath('redirect_to', '/admin');
+
+        $this->assertAuthenticatedAs($admin);
     }
 
     public function test_authenticated_user_can_logout_via_api(): void
