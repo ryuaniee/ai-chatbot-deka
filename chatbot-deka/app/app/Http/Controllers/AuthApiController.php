@@ -8,9 +8,12 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Laravel\Fortify\Contracts\RedirectsIfTwoFactorAuthenticatable;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
+use Symfony\Component\HttpFoundation\Response;
 
 class AuthApiController extends Controller
 {
@@ -27,6 +30,8 @@ class AuthApiController extends Controller
         if (! Features::enabled(Features::registration())) {
             abort(404);
         }
+
+        $this->normalizeUsername($request);
 
         /** @var User $user */
         $user = $createNewUser->create($request->all());
@@ -45,10 +50,22 @@ class AuthApiController extends Controller
 
     public function login(Request $request): JsonResponse
     {
+        $this->normalizeUsername($request);
+
         $credentials = $request->validate([
             Fortify::username() => ['required', 'string', 'email'],
             'password' => ['required', 'string'],
         ]);
+
+        $twoFactorResponse = $this->twoFactorChallengeResponse($request);
+
+        if ($twoFactorResponse instanceof Response) {
+            return response()->json([
+                'message' => 'Two-factor challenge required.',
+                'two_factor' => true,
+                'redirect_to' => route('two-factor.login', absolute: false),
+            ]);
+        }
 
         if (! Auth::attempt($credentials, (bool) $request->boolean('remember'))) {
             throw ValidationException::withMessages([
@@ -111,5 +128,32 @@ class AuthApiController extends Controller
     private function redirectPathFor(User $user): string
     {
         return $user->isAdmin() ? '/admin' : '/chat';
+    }
+
+    private function normalizeUsername(Request $request): void
+    {
+        if (! config('fortify.lowercase_usernames') || ! $request->has(Fortify::username())) {
+            return;
+        }
+
+        $username = trim((string) $request->input(Fortify::username()));
+
+        $request->merge([
+            Fortify::username() => Str::lower($username),
+        ]);
+    }
+
+    private function twoFactorChallengeResponse(Request $request): ?Response
+    {
+        if (! Features::enabled(Features::twoFactorAuthentication())) {
+            return null;
+        }
+
+        $response = app(RedirectsIfTwoFactorAuthenticatable::class)->handle(
+            $request,
+            static fn (): null => null,
+        );
+
+        return $response instanceof Response ? $response : null;
     }
 }

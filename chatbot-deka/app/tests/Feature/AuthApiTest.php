@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravel\Fortify\Features;
 use Tests\TestCase;
 
 class AuthApiTest extends TestCase
@@ -14,7 +15,7 @@ class AuthApiTest extends TestCase
     {
         $response = $this->postJson(route('api.auth.register'), [
             'name' => 'Tester API',
-            'email' => 'tester-api@example.com',
+            'email' => 'Tester-API@Example.COM',
             'password' => 'password',
             'password_confirmation' => 'password',
         ]);
@@ -52,6 +53,23 @@ class AuthApiTest extends TestCase
         $this->assertAuthenticatedAs($user);
     }
 
+    public function test_guest_can_login_via_api_with_uppercase_email_input(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'case-login@example.com',
+            'password' => 'password',
+        ]);
+
+        $this->postJson(route('api.auth.login'), [
+            'email' => 'CASE-LOGIN@EXAMPLE.COM',
+            'password' => 'password',
+        ])->assertOk()
+            ->assertJsonPath('user.id', $user->id)
+            ->assertJsonPath('user.email', 'case-login@example.com');
+
+        $this->assertAuthenticatedAs($user);
+    }
+
     public function test_authenticated_user_can_fetch_current_user_via_api(): void
     {
         $user = User::factory()->create([
@@ -82,6 +100,32 @@ class AuthApiTest extends TestCase
             ->assertJsonPath('redirect_to', '/admin');
 
         $this->assertAuthenticatedAs($admin);
+    }
+
+    public function test_login_with_two_factor_enabled_returns_challenge_instead_of_authenticating(): void
+    {
+        $this->skipUnlessFortifyHas(Features::twoFactorAuthentication());
+
+        Features::twoFactorAuthentication([
+            'confirm' => true,
+            'confirmPassword' => true,
+        ]);
+
+        $user = User::factory()->withTwoFactor()->create([
+            'email' => 'twofactor@example.com',
+            'password' => 'password',
+        ]);
+
+        $this->postJson(route('api.auth.login'), [
+            'email' => 'TWOFACTOR@EXAMPLE.COM',
+            'password' => 'password',
+        ])->assertOk()
+            ->assertJsonPath('two_factor', true)
+            ->assertJsonPath('redirect_to', route('two-factor.login', absolute: false))
+            ->assertJsonMissingPath('user.id');
+
+        $this->assertGuest();
+        $this->assertSame($user->id, session('login.id'));
     }
 
     public function test_authenticated_user_can_logout_via_api(): void

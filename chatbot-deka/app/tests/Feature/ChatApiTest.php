@@ -118,6 +118,15 @@ class ChatApiTest extends TestCase
             ->assertNotFound();
     }
 
+    public function test_unverified_user_cannot_access_chat_api(): void
+    {
+        $user = User::factory()->unverified()->create();
+
+        $this->actingAs($user)
+            ->getJson(route('api.conversations.index'))
+            ->assertForbidden();
+    }
+
     public function test_user_can_send_a_message_to_an_existing_conversation(): void
     {
         Http::fake([
