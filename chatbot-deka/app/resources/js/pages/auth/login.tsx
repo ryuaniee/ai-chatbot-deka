@@ -1,4 +1,5 @@
 import { Head, useHttp } from '@inertiajs/react';
+import { Mail, Lock } from 'lucide-react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -67,42 +68,52 @@ export default function Login({ status, canResetPassword }: Props) {
             >
                 <div className="grid gap-5">
                     {/* Email Address */}
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="email" className="text-sm font-semibold text-black">
-                            Email
+                    <div className="grid gap-2">
+                        <Label htmlFor="email" className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                            Alamat Email
                         </Label>
-                        <Input
-                            id="email"
-                            type="email"
-                            name="email"
-                            required
-                            autoFocus
-                            tabIndex={1}
-                            autoComplete="email"
-                            placeholder="Email address"
-                            value={http.data.email}
-                            onChange={(e) => http.setData('email', e.target.value)}
-                            className="h-12 border-gray-300 rounded-lg text-black bg-white focus-visible:ring-[#2f80ed] focus-visible:border-[#2f80ed] placeholder:text-gray-400"
-                        />
+                        <div className="relative">
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-400">
+                                <Mail className="h-4 w-4" />
+                            </span>
+                            <Input
+                                id="email"
+                                type="email"
+                                name="email"
+                                required
+                                autoFocus
+                                tabIndex={1}
+                                autoComplete="email"
+                                placeholder="nama@email.com"
+                                value={http.data.email}
+                                onChange={(e) => http.setData('email', e.target.value)}
+                                className="h-12 pl-11 border-zinc-200 rounded-xl text-black bg-white focus-visible:ring-[#2f80ed]/25 focus-visible:border-[#2f80ed] placeholder:text-zinc-400 shadow-sm transition-all focus:shadow-md"
+                            />
+                        </div>
                         <InputError message={http.errors.email} />
                     </div>
 
                     {/* Password */}
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="password" className="text-sm font-semibold text-black">
-                            Password
+                    <div className="grid gap-2">
+                        <Label htmlFor="password" className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                            Kata Sandi
                         </Label>
-                        <PasswordInput
-                            id="password"
-                            name="password"
-                            required
-                            tabIndex={2}
-                            autoComplete="current-password"
-                            placeholder="Password"
-                            value={http.data.password}
-                            onChange={(e) => http.setData('password', e.target.value)}
-                            className="h-12 border-gray-300 rounded-lg text-black bg-white focus-visible:ring-[#2f80ed] focus-visible:border-[#2f80ed] placeholder:text-gray-400"
-                        />
+                        <div className="relative">
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-400 z-10">
+                                <Lock className="h-4 w-4" />
+                            </span>
+                            <PasswordInput
+                                id="password"
+                                name="password"
+                                required
+                                tabIndex={2}
+                                autoComplete="current-password"
+                                placeholder="Masukkan kata sandi"
+                                value={http.data.password}
+                                onChange={(e) => http.setData('password', e.target.value)}
+                                className="h-12 pl-11 border-zinc-200 rounded-xl text-black bg-white focus-visible:ring-[#2f80ed]/25 focus-visible:border-[#2f80ed] placeholder:text-zinc-400 shadow-sm transition-all focus:shadow-md"
+                            />
+                        </div>
                         <InputError message={http.errors.password} />
                     </div>
 
@@ -115,19 +126,19 @@ export default function Login({ status, canResetPassword }: Props) {
                                 tabIndex={3}
                                 checked={http.data.remember}
                                 onCheckedChange={(checked) => http.setData('remember', !!checked)}
-                                className="h-5 w-5 rounded border-gray-300 text-[#2f80ed] focus:ring-[#2f80ed] data-[state=checked]:bg-[#2f80ed] data-[state=checked]:border-[#2f80ed] cursor-pointer"
+                                className="h-5 w-5 rounded-md border-zinc-300 text-[#2f80ed] focus:ring-[#2f80ed] data-[state=checked]:bg-[#2f80ed] data-[state=checked]:border-[#2f80ed] cursor-pointer shadow-sm"
                             />
-                            <Label htmlFor="remember" className="text-sm font-semibold text-black cursor-pointer select-none">
+                            <Label htmlFor="remember" className="text-sm font-semibold text-zinc-700 cursor-pointer select-none">
                                 Ingatkan Saya
                             </Label>
                         </div>
                         {canResetPassword && (
                             <TextLink
                                 href={request()}
-                                className="text-sm font-semibold text-black hover:underline hover:text-black"
+                                className="text-sm font-semibold text-zinc-600 hover:underline hover:text-zinc-900"
                                 tabIndex={5}
                             >
-                                Forgot Password?
+                                Lupa Password?
                             </TextLink>
                         )}
                     </div>
@@ -135,36 +146,35 @@ export default function Login({ status, canResetPassword }: Props) {
                     {/* Submit Button */}
                     <Button
                         type="submit"
-                        className="w-full h-12 mt-4 bg-[#2f80ed] hover:bg-blue-600 text-white font-semibold rounded-lg transition-colors border-none cursor-pointer flex items-center justify-center"
+                        className="w-full h-12 mt-4 bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] hover:from-[#1a73e8] hover:to-[#155fc4] text-white font-semibold rounded-xl transition-all border-none cursor-pointer flex items-center justify-center shadow-md hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99] text-sm tracking-wide"
                         tabIndex={4}
                         disabled={http.processing}
                     >
                         {http.processing && <Spinner className="mr-2 h-4 w-4 animate-spin text-white" />}
-                        Login
+                        Masuk
                     </Button>
                 </div>
 
                 {/* Divider */}
                 <div className="relative flex py-2 items-center">
-                    <div className="flex-grow border-t border-gray-300"></div>
-                    <span className="flex-shrink mx-4 text-gray-400 text-xs font-semibold">
+                    <div className="flex-grow border-t border-zinc-200"></div>
+                    <span className="flex-shrink mx-4 text-zinc-400 text-xs font-semibold">
                         atau lanjut dengan
                     </span>
-                    <div className="flex-grow border-t border-gray-300"></div>
+                    <div className="flex-grow border-t border-zinc-200"></div>
                 </div>
 
                 {/* Google Sign In */}
                 <button
                     type="button"
-                    onClick={() => window.location.assign('/auth/google')}
-                    className="w-full h-12 border border-gray-300 bg-white hover:bg-gray-50 text-black font-semibold rounded-lg flex items-center justify-center gap-3 transition-colors cursor-pointer"
+                    className="w-full h-12 border border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300 text-zinc-700 font-semibold rounded-xl flex items-center justify-center gap-3 transition-all cursor-pointer shadow-sm active:scale-[0.99]"
                 >
                     <GoogleIcon />
-                    <span className="text-sm font-bold">Masuk atau daftar dengan Google</span>
+                    <span className="text-sm font-bold">Sign In With Google</span>
                 </button>
 
                 {/* Footer */}
-                <div className="text-center text-sm text-black font-medium mt-2">
+                <div className="text-center text-sm text-zinc-600 font-medium mt-2">
                     Belum punya akun?{' '}
                     <TextLink
                         href={register()}
