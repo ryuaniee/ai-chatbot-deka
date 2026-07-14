@@ -9,3 +9,6 @@ chatbot-deka/ai-service/.venv/
 chatbot-deka/ai-service/.ruff_cache/
 chatbot-deka/ai-service/__pycache__/
 chatbot-deka/ai-service/app/__pycache__/
+chatbot-deka/vendor/
+chatbot-deka/**/__pycache__/
+chatbot-deka/**/*.pyc

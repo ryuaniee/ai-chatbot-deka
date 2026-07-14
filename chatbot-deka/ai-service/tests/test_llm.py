@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 
 import httpx
-from openai import APIConnectionError, AuthenticationError, InternalServerError
+from openai import APIConnectionError, AuthenticationError, InternalServerError, NotFoundError
 
 from app.llm import LlmFallbackExhausted, LlmService
 from app.schemas import ChatMessage
@@ -16,6 +16,20 @@ def make_status_error(status_code: int, body: dict) -> InternalServerError:
     )
     return InternalServerError(
         "upstream failure",
+        response=response,
+        body=body,
+    )
+
+
+def make_not_found_error(body: dict) -> NotFoundError:
+    request = httpx.Request("POST", "http://localhost:20127/v1/chat/completions")
+    response = httpx.Response(
+        status_code=404,
+        request=request,
+        json=body,
+    )
+    return NotFoundError(
+        "not found",
         response=response,
         body=body,
     )
@@ -48,26 +62,26 @@ def test_llm_service_falls_back_to_secondary_model(monkeypatch) -> None:
 
     calls: list[str] = []
 
-    class FakeModel:
-        def __init__(self, model_name: str) -> None:
-            self.model_name = model_name
+    class FakeCompletions:
+        @staticmethod
+        def create(*, model, messages):
+            calls.append(model)
 
-        def invoke(self, payload):
-            calls.append(self.model_name)
-
-            if self.model_name == "primary-model":
+            if model == "primary-model":
                 raise make_status_error(
                     503,
                     {"error": {"message": "All accounts unavailable"}},
                 )
 
             return SimpleNamespace(
-                content="Halo dari fallback.",
-                usage_metadata={"total_tokens": 9},
-                response_metadata={"model_name": self.model_name},
+                choices=[SimpleNamespace(message=SimpleNamespace(content="Halo dari fallback."))],
+                usage=SimpleNamespace(model_dump=lambda: {"total_tokens": 9}),
+                model=model,
             )
 
-    monkeypatch.setattr(service, "_build_model", lambda model_name: FakeModel(model_name))
+    service.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions())
+    )
 
     result = service.respond([ChatMessage(role="user", content="Halo")])
 
@@ -83,23 +97,23 @@ def test_llm_service_retries_fallback_on_connection_error(monkeypatch) -> None:
 
     calls: list[str] = []
 
-    class FakeModel:
-        def __init__(self, model_name: str) -> None:
-            self.model_name = model_name
+    class FakeCompletions:
+        @staticmethod
+        def create(*, model, messages):
+            calls.append(model)
 
-        def invoke(self, payload):
-            calls.append(self.model_name)
-
-            if self.model_name == "primary-model":
+            if model == "primary-model":
                 raise make_connection_error()
 
             return SimpleNamespace(
-                content="Judul fallback",
-                usage_metadata={"total_tokens": 3},
-                response_metadata={"model_name": self.model_name},
+                choices=[SimpleNamespace(message=SimpleNamespace(content="Judul fallback"))],
+                usage=SimpleNamespace(model_dump=lambda: {"total_tokens": 3}),
+                model=model,
             )
 
-    monkeypatch.setattr(service, "_build_model", lambda model_name: FakeModel(model_name))
+    service.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions())
+    )
 
     title = service.generate_title(
         [
@@ -119,15 +133,15 @@ def test_llm_service_does_not_fallback_on_auth_error(monkeypatch) -> None:
 
     calls: list[str] = []
 
-    class FakeModel:
-        def __init__(self, model_name: str) -> None:
-            self.model_name = model_name
-
-        def invoke(self, payload):
-            calls.append(self.model_name)
+    class FakeCompletions:
+        @staticmethod
+        def create(*, model, messages):
+            calls.append(model)
             raise make_auth_error()
 
-    monkeypatch.setattr(service, "_build_model", lambda model_name: FakeModel(model_name))
+    service.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions())
+    )
 
     try:
         service.respond([ChatMessage(role="user", content="Halo")])
@@ -152,18 +166,18 @@ def test_llm_service_reports_all_attempted_models(monkeypatch) -> None:
 
     calls: list[str] = []
 
-    class FakeModel:
-        def __init__(self, model_name: str) -> None:
-            self.model_name = model_name
-
-        def invoke(self, payload):
-            calls.append(self.model_name)
+    class FakeCompletions:
+        @staticmethod
+        def create(*, model, messages):
+            calls.append(model)
             raise make_status_error(
                 503,
-                {"error": {"message": f"{self.model_name} unavailable"}},
+                {"error": {"message": f"{model} unavailable"}},
             )
 
-    monkeypatch.setattr(service, "_build_model", lambda model_name: FakeModel(model_name))
+    service.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions())
+    )
 
     try:
         service.respond([ChatMessage(role="user", content="Halo")])
@@ -187,3 +201,73 @@ def test_llm_service_reports_all_attempted_models(monkeypatch) -> None:
         raise AssertionError("Expected fallback exhaustion exception to be raised.")
 
     assert calls == ["primary-model", "fallback-a", "fallback-b"]
+
+
+def test_llm_service_extracts_output_text_from_responses_api_fallback() -> None:
+    service = LlmService()
+    service.primary_model = "primary-model"
+    service.fallback_models = []
+
+    calls: list[str] = []
+
+    class FakeCompletions:
+        @staticmethod
+        def create(*, model, messages):
+            calls.append(f"chat:{model}")
+            raise make_not_found_error(
+                {"error": {"message": "chat completions not supported"}},
+            )
+
+    class FakeResponses:
+        @staticmethod
+        def create(*, model, input):
+            calls.append(f"responses:{model}")
+            return SimpleNamespace(
+                output_text="Halo dari responses.",
+                usage=SimpleNamespace(model_dump=lambda: {"total_tokens": 7}),
+                model=model,
+            )
+
+    service.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions()),
+        responses=SimpleNamespace(create=FakeResponses.create),
+    )
+
+    result = service.respond([ChatMessage(role="user", content="Halo")])
+
+    assert calls == ["chat:primary-model", "responses:primary-model"]
+    assert result["message"]["content"] == "Halo dari responses."
+    assert result["model"] == "primary-model"
+
+
+def test_llm_service_extracts_text_from_content_parts() -> None:
+    service = LlmService()
+    service.primary_model = "primary-model"
+    service.fallback_models = []
+
+    class FakeCompletions:
+        @staticmethod
+        def create(*, model, messages):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=[
+                                {"type": "output_text", "text": "Halo "},
+                                {"type": "output_text", "text": "berbagian."},
+                            ]
+                        )
+                    )
+                ],
+                usage=SimpleNamespace(model_dump=lambda: {"total_tokens": 5}),
+                model=model,
+            )
+
+    service.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=FakeCompletions()),
+        responses=SimpleNamespace(create=lambda **kwargs: None),
+    )
+
+    result = service.respond([ChatMessage(role="user", content="Halo")])
+
+    assert result["message"]["content"] == "Halo berbagian."
