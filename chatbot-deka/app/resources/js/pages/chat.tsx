@@ -8,7 +8,11 @@ import {
     Paperclip,
     Mic,
     ChevronDown,
-    SendHorizontal
+    SendHorizontal,
+    HelpCircle,
+    Sparkles,
+    Phone,
+    Info
 } from 'lucide-react';
 import DekaLogo from '@/components/deka-logo';
 import { 
@@ -18,6 +22,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { UserInfo } from '@/components/user-info';
 import { UserMenuContent } from '@/components/user-menu-content';
+import SettingsModal from '@/components/settings-modal';
 import { index as getConversations, store as createConversation, show as getConversation } from '@/routes/api/conversations';
 import { store as createMessage } from '@/routes/api/conversations/messages';
 
@@ -52,6 +57,7 @@ export default function ChatPage() {
     const [inputValue, setInputValue] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -180,7 +186,7 @@ export default function ChatPage() {
         <>
             <Head title="Chat Dashboard" />
 
-            <div className="flex h-screen w-screen bg-white text-stone-800 overflow-hidden font-sans relative">
+             <div className="flex h-screen w-screen bg-white text-slate-800 overflow-hidden font-sans relative">
                 {/* Mobile sidebar backdrop */}
                 {sidebarOpen && (
                     <div 
@@ -191,16 +197,16 @@ export default function ChatPage() {
 
                 {/* Left Sidebar */}
                 <aside className={`
-                    fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-[#f9f9fb] border-r border-stone-200/80 transition-transform duration-300 lg:static lg:translate-x-0
+                    fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-slate-50 border-r border-slate-200/80 transition-transform duration-300 lg:static lg:translate-x-0
                     ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
                 `}>
                     {/* Sidebar Header */}
-                    <div className="flex items-center justify-between p-4 border-b border-stone-200/50">
+                    <div className="flex items-center justify-between p-4 border-b border-slate-200/50">
                         <div className="flex items-center gap-2">
                             <DekaLogo className="h-9 w-auto object-contain" />
-                            <span className="font-extrabold text-stone-800 tracking-tight text-lg">Deka Chat</span>
+                            <span className="font-extrabold text-blue-600 tracking-tight text-lg">Deka Chat</span>
                         </div>
-                        <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-2 hover:bg-stone-200/50 rounded-lg text-stone-500 cursor-pointer">
+                        <button onClick={() => setSidebarOpen(false)} className="lg:hidden p-2 hover:bg-slate-200/50 rounded-lg text-slate-500 cursor-pointer">
                             <X className="h-5 w-5" />
                         </button>
                     </div>
@@ -209,32 +215,32 @@ export default function ChatPage() {
                     <div className="p-4">
                         <button 
                             onClick={handleNewChat}
-                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-white border border-stone-200 hover:bg-stone-50 hover:border-stone-300 transition px-4 py-3 text-sm font-semibold text-stone-700 shadow-sm cursor-pointer"
+                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all duration-200 px-4 py-3 text-sm font-bold cursor-pointer"
                         >
-                            <Plus className="h-4 w-4 text-[#2f80ed]" />
+                            <Plus className="h-4 w-4 text-white" />
                             Percakapan Baru
                         </button>
                     </div>
 
                     {/* Conversation List */}
                     <div className="flex-1 overflow-y-auto px-3 pb-4 space-y-1" style={{ scrollbarWidth: 'none' }}>
-                        <p className="px-3 text-xs font-bold uppercase tracking-[0.1em] text-stone-400 mb-2">
+                        <p className="px-3 text-[10px] font-extrabold uppercase tracking-[0.15em] text-slate-400 mb-2">
                             Riwayat Chat
                         </p>
                         {conversations.length === 0 ? (
-                            <p className="px-3 text-xs text-stone-400 italic">Belum ada percakapan</p>
+                            <p className="px-3 text-xs text-slate-400 italic">Belum ada percakapan</p>
                         ) : (
                             conversations.map((conv) => (
                                 <button
                                     key={conv.id}
                                     onClick={() => handleSelectConversation(conv.id)}
-                                    className={`flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm transition cursor-pointer border ${
+                                    className={`flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-left text-sm transition cursor-pointer border-l-4 ${
                                         activeConversationId === conv.id
-                                            ? 'bg-blue-50/70 border-blue-100/50 text-[#2f80ed] font-semibold'
-                                            : 'bg-transparent border-transparent hover:bg-stone-200/40 text-stone-600'
+                                            ? 'bg-blue-50 border-l-blue-600 border-y-transparent border-r-transparent text-blue-600 font-bold'
+                                            : 'bg-transparent border-l-transparent border-y-transparent border-r-transparent hover:bg-slate-200/40 text-slate-600'
                                     }`}
                                 >
-                                    <MessageSquare className={`h-4 w-4 shrink-0 ${activeConversationId === conv.id ? 'text-[#2f80ed]' : 'text-stone-400'}`} />
+                                    <MessageSquare className={`h-4 w-4 shrink-0 ${activeConversationId === conv.id ? 'text-blue-600' : 'text-slate-450'}`} />
                                     <span className="truncate flex-1">{conv.title || 'Percakapan Tanpa Judul'}</span>
                                 </button>
                               ))
@@ -243,16 +249,16 @@ export default function ChatPage() {
 
                     {/* Sidebar Footer */}
                     {user && (
-                        <div className="p-4 border-t border-stone-200/50 bg-stone-50/80">
+                        <div className="p-4 border-t border-slate-200/50 bg-slate-50">
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                    <button className="flex w-full items-center gap-3 rounded-xl p-2 hover:bg-stone-200/50 transition text-left cursor-pointer border border-transparent hover:border-stone-200 outline-none">
+                                    <button className="flex w-full items-center gap-3 rounded-xl p-2 hover:bg-slate-200/40 transition text-left cursor-pointer border border-transparent hover:border-slate-200 outline-none">
                                         <UserInfo user={user} />
-                                        <ChevronDown className="ml-auto size-4 text-stone-400" />
+                                        <ChevronDown className="ml-auto size-4 text-slate-400" />
                                     </button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent className="w-64 rounded-xl p-1.5 shadow-lg border border-stone-200" align="start" side="top">
-                                    <UserMenuContent user={user} />
+                                <DropdownMenuContent className="w-64 rounded-xl p-1.5 shadow-lg border border-slate-200" align="start" side="top">
+                                    <UserMenuContent user={user} onSettingsClick={() => setSettingsOpen(true)} />
                                 </DropdownMenuContent>
                             </DropdownMenu>
                         </div>
@@ -262,15 +268,11 @@ export default function ChatPage() {
                 {/* Main Content Area */}
                 <main className="flex-1 flex flex-col h-full bg-white relative overflow-hidden">
                     {/* Top Header Bar */}
-                    <header className="flex h-14 shrink-0 items-center justify-between border-b border-stone-100 bg-white px-4">
+                    <header className="flex h-16 shrink-0 items-center justify-between border-b border-slate-100 bg-white px-6">
                         <div className="flex items-center gap-2">
-                            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 hover:bg-stone-100 rounded-lg text-stone-500 cursor-pointer">
+                            <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 hover:bg-slate-100 rounded-lg text-slate-500 cursor-pointer">
                                 <Menu className="h-5 w-5" />
                             </button>
-                            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-stone-50 border border-stone-100 text-xs font-semibold text-stone-600">
-                                <span className="h-1.5 w-1.5 bg-green-500 rounded-full"></span>
-                                Deka Assistant Online
-                            </div>
                         </div>
                         <div className="flex items-center gap-2">
                         </div>
@@ -280,43 +282,49 @@ export default function ChatPage() {
                     <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: 'none' }}>
                         {messages.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center p-6 text-center max-w-2xl mx-auto">
-                                <DekaLogo className="h-20 w-auto object-contain mb-6 animate-pulse" />
-                                <h2 className="text-3xl font-extrabold tracking-tight text-stone-800 mb-2">
+                                <div className="p-3 bg-slate-100/80 rounded-full border border-slate-200/50 mb-6">
+                                    <DekaLogo className="h-16 w-auto object-contain" />
+                                </div>
+                                <h2 className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight text-blue-600 mb-3">
                                     Ada yang bisa saya bantu hari ini?
                                 </h2>
-                                <p className="text-sm text-stone-500 mb-8 max-w-md">
+                                <p className="text-sm md:text-base text-slate-500 mb-8 max-w-md leading-relaxed">
                                     Tanyakan apa saja seputar Deka, layanan kami, alamat, kontak, atau informasi lainnya.
                                 </p>
 
                                 {/* Suggestion Cards */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 w-full max-w-xl">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 w-full max-w-xl">
                                     <button
                                         onClick={() => handleSendMessage('Apa itu Deka?')}
-                                        className="flex flex-col items-start p-4 rounded-2xl border border-stone-200 hover:border-blue-450 hover:bg-blue-50/20 text-left transition shadow-sm cursor-pointer"
+                                        className="flex flex-col items-start p-5 rounded-2xl border border-slate-200/80 bg-white hover:border-blue-300 hover:bg-blue-50/30 text-left transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer group"
                                     >
-                                        <span className="font-semibold text-sm text-stone-700">Apa itu Deka?</span>
-                                        <span className="text-xs text-stone-400 mt-1">Cari tahu informasi dasar mengenai Deka.</span>
+                                        <HelpCircle className="h-5 w-5 text-blue-500 mb-2.5 group-hover:scale-110 transition-transform duration-200" />
+                                        <span className="font-bold text-sm text-slate-800 group-hover:text-blue-600 transition-colors">Apa itu Deka?</span>
+                                        <span className="text-xs text-slate-400 mt-1">Cari tahu informasi dasar mengenai Deka.</span>
                                     </button>
                                     <button
                                         onClick={() => handleSendMessage('Layanan Deka')}
-                                        className="flex flex-col items-start p-4 rounded-2xl border border-stone-200 hover:border-blue-450 hover:bg-blue-50/20 text-left transition shadow-sm cursor-pointer"
+                                        className="flex flex-col items-start p-5 rounded-2xl border border-slate-200/80 bg-white hover:border-blue-300 hover:bg-blue-50/30 text-left transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer group"
                                     >
-                                        <span className="font-semibold text-sm text-stone-700">Layanan Deka</span>
-                                        <span className="text-xs text-stone-400 mt-1">Pelajari layanan dan produk yang kami sediakan.</span>
+                                        <Sparkles className="h-5 w-5 text-indigo-500 mb-2.5 group-hover:scale-110 transition-transform duration-200" />
+                                        <span className="font-bold text-sm text-slate-800 group-hover:text-blue-600 transition-colors">Layanan Deka</span>
+                                        <span className="text-xs text-slate-400 mt-1">Pelajari layanan dan produk yang kami sediakan.</span>
                                     </button>
                                     <button
                                         onClick={() => handleSendMessage('Kontak dan alamat')}
-                                        className="flex flex-col items-start p-4 rounded-2xl border border-stone-200 hover:border-blue-450 hover:bg-blue-50/20 text-left transition shadow-sm cursor-pointer"
+                                        className="flex flex-col items-start p-5 rounded-2xl border border-slate-200/80 bg-white hover:border-blue-300 hover:bg-blue-50/30 text-left transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer group"
                                     >
-                                        <span className="font-semibold text-sm text-stone-700">Kontak & Alamat</span>
-                                        <span className="text-xs text-stone-400 mt-1">Dapatkan nomor telepon, email, dan alamat kantor.</span>
+                                        <Phone className="h-5 w-5 text-emerald-500 mb-2.5 group-hover:scale-110 transition-transform duration-200" />
+                                        <span className="font-bold text-sm text-slate-800 group-hover:text-blue-600 transition-colors">Kontak & Alamat</span>
+                                        <span className="text-xs text-slate-400 mt-1">Dapatkan nomor telepon, email, dan alamat kantor.</span>
                                     </button>
                                     <button
                                         onClick={() => handleSendMessage('Fitur chatbot ini')}
-                                        className="flex flex-col items-start p-4 rounded-2xl border border-stone-200 hover:border-blue-450 hover:bg-blue-50/20 text-left transition shadow-sm cursor-pointer"
+                                        className="flex flex-col items-start p-5 rounded-2xl border border-slate-200/80 bg-white hover:border-blue-300 hover:bg-blue-50/30 text-left transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 cursor-pointer group"
                                     >
-                                        <span className="font-semibold text-sm text-stone-700">Fitur Chatbot</span>
-                                        <span className="text-xs text-stone-400 mt-1">Ketahui kemampuan asisten AI dalam membantu Anda.</span>
+                                        <Info className="h-5 w-5 text-purple-500 mb-2.5 group-hover:scale-110 transition-transform duration-200" />
+                                        <span className="font-bold text-sm text-slate-800 group-hover:text-blue-600 transition-colors">Fitur Chatbot</span>
+                                        <span className="text-xs text-slate-400 mt-1">Ketahui kemampuan asisten AI dalam membantu Anda.</span>
                                     </button>
                                 </div>
                             </div>
@@ -326,16 +334,16 @@ export default function ChatPage() {
                                     <div key={message.id} className="max-w-3xl mx-auto w-full animate-fade-in">
                                         {message.role === 'user' ? (
                                             <div className="flex justify-end w-full">
-                                                <div className="max-w-[80%] rounded-[2rem] bg-[#2f80ed] text-white px-5 py-3 text-sm md:text-base shadow-sm whitespace-pre-wrap">
+                                                <div className="max-w-[80%] rounded-2xl rounded-tr-none bg-blue-600 text-white px-5 py-3 text-sm md:text-base shadow-sm whitespace-pre-wrap">
                                                     {message.content}
                                                 </div>
                                             </div>
                                         ) : (
                                             <div className="flex gap-4 items-start w-full">
-                                                <div className="flex-shrink-0 h-8 w-8 rounded-full bg-stone-100 flex items-center justify-center border border-stone-200 overflow-hidden shadow-inner">
-                                                    <DekaLogo className="h-5 w-5 object-contain" />
+                                                <div className="flex-shrink-0 h-9 w-9 rounded-full bg-white flex items-center justify-center border border-slate-100 overflow-hidden shadow-sm">
+                                                    <DekaLogo className="h-6 w-6 object-contain" />
                                                 </div>
-                                                <div className="flex-1 bg-stone-50/70 border border-stone-100 rounded-[1.5rem] px-5 py-3.5 text-sm md:text-base shadow-sm whitespace-pre-wrap text-stone-800 leading-relaxed">
+                                                <div className="flex-1 bg-white border border-slate-150/70 rounded-2xl rounded-tl-none px-5 py-4 text-sm md:text-base shadow-sm whitespace-pre-wrap text-slate-800 leading-relaxed">
                                                     {message.content}
                                                 </div>
                                             </div>
@@ -346,15 +354,15 @@ export default function ChatPage() {
                                 {/* Typing Indicator */}
                                 {isGenerating && (
                                     <div className="max-w-3xl mx-auto w-full">
-                                        <div className="flex gap-4 items-start w-full">
-                                            <div className="flex-shrink-0 h-8 w-8 rounded-full bg-stone-100 flex items-center justify-center border border-stone-200 overflow-hidden shadow-inner">
-                                                <DekaLogo className="h-5 w-5 object-contain" />
+                                        <div className="flex gap-4 items-start w-full animate-pulse">
+                                            <div className="flex-shrink-0 h-9 w-9 rounded-full bg-white flex items-center justify-center border border-slate-100 overflow-hidden shadow-sm">
+                                                <DekaLogo className="h-6 w-6 object-contain" />
                                             </div>
-                                            <div className="flex-1 bg-stone-50/70 border border-stone-100 rounded-[1.5rem] px-5 py-4 shadow-sm w-fit">
-                                                <div className="flex gap-1 items-center">
-                                                    <span className="h-2 w-2 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                                                    <span className="h-2 w-2 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                                                    <span className="h-2 w-2 bg-stone-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                                            <div className="flex-1 bg-white border border-slate-150/70 rounded-2xl rounded-tl-none px-5 py-4 shadow-sm w-fit max-w-[100px]">
+                                                <div className="flex gap-1.5 items-center justify-center">
+                                                    <span className="h-2 w-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                                                    <span className="h-2 w-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                                                    <span className="h-2 w-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                                                 </div>
                                             </div>
                                         </div>
@@ -366,40 +374,41 @@ export default function ChatPage() {
                     </div>
 
                     {/* Input Area */}
-                    <div className="bg-white border-t border-stone-100/50 p-4">
+                    <div className="bg-white border-t border-slate-100 p-4">
                         <div className="max-w-3xl mx-auto w-full">
-                            <div className="relative flex flex-col rounded-3xl border border-stone-200 bg-stone-50 shadow-sm focus-within:border-stone-400 focus-within:ring-1 focus-within:ring-stone-400 p-1.5 transition">
+                            <div className="relative flex flex-col rounded-3xl border border-slate-200 bg-white shadow-md shadow-slate-100/50 focus-within:border-blue-500/80 focus-within:ring-4 focus-within:ring-blue-500/10 p-2 transition-all duration-300">
                                 <textarea
                                     value={inputValue}
                                     onChange={(e) => setInputValue(e.target.value)}
                                     onKeyDown={handleKeyDown}
                                     placeholder="Tulis pertanyaan tentang Deka di sini..."
                                     rows={1}
-                                    className="w-full resize-none bg-transparent py-2.5 px-4 text-sm md:text-base outline-none max-h-36 min-h-[40px] text-stone-800 scrollbar-none"
+                                    className="w-full resize-none bg-transparent py-2.5 px-4 text-sm md:text-base outline-none max-h-36 min-h-[40px] text-slate-800 scrollbar-none"
                                 />
-                                <div className="flex justify-between items-center px-2 pt-1 border-t border-stone-100/50 mt-1">
+                                <div className="flex justify-between items-center px-2 pt-1.5 border-t border-slate-100 mt-1">
                                     <div className="flex gap-1">
-                                        <button type="button" className="text-stone-400 hover:text-stone-600 p-2 rounded-full hover:bg-stone-200/40 transition cursor-pointer">
-                                            <Paperclip className="h-4 w-4" />
+                                        <button type="button" className="text-slate-400 hover:text-blue-600 p-2 rounded-full hover:bg-blue-50 transition cursor-pointer">
+                                            <Paperclip className="h-4.5 w-4.5" />
                                         </button>
-                                        <button type="button" className="text-stone-400 hover:text-stone-600 p-2 rounded-full hover:bg-stone-200/40 transition cursor-pointer">
-                                            <Mic className="h-4 w-4" />
+                                        <button type="button" className="text-slate-400 hover:text-blue-600 p-2 rounded-full hover:bg-blue-50 transition cursor-pointer">
+                                            <Mic className="h-4.5 w-4.5" />
                                         </button>
                                     </div>
                                     <button
                                         onClick={() => handleSendMessage()}
                                         disabled={!inputValue.trim() || isGenerating}
-                                        className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#2f80ed] hover:bg-blue-600 text-white disabled:bg-stone-200 disabled:text-stone-400 transition cursor-pointer shadow-sm"
+                                        className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 hover:bg-blue-700 text-white disabled:bg-slate-200 disabled:text-slate-400 transition-all duration-200 cursor-pointer shadow-md hover:shadow-lg active:scale-95"
                                     >
-                                        <SendHorizontal className="h-4.5 w-4.5" />
+                                        <SendHorizontal className="h-5 w-5" />
                                     </button>
                                 </div>
                             </div>
-                            <p className="text-[10px] md:text-xs text-stone-400 text-center mt-2.5">
+                            <p className="text-[10px] md:text-xs text-slate-400 text-center mt-2.5">
                                 Asisten AI Deka dapat membuat kesalahan. Pertimbangkan untuk memeriksa informasi penting.
                             </p>
                         </div>
                     </div>
+                    <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
                 </main>
             </div>
         </>
