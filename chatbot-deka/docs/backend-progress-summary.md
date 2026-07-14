@@ -27,6 +27,8 @@ Kesimpulan status saat ini:
 - koneksi ke router model sudah jalan
 - fallback model sudah jalan
 - redirect auth admin dan user sudah konsisten
+- email verification, reset password, dan welcome email sudah jalan
+- frontend chat dasar sudah ada dan sudah terhubung ke API backend
 - chatbot saat ini masih chatbot umum
 - knowledge khusus Deka belum di-ingest
 
@@ -161,6 +163,8 @@ Sudah dibuat:
 - request id assignment
 - idempotency handling
 - throttle chat
+- resend verification email throttle
+- forgot password throttle
 - controlled error mapping untuk AI service
 
 File utama:
@@ -255,7 +259,7 @@ File utama:
 Sudah dibuat:
 
 - panel admin di path `/admin`
-- login admin terpisah dari UI user biasa
+- login admin memakai halaman `/login` yang sama dengan user biasa
 - pembatasan akses panel hanya untuk `role=admin`
 - resource `Users`
 - resource `Conversations`
@@ -268,6 +272,21 @@ Artinya:
 - admin dan user tetap satu entitas user
 - register publik tidak pernah membuat admin baru
 - pembeda hanya field `role`
+- admin tidak boleh mengakses halaman chat user
+
+### 5.2 Frontend Chat Dasar
+
+Sudah tersedia halaman `/chat` yang:
+
+- mengambil daftar conversation dari backend
+- mengambil detail conversation dari backend
+- membuat conversation baru lewat backend
+- mengirim message ke backend
+- menampilkan balasan assistant dari backend
+
+Dokumen kontrak frontend:
+
+- [docs/frontend-chat-api.md](/home/panzek/project-pkl-deka/chatbot-deka/docs/frontend-chat-api.md:1)
 
 File utama:
 

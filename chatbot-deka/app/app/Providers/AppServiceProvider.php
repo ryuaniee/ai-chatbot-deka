@@ -2,12 +2,19 @@
 
 namespace App\Providers;
 
+use App\Models\User;
+use App\Notifications\WelcomeNotification;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Notifications\VerifyEmail;
+use Illuminate\Auth\Events\Verified;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Notifications\Messages\MailMessage;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Http\Request;
 
@@ -28,6 +35,8 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configureRateLimiting();
+        $this->configureMailTemplates();
+        $this->configureEventListeners();
     }
 
     /**
@@ -62,6 +71,36 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute((int) config('services.ai_service.rate_limit_per_minute', 20))
                 ->by($key);
+        });
+    }
+
+    protected function configureMailTemplates(): void
+    {
+        VerifyEmail::toMailUsing(function (object $notifiable, string $url): MailMessage {
+            return (new MailMessage)
+                ->subject('Verifikasi Email Akun Chatbot Deka')
+                ->view('emails.verify-email', [
+                    'appName' => config('app.name', 'Chatbot Deka'),
+                    'userName' => $notifiable->name,
+                    'verificationUrl' => $url,
+                    'expiryMinutes' => config('auth.verification.expire', 60),
+                    'supportEmail' => config('mail.from.address'),
+                    'logoUrl' => config('app.email_logo_url'),
+                    'currentYear' => Carbon::now()->year,
+                ]);
+        });
+    }
+
+    protected function configureEventListeners(): void
+    {
+        Event::listen(Verified::class, function (Verified $event): void {
+            $user = $event->user;
+
+            if (! $user instanceof User || ! $user->isUser()) {
+                return;
+            }
+
+            $user->notify(new WelcomeNotification());
         });
     }
 }

@@ -1,6 +1,5 @@
-import { Head, router, useHttp } from '@inertiajs/react';
+import { Head, useHttp } from '@inertiajs/react';
 import InputError from '@/components/input-error';
-import PasskeyVerify from '@/components/passkey-verify';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
 import { Button } from '@/components/ui/button';
@@ -50,7 +49,7 @@ export default function Login({ status, canResetPassword }: Props) {
         http.post(apiLogin.url())
             .then((res: any) => {
                 if (res.redirect_to) {
-                    router.visit(res.redirect_to);
+                    window.location.assign(res.redirect_to);
                 }
             })
             .catch(() => {
@@ -61,8 +60,6 @@ export default function Login({ status, canResetPassword }: Props) {
     return (
         <>
             <Head title="Masuk" />
-
-            <PasskeyVerify />
 
             <form
                 onSubmit={handleSubmit}

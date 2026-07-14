@@ -1,4 +1,4 @@
-import { Head, router, useHttp } from '@inertiajs/react';
+import { Head, useHttp } from '@inertiajs/react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -47,7 +47,7 @@ export default function Register({ passwordRules }: Props) {
         http.post(apiRegister.url())
             .then((res: any) => {
                 if (res.redirect_to) {
-                    router.visit(res.redirect_to);
+                    window.location.assign(res.redirect_to);
                 }
             })
             .catch(() => {
