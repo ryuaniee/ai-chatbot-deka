@@ -42,19 +42,76 @@ class AiServiceClientTest extends TestCase
     public function test_it_throws_a_domain_exception_for_http_errors(): void
     {
         Http::fake([
-            'http://127.0.0.1:8001/chat/respond' => Http::response([], 500),
+            'http://127.0.0.1:8001/chat/respond' => Http::response([
+                'detail' => [
+                    'code' => 'MODEL_UNAVAILABLE',
+                    'message' => 'Unable to generate assistant response.',
+                ],
+            ], 500),
         ]);
 
-        $this->expectException(AiServiceException::class);
+        try {
+            app(AiServiceClient::class)->respond(1, 2, [
+                ['role' => 'user', 'content' => 'Hi'],
+            ]);
+        } catch (AiServiceException $exception) {
+            $this->assertSame(500, $exception->status);
+            $this->assertSame('MODEL_UNAVAILABLE', $exception->errorCode);
+            $this->assertSame('Unable to generate assistant response.', $exception->getMessage());
+
+            return;
+        }
+
+        $this->fail('Expected AiServiceException to be thrown.');
+    }
+
+    public function test_it_rejects_placeholder_internal_token_configuration(): void
+    {
+        config()->set('services.ai_service.internal_token', 'change-this-in-production');
+
+        $this->expectException(AiServiceConfigurationException::class);
 
         app(AiServiceClient::class)->respond(1, 2, [
             ['role' => 'user', 'content' => 'Hi'],
         ]);
     }
 
-    public function test_it_rejects_placeholder_internal_token_configuration(): void
+    public function test_it_maps_upstream_rate_limits_without_losing_status(): void
     {
-        config()->set('services.ai_service.internal_token', 'change-this-in-production');
+        Http::fake([
+            'http://127.0.0.1:8001/chat/respond' => Http::response([
+                'detail' => [
+                    'code' => 'MODEL_RATE_LIMITED',
+                    'message' => 'Please retry later.',
+                ],
+            ], 429),
+        ]);
+
+        try {
+            app(AiServiceClient::class)->respond(1, 2, [
+                ['role' => 'user', 'content' => 'Hi'],
+            ]);
+        } catch (AiServiceException $exception) {
+            $this->assertSame(429, $exception->status);
+            $this->assertSame('AI_SERVICE_RATE_LIMITED', $exception->errorCode);
+            $this->assertSame('Please retry later.', $exception->getMessage());
+
+            return;
+        }
+
+        $this->fail('Expected AiServiceException to be thrown.');
+    }
+
+    public function test_it_maps_internal_auth_failures_to_configuration_exception(): void
+    {
+        Http::fake([
+            'http://127.0.0.1:8001/chat/respond' => Http::response([
+                'detail' => [
+                    'code' => 'UNAUTHORIZED_INTERNAL_REQUEST',
+                    'message' => 'Invalid internal service token.',
+                ],
+            ], 401),
+        ]);
 
         $this->expectException(AiServiceConfigurationException::class);
 

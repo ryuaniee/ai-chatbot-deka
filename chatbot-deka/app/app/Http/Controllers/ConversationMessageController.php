@@ -58,9 +58,9 @@ class ConversationMessageController extends Controller
             ], 503);
         } catch (AiServiceException $exception) {
             return response()->json([
-                'message' => 'Assistant response could not be generated.',
-                'code' => 'AI_SERVICE_UNAVAILABLE',
-            ], 502);
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode ?? 'AI_SERVICE_UNAVAILABLE',
+            ], $exception->status);
         }
 
         $conversation->refresh();

@@ -66,6 +66,20 @@ class ChatApiTest extends TestCase
         $this->assertDatabaseCount('messages', 0);
     }
 
+    public function test_whitespace_only_first_message_is_rejected_instead_of_creating_empty_conversation(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->postJson(route('api.conversations.store'), [
+            'content' => '   ',
+        ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['content']);
+
+        $this->assertDatabaseCount('conversations', 0);
+        $this->assertDatabaseCount('messages', 0);
+    }
+
     public function test_user_can_list_only_their_own_conversations_in_latest_order(): void
     {
         $user = User::factory()->create();

@@ -1,4 +1,4 @@
-import { Link, router } from '@inertiajs/react';
+import { router } from '@inertiajs/react';
 import { LogOut, Settings } from 'lucide-react';
 import {
     DropdownMenuGroup,
@@ -20,9 +20,20 @@ type Props = {
 export function UserMenuContent({ user, onSettingsClick }: Props) {
     const cleanup = useMobileNavigation();
 
+    const handleSettings = () => {
+        cleanup();
+        if (onSettingsClick) {
+            onSettingsClick();
+            return;
+        }
+
+        router.visit(edit.url());
+    };
+
     const handleLogout = () => {
         cleanup();
         router.flushAll();
+        router.post(logout.url());
     };
 
     return (
@@ -34,43 +45,15 @@ export function UserMenuContent({ user, onSettingsClick }: Props) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                    {onSettingsClick ? (
-                        <button
-                            className="flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-slate-100 transition"
-                            onClick={() => {
-                                cleanup();
-                                onSettingsClick();
-                            }}
-                        >
-                            <Settings className="mr-2 h-4 w-4" />
-                            Settings
-                        </button>
-                    ) : (
-                        <Link
-                            className="block w-full cursor-pointer"
-                            href={edit()}
-                            prefetch
-                            onClick={cleanup}
-                        >
-                            <Settings className="mr-2" />
-                            Settings
-                        </Link>
-                    )}
+                <DropdownMenuItem onSelect={handleSettings}>
+                    <Settings className="mr-2 h-4 w-4" />
+                    Settings
                 </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-                <Link
-                    className="block w-full cursor-pointer"
-                    href={logout()}
-                    as="button"
-                    onClick={handleLogout}
-                    data-test="logout-button"
-                >
-                    <LogOut className="mr-2" />
-                    Log out
-                </Link>
+            <DropdownMenuItem onSelect={handleLogout} data-test="logout-button">
+                <LogOut className="mr-2 h-4 w-4" />
+                Log out
             </DropdownMenuItem>
         </>
     );

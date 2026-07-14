@@ -26,9 +26,20 @@ Route::prefix('api/auth')->name('api.auth.')->group(function () {
     });
 });
 
+Route::middleware('guest')->group(function () {
+    Route::get('auth/google', [\App\Http\Controllers\GoogleAuthController::class, 'redirect'])
+        ->name('auth.google.redirect');
+    Route::get('auth/google/callback', [\App\Http\Controllers\GoogleAuthController::class, 'callback'])
+        ->name('auth.google.callback');
+});
+
 Route::post('email/verification-notification-resend', [\App\Http\Controllers\VerificationNotificationController::class, 'store'])
     ->middleware(['auth'])
     ->name('verification.resend');
+
+Route::get('email/verify/{id}/{hash}', \App\Http\Controllers\PublicEmailVerificationController::class)
+    ->middleware(['signed', 'throttle:6,1'])
+    ->name('verification.public.verify');
 
 Route::post('forgot-password', [\App\Http\Controllers\PasswordResetLinkController::class, 'store'])
     ->middleware('guest')
