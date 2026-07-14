@@ -9,12 +9,13 @@ Backend chatbot Deka saat ini sudah mencakup:
 - AI service internal
 - fallback model
 - kontrak redirect auth untuk admin dan user
+- email verification via Laravel mail
 
 Status produk saat ini:
 
 - fondasi backend sudah siap
-- frontend custom belum dikerjakan di repo ini
-- starter frontend bawaan bukan fokus implementasi
+- halaman auth dan chat dasar sudah ada di repo ini
+- frontend tetap memakai kontrak API backend yang sudah disiapkan
 - knowledge khusus `deka.dev` belum di-ingest
 
 ## Stack
@@ -59,6 +60,7 @@ Dokumen utama:
 - [Setup Local](docs/setup-local.md)
 - [Ringkasan Progres Backend](docs/backend-progress-summary.md)
 - [Arsitektur Backend Final](docs/deka-chatbot-backend-architecture.md)
+- [Frontend Chat API](docs/frontend-chat-api.md)
 
 ## Status Backend
 
@@ -73,7 +75,7 @@ Yang sudah ada:
 - `POST /api/conversations`
 - `GET /api/conversations/{conversation}`
 - `POST /api/conversations/{conversation}/messages`
-- `GET /admin/login`
+- `GET /login`
 - panel admin Filament di `/admin`
 
 Role yang dipakai hanya dua:
@@ -86,6 +88,7 @@ Aturan akses:
 - user baru otomatis mendapat role `user`
 - hanya `role=admin` yang bisa masuk panel admin
 - user biasa memakai auth API dan flow chat biasa
+- admin tidak memakai halaman chat user
 - response auth menyertakan `redirect_to`
 
 ## Quick Start
@@ -109,6 +112,15 @@ php artisan db:seed --class=AdminUserSeeder
 php artisan serve
 ```
 
+Konfigurasi mail untuk email verification:
+
+```env
+MAIL_MAILER=resend
+MAIL_FROM_ADDRESS=onboarding@resend.dev
+MAIL_FROM_NAME="Chatbot Deka"
+RESEND_API_KEY=your-resend-api-key
+```
+
 ### 3. Jalankan AI Service
 
 ```bash
@@ -128,7 +140,15 @@ curl http://127.0.0.1:8001/health
 
 Admin panel:
 
-- `http://127.0.0.1:8000/admin/login`
+- `http://127.0.0.1:8000/admin`
+
+Login semua role:
+
+- `http://127.0.0.1:8000/login`
+
+Chat user biasa:
+
+- `http://127.0.0.1:8000/chat`
 
 Default admin dari `.env.example`:
 
@@ -146,8 +166,24 @@ Gunakan kontrak berikut:
 - login/register memakai endpoint auth API yang sudah tersedia
 - gunakan field `role` dari response auth untuk memisahkan `admin` dan `user`
 - gunakan field `redirect_to` dari response auth sebagai target redirect final
-- user biasa diarahkan ke flow chat
-- admin diarahkan ke `/admin` jika memang memakai panel backend
+- user biasa diarahkan ke `/chat` atau `/email/verify`
+- admin diarahkan ke `/admin`
+- endpoint chat yang dipakai frontend sudah didokumentasikan di [Frontend Chat API](docs/frontend-chat-api.md)
+
+## Email dan Rate Limit
+
+Yang sudah aktif:
+
+- email verification custom
+- reset password email custom
+- welcome email setelah user berhasil verify
+- resend verification email rate limit `3x / 10 menit`
+- forgot password rate limit `3x / 10 menit`
+
+Catatan lokal:
+
+- untuk testing cepat tanpa domain email terverifikasi, gunakan `MAIL_MAILER=log`
+- untuk email real via Resend, pakai domain pengirim sendiri yang sudah diverifikasi
 
 ## Tahap Berikutnya
 

@@ -10,7 +10,8 @@ Dokumen ini menjelaskan cara menjalankan project secara lokal dari nol sampai si
 Catatan:
 
 - repo ini difokuskan ke backend
-- frontend custom chat belum dikerjakan di repo ini
+- halaman auth dan chat dasar sudah tersedia di repo ini
+- frontend tetap diharapkan memakai kontrak API backend yang sudah disiapkan
 
 ## 1. Gambaran Stack
 
@@ -136,6 +137,11 @@ AI_SERVICE_INTERNAL_TOKEN=GouTOiReW0p09X3lpElLERTBdUxGYF9xmcJ5td-Q5Pk
 ADMIN_NAME="Admin Deka"
 ADMIN_EMAIL=admin@deka.dev
 ADMIN_PASSWORD=password
+
+MAIL_MAILER=resend
+MAIL_FROM_ADDRESS=onboarding@resend.dev
+MAIL_FROM_NAME="Chatbot Deka"
+RESEND_API_KEY=your-resend-api-key
 ```
 
 ### 5.3 Jalankan Migration
@@ -226,9 +232,17 @@ Expected:
 
 Admin panel sudah terpasang di Laravel app.
 
-URL login admin:
+URL admin:
 
-- `http://127.0.0.1:8000/admin/login`
+- `http://127.0.0.1:8000/admin`
+
+URL login semua role:
+
+- `http://127.0.0.1:8000/login`
+
+URL chat user biasa:
+
+- `http://127.0.0.1:8000/chat`
 
 Default admin dari `.env`:
 
@@ -239,8 +253,30 @@ Catatan:
 
 - hanya user dengan `role=admin` yang bisa masuk panel
 - user biasa tidak bisa akses `/admin`
+- admin tidak memakai halaman login Filament terpisah
+- admin juga tidak boleh memakai halaman `/chat`
 
-## 8. Auth API Lokal
+## 8. Setup Email Verification dengan Resend
+
+Laravel app sudah siap memakai transport `resend`.
+
+Isi `app/.env` minimal:
+
+```env
+MAIL_MAILER=resend
+MAIL_FROM_ADDRESS=onboarding@resend.dev
+MAIL_FROM_NAME="Chatbot Deka"
+RESEND_API_KEY=your-resend-api-key
+```
+
+Catatan:
+
+- `onboarding@resend.dev` cukup untuk testing awal
+- untuk production, ganti ke alamat dari domain Anda yang sudah diverifikasi di Resend
+- setelah ubah `.env`, jalankan `php artisan optimize:clear`
+- untuk development tanpa kirim email real, set `MAIL_MAILER=log`
+
+## 9. Auth API Lokal
 
 Endpoint auth yang tersedia:
 
@@ -255,13 +291,13 @@ Field penting pada response auth:
 - `role`
 - `redirect_to`
 
-### 8.1 Ambil CSRF Token
+### 9.1 Ambil CSRF Token
 
 ```bash
 curl -c cookies.txt http://127.0.0.1:8000/api/auth/csrf
 ```
 
-### 8.2 Register
+### 9.2 Register
 
 ```bash
 curl -i -c cookies.txt -b cookies.txt \
@@ -276,7 +312,7 @@ curl -i -c cookies.txt -b cookies.txt \
   }'
 ```
 
-### 8.3 Login
+### 9.3 Login
 
 ```bash
 curl -i -c cookies.txt -b cookies.txt \
@@ -289,7 +325,7 @@ curl -i -c cookies.txt -b cookies.txt \
   }'
 ```
 
-### 8.4 Cek User Aktif
+### 9.4 Cek User Aktif
 
 ```bash
 curl -i -b cookies.txt \
@@ -302,7 +338,14 @@ Perilaku response auth:
 - user biasa mendapat `redirect_to=/chat`
 - admin mendapat `redirect_to=/admin`
 
-## 9. Tes AI Service Tanpa Frontend
+Catatan:
+
+- user yang belum verify email akan diarahkan ke `/email/verify`
+- user yang sudah verify tidak boleh tetap tinggal di halaman `/email/verify`
+- resend verification email dibatasi `3x / 10 menit`
+- forgot password dibatasi `3x / 10 menit`
+
+## 10. Tes AI Service Tanpa Frontend
 
 Tes langsung ke AI service:
 
@@ -318,6 +361,12 @@ curl -i -X POST http://127.0.0.1:8001/chat/respond \
     ]
   }'
 ```
+
+## 11. Dokumen Frontend Chat
+
+Untuk agent frontend, gunakan dokumen ini:
+
+- [Frontend Chat API](frontend-chat-api.md)
 
 Jika sukses, Anda akan mendapat:
 

@@ -26,7 +26,15 @@ Route::prefix('api/auth')->name('api.auth.')->group(function () {
     });
 });
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::post('email/verification-notification-resend', [\App\Http\Controllers\VerificationNotificationController::class, 'store'])
+    ->middleware(['auth'])
+    ->name('verification.resend');
+
+Route::post('forgot-password', [\App\Http\Controllers\PasswordResetLinkController::class, 'store'])
+    ->middleware('guest')
+    ->name('password.email');
+
+Route::middleware(['auth', 'verified', 'regular-user'])->group(function () {
     Route::inertia('chat', 'chat')->name('chat');
 
     Route::prefix('api')->name('api.')->group(function () {

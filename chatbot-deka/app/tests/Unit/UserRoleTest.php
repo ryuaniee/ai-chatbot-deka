@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\User;
+use Illuminate\Support\Facades\Route;
 use Filament\Panel;
 use Mockery;
 use Tests\TestCase;
@@ -31,5 +32,14 @@ class UserRoleTest extends TestCase
 
         $this->assertFalse($user->canAccessPanel($panel));
         $this->assertTrue($admin->canAccessPanel($panel));
+    }
+
+    public function test_non_admin_redirect_path_is_chat(): void
+    {
+        Route::get('/login')->name('login');
+
+        $user = new User(['role' => User::ROLE_USER, 'email_verified_at' => now()]);
+
+        $this->assertSame('/chat', $user->isAdmin() ? '/admin' : '/chat');
     }
 }

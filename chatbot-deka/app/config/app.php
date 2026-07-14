@@ -54,6 +54,11 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    'email_logo_url' => env(
+        'APP_EMAIL_LOGO_URL',
+        'https://i.ibb.co.com/hJ5LLkyv/Whats-App-Image-2026-07-13-at-15-06-30-removebg-preview.png',
+    ),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone
