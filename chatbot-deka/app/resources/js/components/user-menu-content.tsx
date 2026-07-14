@@ -14,9 +14,10 @@ import type { User } from '@/types';
 
 type Props = {
     user: User;
+    onSettingsClick?: () => void;
 };
 
-export function UserMenuContent({ user }: Props) {
+export function UserMenuContent({ user, onSettingsClick }: Props) {
     const cleanup = useMobileNavigation();
 
     const handleLogout = () => {
@@ -34,15 +35,28 @@ export function UserMenuContent({ user }: Props) {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
                 <DropdownMenuItem asChild>
-                    <Link
-                        className="block w-full cursor-pointer"
-                        href={edit()}
-                        prefetch
-                        onClick={cleanup}
-                    >
-                        <Settings className="mr-2" />
-                        Settings
-                    </Link>
+                    {onSettingsClick ? (
+                        <button
+                            className="flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-slate-100 transition"
+                            onClick={() => {
+                                cleanup();
+                                onSettingsClick();
+                            }}
+                        >
+                            <Settings className="mr-2 h-4 w-4" />
+                            Settings
+                        </button>
+                    ) : (
+                        <Link
+                            className="block w-full cursor-pointer"
+                            href={edit()}
+                            prefetch
+                            onClick={cleanup}
+                        >
+                            <Settings className="mr-2" />
+                            Settings
+                        </Link>
+                    )}
                 </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
