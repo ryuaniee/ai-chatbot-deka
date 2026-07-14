@@ -1,4 +1,5 @@
 import { Head, useHttp } from '@inertiajs/react';
+import { User, Mail, Lock } from 'lucide-react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -64,90 +65,110 @@ export default function Register({ passwordRules }: Props) {
             >
                 <div className="grid gap-5">
                     {/* Name */}
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="name" className="text-sm font-semibold text-black">
-                            Nama
+                    <div className="grid gap-2">
+                        <Label htmlFor="name" className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                            Nama Lengkap
                         </Label>
-                        <Input
-                            id="name"
-                            type="text"
-                            required
-                            autoFocus
-                            tabIndex={1}
-                            autoComplete="name"
-                            name="name"
-                            placeholder="Full name"
-                            value={http.data.name}
-                            onChange={(e) => http.setData('name', e.target.value)}
-                            className="h-12 border-gray-300 rounded-lg text-black bg-white focus-visible:ring-[#2f80ed] focus-visible:border-[#2f80ed] placeholder:text-gray-400"
-                        />
+                        <div className="relative">
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-400">
+                                <User className="h-4 w-4" />
+                            </span>
+                            <Input
+                                id="name"
+                                type="text"
+                                required
+                                autoFocus
+                                tabIndex={1}
+                                autoComplete="name"
+                                name="name"
+                                placeholder="Nama lengkap Anda"
+                                value={http.data.name}
+                                onChange={(e) => http.setData('name', e.target.value)}
+                                className="h-12 pl-11 border-zinc-200 rounded-xl text-black bg-white focus-visible:ring-[#2f80ed]/25 focus-visible:border-[#2f80ed] placeholder:text-zinc-400 shadow-sm transition-all focus:shadow-md"
+                            />
+                        </div>
                         <InputError message={http.errors.name} />
                     </div>
 
                     {/* Email Address */}
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="email" className="text-sm font-semibold text-black">
-                            Email
+                    <div className="grid gap-2">
+                        <Label htmlFor="email" className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                            Alamat Email
                         </Label>
-                        <Input
-                            id="email"
-                            type="email"
-                            required
-                            tabIndex={2}
-                            autoComplete="email"
-                            name="email"
-                            placeholder="Email address"
-                            value={http.data.email}
-                            onChange={(e) => http.setData('email', e.target.value)}
-                            className="h-12 border-gray-300 rounded-lg text-black bg-white focus-visible:ring-[#2f80ed] focus-visible:border-[#2f80ed] placeholder:text-gray-400"
-                        />
+                        <div className="relative">
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-400">
+                                <Mail className="h-4 w-4" />
+                            </span>
+                            <Input
+                                id="email"
+                                type="email"
+                                required
+                                tabIndex={2}
+                                autoComplete="email"
+                                name="email"
+                                placeholder="nama@email.com"
+                                value={http.data.email}
+                                onChange={(e) => http.setData('email', e.target.value)}
+                                className="h-12 pl-11 border-zinc-200 rounded-xl text-black bg-white focus-visible:ring-[#2f80ed]/25 focus-visible:border-[#2f80ed] placeholder:text-zinc-400 shadow-sm transition-all focus:shadow-md"
+                            />
+                        </div>
                         <InputError message={http.errors.email} />
                     </div>
 
                     {/* Password */}
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="password" className="text-sm font-semibold text-black">
-                            Password
+                    <div className="grid gap-2">
+                        <Label htmlFor="password" className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                            Kata Sandi
                         </Label>
-                        <PasswordInput
-                            id="password"
-                            required
-                            tabIndex={3}
-                            autoComplete="new-password"
-                            name="password"
-                            placeholder="Password"
-                            passwordrules={passwordRules}
-                            value={http.data.password}
-                            onChange={(e) => http.setData('password', e.target.value)}
-                            className="h-12 border-gray-300 rounded-lg text-black bg-white focus-visible:ring-[#2f80ed] focus-visible:border-[#2f80ed] placeholder:text-gray-400"
-                        />
+                        <div className="relative">
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-400 z-10">
+                                <Lock className="h-4 w-4" />
+                            </span>
+                            <PasswordInput
+                                id="password"
+                                required
+                                tabIndex={3}
+                                autoComplete="new-password"
+                                name="password"
+                                placeholder="Masukkan kata sandi"
+                                passwordrules={passwordRules}
+                                value={http.data.password}
+                                onChange={(e) => http.setData('password', e.target.value)}
+                                className="h-12 pl-11 border-zinc-200 rounded-xl text-black bg-white focus-visible:ring-[#2f80ed]/25 focus-visible:border-[#2f80ed] placeholder:text-zinc-400 shadow-sm transition-all focus:shadow-md"
+                            />
+                        </div>
                         <InputError message={http.errors.password} />
                     </div>
 
                     {/* Confirm Password */}
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="password_confirmation" className="text-sm font-semibold text-black">
-                            Confirm Password
+                    <div className="grid gap-2">
+                        <Label htmlFor="password_confirmation" className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                            Ulangi Kata Sandi
                         </Label>
-                        <PasswordInput
-                            id="password_confirmation"
-                            required
-                            tabIndex={4}
-                            autoComplete="new-password"
-                            name="password_confirmation"
-                            placeholder="Confirm password"
-                            passwordrules={passwordRules}
-                            value={http.data.password_confirmation}
-                            onChange={(e) => http.setData('password_confirmation', e.target.value)}
-                            className="h-12 border-gray-300 rounded-lg text-black bg-white focus-visible:ring-[#2f80ed] focus-visible:border-[#2f80ed] placeholder:text-gray-400"
-                        />
+                        <div className="relative">
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-400 z-10">
+                                <Lock className="h-4 w-4" />
+                            </span>
+                            <PasswordInput
+                                id="password_confirmation"
+                                required
+                                tabIndex={4}
+                                autoComplete="new-password"
+                                name="password_confirmation"
+                                placeholder="Ulangi kata sandi"
+                                passwordrules={passwordRules}
+                                value={http.data.password_confirmation}
+                                onChange={(e) => http.setData('password_confirmation', e.target.value)}
+                                className="h-12 pl-11 border-zinc-200 rounded-xl text-black bg-white focus-visible:ring-[#2f80ed]/25 focus-visible:border-[#2f80ed] placeholder:text-zinc-400 shadow-sm transition-all focus:shadow-md"
+                            />
+                        </div>
                         <InputError message={http.errors.password_confirmation} />
                     </div>
 
                     {/* Submit Button */}
                     <Button
                         type="submit"
-                        className="w-full h-12 mt-4 bg-[#2f80ed] hover:bg-blue-600 text-white font-semibold rounded-lg transition-colors border-none cursor-pointer flex items-center justify-center"
+                        className="w-full h-12 mt-4 bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] hover:from-[#1a73e8] hover:to-[#155fc4] text-white font-semibold rounded-xl transition-all border-none cursor-pointer flex items-center justify-center shadow-md hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99] text-sm tracking-wide"
                         tabIndex={5}
                         data-test="register-user-button"
                         disabled={http.processing}
@@ -159,24 +180,24 @@ export default function Register({ passwordRules }: Props) {
 
                 {/* Divider */}
                 <div className="relative flex py-2 items-center">
-                    <div className="flex-grow border-t border-gray-300"></div>
-                    <span className="flex-shrink mx-4 text-gray-400 text-xs font-semibold">
+                    <div className="flex-grow border-t border-zinc-200"></div>
+                    <span className="flex-shrink mx-4 text-zinc-400 text-xs font-semibold">
                         atau lanjut dengan
                     </span>
-                    <div className="flex-grow border-t border-gray-300"></div>
+                    <div className="flex-grow border-t border-zinc-200"></div>
                 </div>
 
                 {/* Google Sign In */}
                 <button
                     type="button"
-                    className="w-full h-12 border border-gray-300 bg-white hover:bg-gray-50 text-black font-semibold rounded-lg flex items-center justify-center gap-3 transition-colors cursor-pointer"
+                    className="w-full h-12 border border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300 text-zinc-700 font-semibold rounded-xl flex items-center justify-center gap-3 transition-all cursor-pointer shadow-sm active:scale-[0.99]"
                 >
                     <GoogleIcon />
-                    <span className="text-sm font-bold">Sign With Google</span>
+                    <span className="text-sm font-bold">Sign In With Google</span>
                 </button>
 
                 {/* Footer - redirects to login */}
-                <div className="text-center text-sm text-black font-medium mt-2">
+                <div className="text-center text-sm text-zinc-600 font-medium mt-2">
                     Sudah punya akun?{' '}
                     <TextLink
                         href={login()}
