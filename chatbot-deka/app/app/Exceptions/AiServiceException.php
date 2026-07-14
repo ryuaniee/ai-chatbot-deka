@@ -6,11 +6,43 @@ use RuntimeException;
 
 class AiServiceException extends RuntimeException
 {
+    public function __construct(
+        string $message = 'AI service is unavailable.',
+        public readonly int $status = 502,
+        public readonly ?string $errorCode = 'AI_SERVICE_UNAVAILABLE',
+        ?\Throwable $previous = null,
+    ) {
+        parent::__construct($message, previous: $previous);
+    }
+
     public static function unavailable(
         string $message = 'AI service is unavailable.',
         ?\Throwable $previous = null,
     ): self
     {
-        return new self($message, previous: $previous);
+        return new self($message, 502, 'AI_SERVICE_UNAVAILABLE', $previous);
+    }
+
+    public static function rateLimited(
+        string $message = 'AI service rate limit exceeded.',
+        ?\Throwable $previous = null,
+    ): self
+    {
+        return new self($message, 429, 'AI_SERVICE_RATE_LIMITED', $previous);
+    }
+
+    public static function upstreamFailure(
+        string $message,
+        int $status,
+        ?string $errorCode = null,
+        ?\Throwable $previous = null,
+    ): self
+    {
+        return new self(
+            $message,
+            $status >= 400 ? $status : 502,
+            $errorCode ?? 'AI_SERVICE_UNAVAILABLE',
+            $previous,
+        );
     }
 }

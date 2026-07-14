@@ -15,6 +15,7 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Validation\Rules\Password;
 use Illuminate\Http\Request;
 
@@ -76,6 +77,17 @@ class AppServiceProvider extends ServiceProvider
 
     protected function configureMailTemplates(): void
     {
+        VerifyEmail::createUrlUsing(function (object $notifiable): string {
+            return URL::temporarySignedRoute(
+                'verification.public.verify',
+                now()->addMinutes(config('auth.verification.expire', 60)),
+                [
+                    'id' => $notifiable->getKey(),
+                    'hash' => sha1($notifiable->getEmailForVerification()),
+                ],
+            );
+        });
+
         VerifyEmail::toMailUsing(function (object $notifiable, string $url): MailMessage {
             return (new MailMessage)
                 ->subject('Verifikasi Email Akun Chatbot Deka')

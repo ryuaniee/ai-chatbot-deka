@@ -45,12 +45,23 @@ class ConversationController extends Controller
         ConversationChatService $conversationChatService,
     ): JsonResponse {
         $validated = $request->validate([
-            'content' => ['nullable', 'string', 'max:4000'],
+            'content' => [
+                'nullable',
+                'string',
+                'max:4000',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    if ($value !== null && trim((string) $value) === '') {
+                        $fail('The content field must not be empty.');
+                    }
+                },
+            ],
         ]);
 
-        $content = trim((string) ($validated['content'] ?? ''));
+        $content = array_key_exists('content', $validated)
+            ? trim((string) $validated['content'])
+            : null;
 
-        if ($content === '') {
+        if ($content === null) {
             $conversation = $request->user()->conversations()->create([
                 'status' => 'active',
             ]);
@@ -83,9 +94,9 @@ class ConversationController extends Controller
             ], 503);
         } catch (AiServiceException $exception) {
             return response()->json([
-                'message' => 'Assistant response could not be generated.',
-                'code' => 'AI_SERVICE_UNAVAILABLE',
-            ], 502);
+                'message' => $exception->getMessage(),
+                'code' => $exception->errorCode ?? 'AI_SERVICE_UNAVAILABLE',
+            ], $exception->status);
         }
 
         $conversation->refresh();

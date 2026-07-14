@@ -50,6 +50,26 @@ class EmailVerificationTest extends TestCase
         $response->assertRedirect(route('chat', absolute: false).'?verified=1');
     }
 
+    public function test_email_can_be_verified_from_a_different_browser_without_auth_session(): void
+    {
+        $user = User::factory()->unverified()->create();
+
+        Event::fake();
+
+        $verificationUrl = URL::temporarySignedRoute(
+            'verification.public.verify',
+            now()->addMinutes(60),
+            ['id' => $user->id, 'hash' => sha1($user->email)],
+        );
+
+        $response = $this->get($verificationUrl);
+
+        Event::assertDispatched(Verified::class);
+        $this->assertTrue($user->fresh()->hasVerifiedEmail());
+        $response->assertRedirect(route('login', absolute: false));
+        $response->assertSessionHas('status', 'Email berhasil diverifikasi. Silakan masuk untuk melanjutkan.');
+    }
+
     public function test_email_is_not_verified_with_invalid_hash()
     {
         $user = User::factory()->unverified()->create();
@@ -115,5 +135,24 @@ class EmailVerificationTest extends TestCase
 
         Event::assertNotDispatched(Verified::class);
         $this->assertTrue($user->fresh()->hasVerifiedEmail());
+    }
+
+    public function test_already_verified_user_visiting_public_verification_link_as_guest_is_redirected_to_login(): void
+    {
+        $user = User::factory()->create();
+
+        Event::fake();
+
+        $verificationUrl = URL::temporarySignedRoute(
+            'verification.public.verify',
+            now()->addMinutes(60),
+            ['id' => $user->id, 'hash' => sha1($user->email)],
+        );
+
+        $this->get($verificationUrl)
+            ->assertRedirect(route('login', absolute: false))
+            ->assertSessionHas('status', 'Email berhasil diverifikasi. Silakan masuk untuk melanjutkan.');
+
+        Event::assertNotDispatched(Verified::class);
     }
 }

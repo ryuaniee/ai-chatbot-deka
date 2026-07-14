@@ -98,8 +98,31 @@ class AiServiceClient
                 ->post($path, $payload)
                 ->throw()
                 ->json();
-        } catch (ConnectionException|RequestException $exception) {
+        } catch (ConnectionException $exception) {
             throw AiServiceException::unavailable(previous: $exception);
+        } catch (RequestException $exception) {
+            $response = $exception->response;
+            $status = $response->status();
+            $body = $response->json();
+            $errorCode = data_get($body, 'detail.code') ?? data_get($body, 'code');
+            $message = data_get($body, 'detail.message')
+                ?? data_get($body, 'message')
+                ?? 'AI service request failed.';
+
+            if (in_array($errorCode, ['INTERNAL_AUTH_NOT_CONFIGURED', 'UNAUTHORIZED_INTERNAL_REQUEST'], true)) {
+                throw AiServiceConfigurationException::invalidInternalAuthentication();
+            }
+
+            if ($status === 429) {
+                throw AiServiceException::rateLimited($message, $exception);
+            }
+
+            throw AiServiceException::upstreamFailure(
+                message: $message,
+                status: $status,
+                errorCode: is_string($errorCode) ? $errorCode : null,
+                previous: $exception,
+            );
         }
     }
 }
