@@ -17,10 +17,17 @@ export default function VerifyEmail({ status }: { status?: string }) {
                 </div>
             )}
 
-            <Form action="/email/verification-notification-resend" method="post" className="space-y-6 text-center">
+            <Form
+                action="/email/verification-notification-resend"
+                method="post"
+                className="space-y-6 text-center"
+            >
                 {({ processing, errors }) => (
                     <>
-                        <InputError message={errors.verification} className="text-center" />
+                        <InputError
+                            message={errors.verification}
+                            className="text-center"
+                        />
 
                         <Button disabled={processing} variant="secondary">
                             {processing && <Spinner />}

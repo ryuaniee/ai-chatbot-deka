@@ -15,25 +15,33 @@ import type { User } from '@/types';
 type Props = {
     user: User;
     onSettingsClick?: () => void;
+    onLogoutClick?: () => void;
 };
 
-export function UserMenuContent({ user, onSettingsClick }: Props) {
+export function UserMenuContent({ user, onSettingsClick, onLogoutClick }: Props) {
     const cleanup = useMobileNavigation();
 
     const handleSettings = () => {
         cleanup();
+
         if (onSettingsClick) {
             onSettingsClick();
+
             return;
         }
 
         router.visit(edit.url());
     };
 
-    const handleLogout = () => {
+    const handleLogout = (e: Event) => {
         cleanup();
-        router.flushAll();
-        router.post(logout.url());
+        if (onLogoutClick) {
+            e.preventDefault();
+            onLogoutClick();
+        } else {
+            router.flushAll();
+            router.post(logout.url());
+        }
     };
 
     return (

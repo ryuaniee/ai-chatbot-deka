@@ -1,7 +1,298 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { login, register } from '@/routes';
+import {
+    ArrowRight,
+    Clock,
+    Info,
+    LogIn,
+    MapPin,
+    MessageSquare,
+    ShieldCheck,
+    Sparkles,
+    UserPlus,
+} from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import DekaLogo from '@/components/deka-logo';
-import { ArrowRight, MessageSquare, Info, Clock, Sparkles, LogIn, UserPlus } from 'lucide-react';
+import { login, register } from '@/routes';
+
+function InteractiveCanvas() {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const container = canvas.parentElement;
+        if (!container) return;
+
+        const resizeCanvas = () => {
+            const rect = container.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+        };
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        interface Particle {
+            x: number;
+            y: number;
+            vx: number;
+            vy: number;
+            radius: number;
+            color: string;
+            baseAlpha: number;
+            alpha: number;
+            speedMultiplier: number;
+        }
+
+        interface StrokeParticle {
+            x: number;
+            y: number;
+            vx: number;
+            vy: number;
+            radius: number;
+            color: string;
+            alpha: number;
+            decay: number;
+        }
+
+        const COLORS = [
+            'rgba(37, 99, 235, ',   // Blue
+            'rgba(180, 83, 9, ',    // Dark Coffee Amber
+            'rgba(217, 119, 6, ',   // Rich Gold
+        ];
+
+        const particles: Particle[] = [];
+        const strokeParticles: StrokeParticle[] = [];
+
+        // Initialize ambient particles
+        const particleCount = 45;
+        for (let i = 0; i < particleCount; i++) {
+            particles.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                vx: (Math.random() - 0.5) * 0.25,
+                vy: (Math.random() - 0.5) * 0.25,
+                radius: Math.random() * 5 + 1.5,
+                color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                baseAlpha: Math.random() * 0.35 + 0.15,
+                alpha: 0,
+                speedMultiplier: Math.random() * 0.6 + 0.4
+            });
+        }
+
+        const mouse = { x: 0, y: 0, active: false, lastX: 0, lastY: 0 };
+
+        const handleMouseMove = (e: MouseEvent) => {
+            const rect = container.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            if (!mouse.active) {
+                mouse.lastX = x;
+                mouse.lastY = y;
+                mouse.active = true;
+            }
+
+            mouse.x = x;
+            mouse.y = y;
+
+            const dx = mouse.x - mouse.lastX;
+            const dy = mouse.y - mouse.lastY;
+            const d = Math.sqrt(dx * dx + dy * dy);
+
+            if (d > 1) {
+                const steps = Math.min(4, Math.floor(d / 3) + 1);
+                for (let k = 0; k < steps; k++) {
+                    const ratio = k / steps;
+                    const px = mouse.lastX + dx * ratio;
+                    const py = mouse.lastY + dy * ratio;
+
+                    strokeParticles.push({
+                        x: px + (Math.random() - 0.5) * 6,
+                        y: py + (Math.random() - 0.5) * 6,
+                        vx: (Math.random() - 0.5) * 0.4 + (dx * 0.02),
+                        vy: (Math.random() - 0.5) * 0.4 + (dy * 0.02),
+                        radius: Math.random() * 10 + 6,
+                        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                        alpha: 0.6,
+                        decay: Math.random() * 0.012 + 0.008
+                    });
+                }
+                mouse.lastX = mouse.x;
+                mouse.lastY = mouse.y;
+            }
+        };
+
+        const handleMouseLeave = () => {
+            mouse.active = false;
+        };
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (e.touches.length > 0) {
+                const rect = container.getBoundingClientRect();
+                const x = e.touches[0].clientX - rect.left;
+                const y = e.touches[0].clientY - rect.top;
+
+                if (!mouse.active) {
+                    mouse.lastX = x;
+                    mouse.lastY = y;
+                    mouse.active = true;
+                }
+
+                mouse.x = x;
+                mouse.y = y;
+
+                const dx = mouse.x - mouse.lastX;
+                const dy = mouse.y - mouse.lastY;
+                const d = Math.sqrt(dx * dx + dy * dy);
+
+                if (d > 1) {
+                    const steps = Math.min(4, Math.floor(d / 3) + 1);
+                    for (let k = 0; k < steps; k++) {
+                        const ratio = k / steps;
+                        const px = mouse.lastX + dx * ratio;
+                        const py = mouse.lastY + dy * ratio;
+
+                        strokeParticles.push({
+                            x: px + (Math.random() - 0.5) * 6,
+                            y: py + (Math.random() - 0.5) * 6,
+                            vx: (Math.random() - 0.5) * 0.4 + (dx * 0.02),
+                            vy: (Math.random() - 0.5) * 0.4 + (dy * 0.02),
+                            radius: Math.random() * 10 + 6,
+                            color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                            alpha: 0.6,
+                            decay: Math.random() * 0.012 + 0.008
+                        });
+                    }
+                    mouse.lastX = mouse.x;
+                    mouse.lastY = mouse.y;
+                }
+            }
+        };
+
+        container.addEventListener('mousemove', handleMouseMove);
+        container.addEventListener('mouseleave', handleMouseLeave);
+        container.addEventListener('touchmove', handleTouchMove, { passive: true });
+        container.addEventListener('touchend', handleMouseLeave);
+
+        let animationFrameId: number;
+
+        const animate = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Update & Draw Ambient Particles
+            for (let i = 0; i < particles.length; i++) {
+                const p = particles[i];
+                p.x += p.vx * p.speedMultiplier;
+                p.y += p.vy * p.speedMultiplier;
+
+                // Wrap boundaries
+                if (p.x < -p.radius) p.x = canvas.width + p.radius;
+                if (p.x > canvas.width + p.radius) p.x = -p.radius;
+                if (p.y < -p.radius) p.y = canvas.height + p.radius;
+                if (p.y > canvas.height + p.radius) p.y = -p.radius;
+
+                // Mouse interaction
+                if (mouse.active) {
+                    const dx = mouse.x - p.x;
+                    const dy = mouse.y - p.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 180) {
+                        const force = ((180 - dist) / 180) * 0.025;
+                        p.vx += (dx / dist) * force;
+                        p.vy += (dy / dist) * force;
+                    }
+                }
+
+                const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+                if (speed > 0.8) {
+                    p.vx = (p.vx / speed) * 0.8;
+                    p.vy = (p.vy / speed) * 0.8;
+                }
+
+                if (p.alpha < p.baseAlpha) {
+                    p.alpha += 0.01;
+                }
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color + p.alpha + ')';
+                ctx.fill();
+            }
+
+            // Update & Draw Mouse Stroke Particles
+            for (let i = strokeParticles.length - 1; i >= 0; i--) {
+                const p = strokeParticles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.025; // Dripping paint effect
+                p.alpha -= p.decay;
+                p.radius += 0.12;
+
+                if (p.alpha <= 0) {
+                    strokeParticles.splice(i, 1);
+                    continue;
+                }
+
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fillStyle = p.color + p.alpha + ')';
+                ctx.fill();
+            }
+
+            animationFrameId = requestAnimationFrame(animate);
+        };
+
+        animate();
+
+        return () => {
+            window.removeEventListener('resize', resizeCanvas);
+            container.removeEventListener('mousemove', handleMouseMove);
+            container.removeEventListener('mouseleave', handleMouseLeave);
+            container.removeEventListener('touchmove', handleTouchMove);
+            container.removeEventListener('touchend', handleMouseLeave);
+            cancelAnimationFrame(animationFrameId);
+        };
+    }, []);
+
+    return (
+        <canvas
+            ref={canvasRef}
+            className="absolute inset-0 z-0 h-full w-full pointer-events-none"
+        />
+    );
+}
+
+const featureItems = [
+    {
+        icon: Info,
+        title: 'Info layanan Deka',
+        description:
+            'Tanyakan profil, layanan, fasilitas, dan informasi umum yang dibutuhkan sebelum berkunjung.',
+    },
+    {
+        icon: MapPin,
+        title: 'Lokasi dan kontak',
+        description:
+            'Temukan alamat, kontak resmi, serta arahan informasi yang membantu Anda terhubung lebih cepat.',
+    },
+    {
+        icon: Clock,
+        title: 'Jadwal dan operasional',
+        description:
+            'Dapatkan ringkasan informasi waktu layanan dan ketersediaan fasilitas secara praktis.',
+    },
+    {
+        icon: MessageSquare,
+        title: 'Riwayat chat tersimpan',
+        description:
+            'Percakapan yang sudah dibuat tetap tersedia, jadi pertanyaan sebelumnya mudah dibuka kembali.',
+    },
+];
 
 export default function Welcome() {
     const { auth } = usePage().props;
@@ -9,163 +300,133 @@ export default function Welcome() {
     return (
         <>
             <Head title="Selamat Datang" />
-            <div className="min-h-screen bg-[#faf9f6] text-[#1b1b18] font-sans selection:bg-[#2f80ed]/20 selection:text-[#2f80ed]">
-                {/* Header / Navbar */}
-                <header className="sticky top-0 z-50 w-full border-b border-zinc-200/50 bg-[#faf9f6]/80 backdrop-blur-md">
-                    <div className="mx-auto flex max-w-7xl h-20 items-center justify-between px-6 lg:px-8">
-                        <Link href="/" className="flex items-center h-20 w-56 relative">
-                            <DekaLogo className="h-36 w-auto object-contain absolute left-0 top-1/2 -translate-y-1/2 max-w-none" />
-                        </Link>
-                        
-                        <nav className="flex items-center gap-4">
-                            {auth.user ? (
-                                <Link
-                                    href="/chat"
-                                    className="flex items-center gap-2 rounded-xl bg-[#2f80ed] px-5 py-2.5 text-sm font-semibold text-white shadow-md hover:bg-blue-600 transition-all hover:shadow-lg hover:shadow-blue-500/20 active:scale-98"
+            <div className="min-h-screen bg-[#f7f7f4] font-sans text-slate-950 selection:bg-blue-600/20 selection:text-blue-700">
+                <main>
+                    <section
+                        className="relative overflow-hidden border-b border-slate-200/70 bg-[#f7f7f4] min-h-screen"
+                    >
+                        {/* Latar Belakang Seni Sapuan Kuas Abstrak (Arts Studio Theme) */}
+                        <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none">
+                            {/* Glow radial di tengah untuk kontras teks */}
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.75)_0%,rgba(247,247,244,0.3)_80%)]" />
+
+                            <InteractiveCanvas />
+
+                            {/* Overlay gradien tambahan untuk transisi mulus ke bagian berikutnya */}
+                            <div className="absolute right-0 bottom-0 left-0 h-32 bg-gradient-to-t from-[#f7f7f4] to-transparent" />
+                        </div>
+
+                        <div
+                            className="relative mx-auto flex min-h-screen max-w-7xl items-center justify-center px-5 md:px-8"
+                        >
+                            <div className="z-10 flex max-w-3xl flex-col items-center justify-center space-y-8 text-center py-12">
+                                <div className="flex flex-col items-center mb-6 mt-[-2.5rem] md:mt-[-5rem]">
+                                    <Link
+                                        href="/"
+                                        className="flex items-center justify-center overflow-visible transition hover:opacity-90"
+                                    >
+                                        <DekaLogo className="h-24 md:h-32 w-auto object-contain" />
+                                    </Link>
+                                </div>
+
+                                <h1
+                                    className="text-center leading-[1.1] font-extrabold tracking-tight text-slate-950"
+                                    style={{
+                                        fontSize: 'clamp(3rem, 5.5vw, 5.25rem)',
+                                    }}
                                 >
-                                    Mulai Chat <ArrowRight className="h-4 w-4" />
-                                </Link>
-                            ) : (
-                                <>
-                                    <Link
-                                        href={login()}
-                                        className="rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 hover:text-zinc-900 transition-all active:scale-98 shadow-sm"
-                                    >
-                                        Masuk
-                                    </Link>
-                                    <Link
-                                        href={register()}
-                                        className="rounded-xl bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:from-[#1a73e8] hover:to-[#155fc4] transition-all hover:shadow-lg hover:shadow-blue-500/20 active:scale-98"
-                                    >
-                                        Daftar
-                                    </Link>
-                                </>
-                            )}
-                        </nav>
-                    </div>
-                </header>
+                                    Tanya{' '}
+                                    <span className="font-black text-blue-500">
+                                        Deka
+                                    </span>
+                                    ,<br />
+                                    dapat jawaban cepat.
+                                </h1>
 
-                {/* Hero Section */}
-                <main className="mx-auto max-w-7xl px-6 lg:px-8 py-12 md:py-20 lg:py-24">
-                    <div className="grid grid-cols-1 gap-12 lg:grid-cols-2 lg:gap-8 items-center">
-                        {/* Text Block */}
-                        <div className="flex flex-col items-start text-left gap-6">
-                            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight text-zinc-900 leading-tight">
-                                Asisten AI Pintar Layanan Informasi Deka
-                            </h1>
+                                <p className="max-w-2xl text-center text-base leading-relaxed text-slate-600 md:text-lg">
+                                    Chatbot pintar kami siap memberikan info
+                                    menu, rute lokasi, fasilitas, hingga jadwal
+                                    operasional Deka Coffee & Arts Studio secara
+                                    instan.
+                                </p>
 
-                            <p className="text-base sm:text-lg text-zinc-600 max-w-xl leading-relaxed font-normal">
-                                Selamat datang di Chatbot Deka! Layanan asisten virtual cerdas yang siap menjawab pertanyaan seputar informasi umum, lokasi, jadwal, hingga layanan Deka secara instan, 24/7.
-                            </p>
-
-                            <div className="flex flex-wrap items-center gap-4 mt-2">
-                                {auth.user ? (
-                                    <Link
-                                        href="/chat"
-                                        className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] px-6 py-3.5 text-sm font-bold text-white shadow-md hover:from-[#1a73e8] hover:to-[#155fc4] transition-all hover:shadow-lg hover:shadow-blue-500/25 active:scale-98"
-                                    >
-                                        <MessageSquare className="h-4 w-4" />
-                                        Mulai Obrolan Sekarang
-                                    </Link>
-                                ) : (
-                                    <>
+                                <div className="flex w-full flex-col items-center justify-center gap-4 pt-2 sm:flex-row">
+                                    {auth.user ? (
+                                        <Link
+                                            href="/chat"
+                                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-4 text-base font-bold text-white shadow-lg shadow-blue-600/30 transition duration-300 hover:-translate-y-0.5 hover:bg-blue-500 hover:shadow-blue-500/40 active:scale-98 sm:w-auto"
+                                        >
+                                            <MessageSquare className="h-5 w-5" />
+                                            Mulai Chat Sekarang
+                                        </Link>
+                                    ) : (
                                         <Link
                                             href={login()}
-                                            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] px-6 py-3.5 text-sm font-bold text-white shadow-md hover:from-[#1a73e8] hover:to-[#155fc4] transition-all hover:shadow-lg hover:shadow-blue-500/25 active:scale-98"
+                                            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-4 text-base font-bold text-white shadow-lg shadow-blue-600/30 transition duration-300 hover:-translate-y-0.5 hover:bg-blue-500 hover:shadow-blue-500/40 active:scale-98 sm:w-auto"
                                         >
-                                            <LogIn className="h-4 w-4" />
-                                            Masuk ke Chatbot
+                                            <MessageSquare className="h-5 w-5" />
+                                            Mulai Bertanya
                                         </Link>
-                                        <Link
-                                            href={register()}
-                                            className="flex items-center gap-2 rounded-xl border border-zinc-300 bg-white px-6 py-3.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 hover:border-zinc-400 hover:text-zinc-900 transition-all active:scale-98 shadow-sm"
-                                        >
-                                            <UserPlus className="h-4 w-4" />
-                                            Daftar Akun Baru
-                                        </Link>
-                                    </>
-                                )}
+                                    )}
+                                </div>
                             </div>
                         </div>
+                    </section>
 
-                        {/* Image Block */}
-                        <div className="relative flex justify-center lg:justify-end">
-                            {/* Decorative background effects */}
-                            <div className="absolute -left-12 -top-12 w-64 h-64 rounded-full bg-blue-500/10 blur-3xl -z-10" />
-                            <div className="absolute -right-12 -bottom-12 w-64 h-64 rounded-full bg-[#2f80ed]/10 blur-3xl -z-10" />
-
-                            <div className="relative overflow-hidden rounded-3xl border border-zinc-200 bg-white p-3 shadow-2xl transition-transform duration-500 hover:scale-[1.01] max-w-lg w-full">
-                                <img
-                                    src="/img/deka-screenshot.png"
-                                    alt="Tampilan Antarmuka Deka Chatbot"
-                                    className="rounded-2xl w-full h-[320px] sm:h-[380px] object-cover object-top"
-                                />
+                    <section
+                        id="fitur"
+                        className="mx-auto max-w-7xl px-5 py-20 md:px-8 md:py-24"
+                    >
+                        <div className="grid gap-8 lg:grid-cols-[0.85fr_1.15fr] lg:items-end">
+                            <div>
+                                <p className="text-sm font-bold text-blue-600 uppercase">
+                                    Yang bisa dibantu
+                                </p>
+                                <h2 className="mt-3 max-w-xl text-3xl leading-tight font-black tracking-normal text-slate-950 md:text-5xl">
+                                    Informasi penting Deka dalam alur chat yang
+                                    ringan.
+                                </h2>
                             </div>
-                        </div>
-                    </div>
-
-                    {/* Features section */}
-                    <div className="mt-20 md:mt-28 border-t border-zinc-200/50 pt-16">
-                        <div className="text-center max-w-2xl mx-auto mb-12">
-                            <h2 className="text-3xl font-bold tracking-tight text-zinc-950 font-serif">
-                                Apa yang bisa dibantu oleh Chatbot Deka?
-                            </h2>
-                            <p className="mt-4 text-sm text-zinc-500">
-                                Asisten cerdas kami siap menjawab dan memberikan bantuan untuk berbagai keperluan informasi Anda.
+                            <p className="max-w-2xl text-sm leading-7 text-slate-600 md:text-lg md:leading-8">
+                                Gunakan chatbot untuk mencari informasi yang
+                                sering ditanyakan tanpa perlu berpindah halaman.
+                                Jawaban tetap mudah dibaca, ringkas, dan
+                                tersimpan dalam riwayat percakapan.
                             </p>
                         </div>
 
-                        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
-                            <div className="flex flex-col items-start rounded-2xl bg-white border border-zinc-200/60 p-6 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2f80ed]/10 text-[#2f80ed] mb-4">
-                                    <Info className="h-5 w-5" />
-                                </div>
-                                <h3 className="text-base font-bold text-zinc-900 mb-2">Informasi Umum</h3>
-                                <p className="text-xs text-zinc-500 leading-relaxed">
-                                    Tanyakan profil lengkap, jenis layanan, kontak resmi, hingga info terbaru mengenai Deka.
-                                </p>
-                            </div>
+                        <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                            {featureItems.map((item) => {
+                                const Icon = item.icon;
 
-                            <div className="flex flex-col items-start rounded-2xl bg-white border border-zinc-200/60 p-6 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2f80ed]/10 text-[#2f80ed] mb-4">
-                                    <Clock className="h-5 w-5" />
-                                </div>
-                                <h3 className="text-base font-bold text-zinc-900 mb-2">Jadwal & Fasilitas</h3>
-                                <p className="text-xs text-zinc-500 leading-relaxed">
-                                    Dapatkan informasi lokasi presisi, peta, serta fasilitas operasional yang tersedia di Deka.
-                                </p>
-                            </div>
-
-                            <div className="flex flex-col items-start rounded-2xl bg-white border border-zinc-200/60 p-6 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2f80ed]/10 text-[#2f80ed] mb-4">
-                                    <MessageSquare className="h-5 w-5" />
-                                </div>
-                                <h3 className="text-base font-bold text-zinc-900 mb-2">Obrolan Instan 24/7</h3>
-                                <p className="text-xs text-zinc-500 leading-relaxed">
-                                    Asisten AI yang siap melayani Anda kapan saja tanpa antre dan tanpa menunggu lama.
-                                </p>
-                            </div>
-
-                            <div className="flex flex-col items-start rounded-2xl bg-white border border-zinc-200/60 p-6 shadow-sm hover:shadow-md transition-shadow">
-                                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2f80ed]/10 text-[#2f80ed] mb-4">
-                                    <Sparkles className="h-5 w-5" />
-                                </div>
-                                <h3 className="text-base font-bold text-zinc-900 mb-2">Teknologi AI Terkini</h3>
-                                <p className="text-xs text-zinc-500 leading-relaxed">
-                                    Didukung dengan pemrosesan bahasa alami yang cerdas dan akurat untuk kenyamanan Anda.
-                                </p>
-                            </div>
+                                return (
+                                    <article
+                                        key={item.title}
+                                        className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+                                    >
+                                        <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                                            <Icon className="h-5 w-5" />
+                                        </div>
+                                        <h3 className="text-base font-bold text-slate-950">
+                                            {item.title}
+                                        </h3>
+                                        <p className="mt-2 text-sm leading-6 text-slate-600">
+                                            {item.description}
+                                        </p>
+                                    </article>
+                                );
+                            })}
                         </div>
-                    </div>
+                    </section>
                 </main>
 
-                {/* Footer */}
-                <footer className="bg-white border-t border-zinc-200/50 py-8 mt-16">
-                    <div className="mx-auto max-w-7xl px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-                        <p className="text-xs text-zinc-500">
-                            &copy; {new Date().getFullYear()} Deka Coffee & Arts Studio. All rights reserved.
+                <footer id="kontak" className="bg-[#f7f7f4] py-8">
+                    <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-5 text-center md:flex-row md:px-8 md:text-left">
+                        <p className="text-xs text-slate-500">
+                            &copy; {new Date().getFullYear()} Deka Coffee & Arts
+                            Studio. All rights reserved.
                         </p>
-                        <p className="text-xs text-zinc-400">
+                        <p className="text-xs font-medium text-slate-500">
                             Powered by Deka Chatbot AI Engine
                         </p>
                     </div>

@@ -25,11 +25,14 @@ export default function ForgotPassword({ status }: { status?: string }) {
                     {({ processing, errors }) => (
                         <>
                             <div className="grid gap-2">
-                                <Label htmlFor="email" className="text-xs font-bold text-zinc-500 tracking-wider uppercase mb-1.5">
+                                <Label
+                                    htmlFor="email"
+                                    className="mb-1.5 text-xs font-bold tracking-wider text-zinc-500 uppercase"
+                                >
                                     Alamat Email
                                 </Label>
                                 <div className="relative flex items-center">
-                                    <Mail className="absolute left-4 text-zinc-400 h-5 w-5 pointer-events-none" />
+                                    <Mail className="pointer-events-none absolute left-4 h-5 w-5 text-zinc-400" />
                                     <Input
                                         id="email"
                                         type="email"
@@ -37,7 +40,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
                                         autoComplete="off"
                                         autoFocus
                                         placeholder="nama@email.com"
-                                        className="h-12 pl-11 w-full border-zinc-200 rounded-xl text-black bg-white focus-visible:ring-[#2f80ed]/25 focus-visible:border-[#2f80ed] placeholder:text-zinc-400 shadow-sm transition-all focus:shadow-md"
+                                        className="h-12 w-full rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                                     />
                                 </div>
 
@@ -46,7 +49,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
 
                             <div className="my-6 flex items-center justify-start">
                                 <Button
-                                    className="w-full h-12 bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] hover:from-[#1a73e8] hover:to-[#155fc4] text-white font-semibold rounded-xl transition-all border-none cursor-pointer flex items-center justify-center shadow-md hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99] text-sm tracking-wide"
+                                    className="flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border-none bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] text-sm font-semibold tracking-wide text-white shadow-md transition-all hover:from-[#1a73e8] hover:to-[#155fc4] hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99]"
                                     disabled={processing}
                                     data-test="email-password-reset-link-button"
                                 >
@@ -60,9 +63,14 @@ export default function ForgotPassword({ status }: { status?: string }) {
                     )}
                 </Form>
 
-                <div className="space-x-1 text-center text-sm text-zinc-600 font-medium">
+                <div className="space-x-1 text-center text-sm font-medium text-zinc-600">
                     <span>Atau kembali ke halaman</span>
-                    <TextLink href={login()} className="text-[#2f80ed] font-semibold hover:underline">Masuk</TextLink>
+                    <TextLink
+                        href={login()}
+                        className="font-semibold text-[#2f80ed] hover:underline"
+                    >
+                        Masuk
+                    </TextLink>
                 </div>
             </div>
         </>

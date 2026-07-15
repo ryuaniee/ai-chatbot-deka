@@ -19,13 +19,15 @@ class ConversationResource extends Resource
 {
     protected static ?string $model = Conversation::class;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedRectangleStack;
+    protected static string|BackedEnum|null $navigationIcon = 'heroicon-o-chat-bubble-left-right';
 
-    protected static string|UnitEnum|null $navigationGroup = 'Chatbot';
+    protected static string|UnitEnum|null $navigationGroup = 'WORKSPACE';
 
-    protected static ?string $modelLabel = 'Conversation';
+    protected static ?int $navigationSort = 2;
 
-    protected static ?string $pluralModelLabel = 'Conversations';
+    protected static ?string $modelLabel = 'Percakapan';
+
+    protected static ?string $pluralModelLabel = 'Percakapan';
 
     public static function form(Schema $schema): Schema
     {

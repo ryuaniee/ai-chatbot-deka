@@ -18,7 +18,12 @@ type Props = {
 };
 
 const GoogleIcon = () => (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg
+        className="h-5 w-5"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+    >
         <path
             d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
             fill="#4285F4"
@@ -62,14 +67,14 @@ export default function Login({ status, canResetPassword }: Props) {
         <>
             <Head title="Masuk" />
 
-            <form
-                onSubmit={handleSubmit}
-                className="flex flex-col gap-6"
-            >
+            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
                 <div className="grid gap-5">
                     {/* Email Address */}
                     <div className="grid gap-2">
-                        <Label htmlFor="email" className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                        <Label
+                            htmlFor="email"
+                            className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
+                        >
                             Alamat Email
                         </Label>
                         <div className="relative">
@@ -86,8 +91,10 @@ export default function Login({ status, canResetPassword }: Props) {
                                 autoComplete="email"
                                 placeholder="nama@email.com"
                                 value={http.data.email}
-                                onChange={(e) => http.setData('email', e.target.value)}
-                                className="h-12 pl-11 border-zinc-200 rounded-xl text-black bg-white focus-visible:ring-[#2f80ed]/25 focus-visible:border-[#2f80ed] placeholder:text-zinc-400 shadow-sm transition-all focus:shadow-md"
+                                onChange={(e) =>
+                                    http.setData('email', e.target.value)
+                                }
+                                className="h-12 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
                         <InputError message={http.errors.email} />
@@ -95,11 +102,14 @@ export default function Login({ status, canResetPassword }: Props) {
 
                     {/* Password */}
                     <div className="grid gap-2">
-                        <Label htmlFor="password" className="text-xs font-bold text-zinc-700 uppercase tracking-wider">
+                        <Label
+                            htmlFor="password"
+                            className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
+                        >
                             Kata Sandi
                         </Label>
                         <div className="relative">
-                            <span className="absolute inset-y-0 left-0 flex items-center pl-4 text-zinc-400 z-10">
+                            <span className="absolute inset-y-0 left-0 z-10 flex items-center pl-4 text-zinc-400">
                                 <Lock className="h-4 w-4" />
                             </span>
                             <PasswordInput
@@ -110,32 +120,39 @@ export default function Login({ status, canResetPassword }: Props) {
                                 autoComplete="current-password"
                                 placeholder="Masukkan kata sandi"
                                 value={http.data.password}
-                                onChange={(e) => http.setData('password', e.target.value)}
-                                className="h-12 pl-11 border-zinc-200 rounded-xl text-black bg-white focus-visible:ring-[#2f80ed]/25 focus-visible:border-[#2f80ed] placeholder:text-zinc-400 shadow-sm transition-all focus:shadow-md"
+                                onChange={(e) =>
+                                    http.setData('password', e.target.value)
+                                }
+                                className="h-12 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
                         <InputError message={http.errors.password} />
                     </div>
 
                     {/* Remember Me & Forgot Password */}
-                    <div className="flex items-center justify-between mt-1">
+                    <div className="mt-1 flex items-center justify-between">
                         <div className="flex items-center space-x-2">
                             <Checkbox
                                 id="remember"
                                 name="remember"
                                 tabIndex={3}
                                 checked={http.data.remember}
-                                onCheckedChange={(checked) => http.setData('remember', !!checked)}
-                                className="h-5 w-5 rounded-md border-zinc-300 text-[#2f80ed] focus:ring-[#2f80ed] data-[state=checked]:bg-[#2f80ed] data-[state=checked]:border-[#2f80ed] cursor-pointer shadow-sm"
+                                onCheckedChange={(checked) =>
+                                    http.setData('remember', !!checked)
+                                }
+                                className="h-5 w-5 cursor-pointer rounded-md border-zinc-300 text-[#2f80ed] shadow-sm focus:ring-[#2f80ed] data-[state=checked]:border-[#2f80ed] data-[state=checked]:bg-[#2f80ed]"
                             />
-                            <Label htmlFor="remember" className="text-sm font-semibold text-zinc-700 cursor-pointer select-none">
+                            <Label
+                                htmlFor="remember"
+                                className="cursor-pointer text-sm font-semibold text-zinc-700 select-none"
+                            >
                                 Ingatkan Saya
                             </Label>
                         </div>
                         {canResetPassword && (
                             <TextLink
                                 href={request()}
-                                className="text-sm font-semibold text-zinc-600 hover:underline hover:text-zinc-900"
+                                className="text-sm font-semibold text-zinc-600 hover:text-zinc-900 hover:underline"
                                 tabIndex={5}
                             >
                                 Lupa Password?
@@ -146,19 +163,21 @@ export default function Login({ status, canResetPassword }: Props) {
                     {/* Submit Button */}
                     <Button
                         type="submit"
-                        className="w-full h-12 mt-4 bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] hover:from-[#1a73e8] hover:to-[#155fc4] text-white font-semibold rounded-xl transition-all border-none cursor-pointer flex items-center justify-center shadow-md hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99] text-sm tracking-wide"
+                        className="mt-4 flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border-none bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] text-sm font-semibold tracking-wide text-white shadow-md transition-all hover:from-[#1a73e8] hover:to-[#155fc4] hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99]"
                         tabIndex={4}
                         disabled={http.processing}
                     >
-                        {http.processing && <Spinner className="mr-2 h-4 w-4 animate-spin text-white" />}
+                        {http.processing && (
+                            <Spinner className="mr-2 h-4 w-4 animate-spin text-white" />
+                        )}
                         Masuk
                     </Button>
                 </div>
 
                 {/* Divider */}
-                <div className="relative flex py-2 items-center">
+                <div className="relative flex items-center py-2">
                     <div className="flex-grow border-t border-zinc-200"></div>
-                    <span className="flex-shrink mx-4 text-zinc-400 text-xs font-semibold">
+                    <span className="mx-4 flex-shrink text-xs font-semibold text-zinc-400">
                         atau lanjut dengan
                     </span>
                     <div className="flex-grow border-t border-zinc-200"></div>
@@ -168,18 +187,20 @@ export default function Login({ status, canResetPassword }: Props) {
                 <button
                     type="button"
                     onClick={() => window.location.assign('/auth/google')}
-                    className="w-full h-12 border border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300 text-zinc-700 font-semibold rounded-xl flex items-center justify-center gap-3 transition-all cursor-pointer shadow-sm active:scale-[0.99]"
+                    className="flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white font-semibold text-zinc-700 shadow-sm transition-all hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99]"
                 >
                     <GoogleIcon />
-                    <span className="text-sm font-bold">Masuk atau daftar dengan Google</span>
+                    <span className="text-sm font-bold">
+                        Masuk atau daftar dengan Google
+                    </span>
                 </button>
 
                 {/* Footer */}
-                <div className="text-center text-sm text-zinc-600 font-medium mt-2">
+                <div className="mt-2 text-center text-sm font-medium text-zinc-600">
                     Belum punya akun?{' '}
                     <TextLink
                         href={register()}
-                        className="text-[#2f80ed] hover:underline font-semibold"
+                        className="font-semibold text-[#2f80ed] hover:underline"
                         tabIndex={6}
                     >
                         Daftar Sekarang
@@ -198,5 +219,6 @@ export default function Login({ status, canResetPassword }: Props) {
 
 Login.layout = {
     title: 'Masuk atau daftar',
-    description: 'AI Chatbot cerdas untuk membantu Anda kapan pun dan di mana pun.',
+    description:
+        'AI Chatbot cerdas untuk membantu Anda kapan pun dan di mana pun.',
 };

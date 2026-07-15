@@ -1,7 +1,6 @@
 import { Form } from '@inertiajs/react';
 import { useRef } from 'react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
-import Heading from '@/components/heading';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import { Button } from '@/components/ui/button';
@@ -20,28 +19,34 @@ export default function DeleteUser() {
     const passwordInput = useRef<HTMLInputElement>(null);
 
     return (
-        <div className="space-y-6">
-            <Heading
-                variant="small"
-                title="Delete account"
-                description="Delete your account and all of its resources"
-            />
-            <div className="space-y-4 rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-200/10 dark:bg-red-700/10">
-                <div className="relative space-y-0.5 text-red-600 dark:text-red-100">
-                    <p className="font-medium">Warning</p>
-                    <p className="text-sm">
-                        Please proceed with caution, this cannot be undone.
+        <div className="space-y-3">
+            <div>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Danger zone
+                </h4>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Permanently delete your account and all of its resources.
+                </p>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50/60 p-4 dark:border-red-950/60 dark:bg-red-950/20">
+                <div className="min-w-0 space-y-0.5 text-slate-700 dark:text-slate-300">
+                    <p className="text-sm font-semibold text-red-950 dark:text-red-100">
+                        Delete account
+                    </p>
+                    <p className="text-xs leading-relaxed text-red-800/75 dark:text-red-200/75">
+                        This action cannot be undone.
                     </p>
                 </div>
 
                 <Dialog>
                     <DialogTrigger asChild>
-                        <Button
-                            variant="destructive"
+                        <button
+                            className="shrink-0 cursor-pointer rounded-lg border border-red-600 bg-red-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 active:scale-95"
                             data-test="delete-user-button"
                         >
                             Delete account
-                        </Button>
+                        </button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogTitle>
@@ -96,18 +101,14 @@ export default function DeleteUser() {
                                             </Button>
                                         </DialogClose>
 
-                                        <Button
-                                            variant="destructive"
+                                        <button
+                                            type="submit"
                                             disabled={processing}
-                                            asChild
+                                            className="cursor-pointer rounded-xl border border-red-600 bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 active:scale-95 disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-400"
+                                            data-test="confirm-delete-user-button"
                                         >
-                                            <button
-                                                type="submit"
-                                                data-test="confirm-delete-user-button"
-                                            >
-                                                Delete account
-                                            </button>
-                                        </Button>
+                                            Delete account
+                                        </button>
                                     </DialogFooter>
                                 </>
                             )}
