@@ -6,6 +6,7 @@ use App\Exceptions\IdempotencyConflictException;
 use App\Models\Conversation;
 use App\Models\Message;
 use App\Models\User;
+use App\Services\Knowledge\DekaKnowledgeRetriever;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Responses\StreamableAgentResponse;
@@ -17,6 +18,7 @@ class ConversationChatService
     public function __construct(
         private readonly AiRuntimeClient $aiRuntimeClient,
         private readonly MessageModerationService $messageModerationService,
+        private readonly DekaKnowledgeRetriever $knowledgeRetriever,
     ) {}
 
     /**
@@ -128,7 +130,7 @@ class ConversationChatService
             $userMessage,
         );
 
-        if (blank($conversation->fresh()->title)) {
+        if (blank($conversation->fresh()->title) && ! $this->isOutOfContextMessage($assistantMessage)) {
             $this->generateTitle($conversation);
         }
 
@@ -248,11 +250,36 @@ class ConversationChatService
 
         $conversation->load(['messages' => fn ($query) => $query->orderBy('sequence')]);
 
+        $retrieval = $this->knowledgeRetriever->retrieve($userMessage->content);
+
+        if ($retrieval['enabled'] && ! $retrieval['in_context']) {
+            $assistantMessage = $this->persistAssistantMessage(
+                $conversation,
+                $userMessage,
+                $this->outOfContextResponse($retrieval),
+            );
+
+            return [$userMessage, $assistantMessage];
+        }
+
+        if ($this->shouldUseDirectContactResponse($retrieval, $userMessage->content)) {
+            $assistantMessage = $this->persistAssistantMessage(
+                $conversation,
+                $userMessage,
+                $this->directContactResponse($retrieval),
+            );
+
+            return [$userMessage, $assistantMessage];
+        }
+
         $response = $this->aiRuntimeClient->respond(
             $conversation->id,
             $user->id,
             $this->buildModelContext($conversation, $userMessage),
+            $retrieval['context'],
         );
+
+        $response['metadata'] = $this->knowledgeMetadata($retrieval);
 
         $assistantMessage = $this->persistAssistantMessage($conversation, $userMessage, $response);
 
@@ -293,13 +320,48 @@ class ConversationChatService
 
         $conversation->load(['messages' => fn ($query) => $query->orderBy('sequence')]);
 
+        $retrieval = $this->knowledgeRetriever->retrieve($userMessage->content);
+
+        if ($retrieval['enabled'] && ! $retrieval['in_context']) {
+            $state->assistantMessage = $this->persistAssistantMessage(
+                $conversation,
+                $userMessage,
+                $this->outOfContextResponse($retrieval),
+            );
+
+            return [
+                'conversation' => $conversation,
+                'user_message' => $userMessage,
+                'assistant_message' => $state->assistantMessage,
+                'stream' => null,
+                'state' => $state,
+            ];
+        }
+
+        if ($this->shouldUseDirectContactResponse($retrieval, $userMessage->content)) {
+            $state->assistantMessage = $this->persistAssistantMessage(
+                $conversation,
+                $userMessage,
+                $this->directContactResponse($retrieval),
+            );
+
+            return [
+                'conversation' => $conversation,
+                'user_message' => $userMessage,
+                'assistant_message' => $state->assistantMessage,
+                'stream' => null,
+                'state' => $state,
+            ];
+        }
+
         $stream = $this->aiRuntimeClient->stream(
             $conversation->id,
             $user->id,
             $this->buildModelContext($conversation, $userMessage),
+            $retrieval['context'],
         );
 
-        $stream->then(function (StreamedAgentResponse $response) use ($conversation, $userMessage, $state): void {
+        $stream->then(function (StreamedAgentResponse $response) use ($conversation, $userMessage, $state, $retrieval): void {
             $state->assistantMessage = $this->persistAssistantMessage($conversation, $userMessage, [
                 'message' => [
                     'role' => 'assistant',
@@ -307,12 +369,13 @@ class ConversationChatService
                 ],
                 'usage' => $response->usage->toArray(),
                 'model' => $response->meta->model,
+                'metadata' => $this->knowledgeMetadata($retrieval),
             ]);
 
             Log::info('Chat stream response persisted.', [
                 'conversation_id' => $conversation->id,
-                'assistant_message_id' => $state->assistantMessage?->id,
-                'model' => data_get($state->assistantMessage?->metadata, 'model'),
+                'assistant_message_id' => $state->assistantMessage->id,
+                'model' => data_get($state->assistantMessage->metadata, 'model'),
             ]);
         });
 
@@ -403,6 +466,7 @@ class ConversationChatService
                 'metadata' => array_filter([
                     'usage' => data_get($response, 'usage'),
                     'model' => data_get($response, 'model'),
+                    ...((array) data_get($response, 'metadata', [])),
                 ], fn (mixed $value): bool => $value !== null),
             ]);
 
@@ -495,6 +559,161 @@ class ConversationChatService
         $conversation->forceFill([
             'title' => $title,
         ])->save();
+    }
+
+    /**
+     * @param  array<string, mixed>  $retrieval
+     * @return array{
+     *     message: array{role: string, content: string},
+     *     usage: null,
+     *     model: null,
+     *     metadata: array<string, mixed>
+     * }
+     */
+    private function outOfContextResponse(array $retrieval): array
+    {
+        return [
+            'message' => [
+                'role' => 'assistant',
+                'content' => (string) config('services.deka_knowledge.out_of_context_response'),
+            ],
+            'usage' => null,
+            'model' => null,
+            'metadata' => [
+                'knowledge' => [
+                    'enabled' => true,
+                    'in_context' => false,
+                    'sources' => $retrieval['sources'] ?? [],
+                ],
+                'out_of_context' => true,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $retrieval
+     * @return array{
+     *     message: array{role: string, content: string},
+     *     usage: null,
+     *     model: null,
+     *     metadata: array<string, mixed>
+     * }
+     */
+    private function directContactResponse(array $retrieval): array
+    {
+        $contact = $this->contactMetadata($retrieval);
+        $mapsUrl = $contact['maps_url'] ?? null;
+        $email = $contact['email'] ?? null;
+        $phone = $contact['phone'] ?? null;
+        $whatsapp = $contact['whatsapp'] ?? null;
+        $lines = [
+            'Berikut informasi kontak dan alamat Deka:',
+        ];
+
+        if ($mapsUrl !== null && $mapsUrl !== '') {
+            $lines[] = "- Alamat: {$mapsUrl}";
+        }
+
+        if ($email !== null && $email !== '') {
+            $lines[] = "- Email: {$email}";
+        }
+
+        if ($phone !== null && $phone !== '') {
+            $lines[] = "- Telepon: {$phone}";
+        }
+
+        if ($whatsapp !== null && $whatsapp !== '') {
+            $lines[] = "- WhatsApp: {$whatsapp}";
+        }
+
+        return [
+            'message' => [
+                'role' => 'assistant',
+                'content' => implode("\n", $lines),
+            ],
+            'usage' => null,
+            'model' => null,
+            'metadata' => [
+                ...$this->knowledgeMetadata($retrieval),
+                'direct_response' => 'deka_contact',
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $retrieval
+     */
+    private function shouldUseDirectContactResponse(array $retrieval, string $question): bool
+    {
+        if (! ($retrieval['enabled'] ?? false) || ! ($retrieval['in_context'] ?? false)) {
+            return false;
+        }
+
+        $question = mb_strtolower($question);
+
+        if (
+            ! str_contains($question, 'kontak')
+            && ! str_contains($question, 'alamat')
+            && ! str_contains($question, 'lokasi')
+            && ! str_contains($question, 'email')
+            && ! str_contains($question, 'telepon')
+            && ! str_contains($question, 'nomor')
+            && ! str_contains($question, 'whatsapp')
+            && ! str_contains($question, 'wa')
+        ) {
+            return false;
+        }
+
+        foreach ($retrieval['sources'] ?? [] as $source) {
+            if (is_array($source) && ($source['url'] ?? null) === 'manual://deka/contact') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $retrieval
+     * @return array{maps_url?: string|null, email?: string|null, phone?: string|null, whatsapp?: string|null}
+     */
+    private function contactMetadata(array $retrieval): array
+    {
+        foreach ($retrieval['sources'] ?? [] as $source) {
+            if (! is_array($source) || ($source['url'] ?? null) !== 'manual://deka/contact') {
+                continue;
+            }
+
+            $metadata = $source['metadata'] ?? [];
+
+            return is_array($metadata) ? $metadata : [];
+        }
+
+        return [];
+    }
+
+    /**
+     * @param  array<string, mixed>  $retrieval
+     * @return array<string, mixed>
+     */
+    private function knowledgeMetadata(array $retrieval): array
+    {
+        if (! ($retrieval['enabled'] ?? false)) {
+            return [];
+        }
+
+        return [
+            'knowledge' => [
+                'enabled' => true,
+                'in_context' => (bool) ($retrieval['in_context'] ?? false),
+                'sources' => $retrieval['sources'] ?? [],
+            ],
+        ];
+    }
+
+    private function isOutOfContextMessage(Message $message): bool
+    {
+        return (bool) data_get($message->metadata, 'out_of_context', false);
     }
 
     private function findUserMessageByIdempotencyKey(User $user, string $idempotencyKey): ?Message

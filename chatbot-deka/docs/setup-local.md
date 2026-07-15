@@ -98,8 +98,17 @@ AI_CHAT_TIMEOUT=30
 AI_CHAT_RATE_LIMIT_PER_MINUTE=20
 AI_CHAT_MAX_HISTORY_MESSAGES=6
 AI_CHAT_MAX_HISTORY_CHARACTERS=6000
+AI_CHAT_ANSWER_MAX_TOKENS=160
+AI_CHAT_TEMPERATURE=0.2
 AI_CHAT_IDEMPOTENCY_TTL_MINUTES=10
 MODERATION_MODEL=omni-moderation-latest
+
+DEKA_KNOWLEDGE_ENABLED=true
+DEKA_KNOWLEDGE_BASE_URL=https://deka.dev
+DEKA_KNOWLEDGE_MAX_PAGES=50
+DEKA_KNOWLEDGE_TOP_K=3
+DEKA_KNOWLEDGE_MIN_SCORE=0.02
+DEKA_KNOWLEDGE_MAX_CONTEXT_CHARACTERS=1800
 
 ADMIN_NAME="Admin Deka"
 ADMIN_EMAIL=admin@deka.dev
@@ -134,7 +143,21 @@ php artisan migrate
 php artisan db:seed --class=AdminUserSeeder
 ```
 
-## 8. Jalankan App
+## 8. Ingest Knowledge Deka
+
+Ambil konten dari `deka.dev` ke knowledge store lokal:
+
+```bash
+php artisan deka:knowledge:ingest --fresh
+```
+
+Catatan:
+
+- crawler hanya menyimpan URL dari host `deka.dev`
+- jika tidak ada knowledge yang cocok, chat langsung membalas out-of-context tanpa call AI
+- ulangi command ini setelah konten `deka.dev` berubah
+
+## 9. Jalankan App
 
 ```bash
 php artisan serve
@@ -144,7 +167,7 @@ Default URL:
 
 - `http://127.0.0.1:8000`
 
-## 9. URL Lokal
+## 10. URL Lokal
 
 - login: `http://127.0.0.1:8000/login`
 - chat: `http://127.0.0.1:8000/chat`
@@ -155,7 +178,7 @@ Default admin:
 - email: `admin@deka.dev`
 - password: `password`
 
-## 10. Auth dan Akses
+## 11. Auth dan Akses
 
 Role yang dipakai:
 
@@ -169,7 +192,7 @@ Aturan akses:
 - admin tidak memakai halaman chat user
 - auth API memakai session cookie
 
-## 11. Endpoint Penting
+## 12. Endpoint Penting
 
 Auth:
 
@@ -188,20 +211,22 @@ Chat:
 - `POST /api/conversations/{conversation}/messages`
 - `POST /api/conversations/{conversation}/messages/stream`
 
-## 12. Test
+## 13. Test
 
 Jalankan test chat utama:
 
 ```bash
-php artisan test --filter='ChatApiTest|AiRuntimeClientTest'
+php artisan test --filter='DekaKnowledgeTest|ChatApiTest|AiRuntimeClientTest'
 ```
 
 Kalau PostgreSQL lokal mati, feature test chat akan gagal karena koneksi database.
 
-## 13. Verifikasi Manual Cepat
+## 14. Verifikasi Manual Cepat
 
 1. buka `/login`
 2. login sebagai user biasa atau admin
 3. user biasa harus masuk `/chat`
 4. admin harus masuk `/admin`
-5. kirim pesan di halaman chat untuk memverifikasi non-stream dan stream flow frontend
+5. pastikan `php artisan deka:knowledge:ingest --fresh` sudah selesai
+6. kirim pertanyaan yang ada di konteks `deka.dev`
+7. kirim pertanyaan di luar konteks untuk memastikan response aman muncul cepat

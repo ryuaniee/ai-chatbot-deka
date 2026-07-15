@@ -1,8 +1,10 @@
 <?php
 
-use App\Http\Middleware\HandleAppearance;
+use App\Console\Commands\IngestDekaKnowledge;
+use App\Console\Commands\SeedDekaManualKnowledge;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\EnsureRegularUser;
+use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleIdempotency;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -17,6 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
+    ->withCommands([
+        IngestDekaKnowledge::class,
+        SeedDekaManualKnowledge::class,
+    ])
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
         $middleware->alias([

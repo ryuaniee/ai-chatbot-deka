@@ -8,14 +8,16 @@ Backend chatbot Deka saat ini berjalan sebagai aplikasi Laravel tunggal dengan:
 - chat runtime via `laravel/ai`
 - endpoint chat biasa dan streaming SSE
 - moderation, rate limit, dan idempotency
-
-Knowledge khusus Deka belum di-ingest. Jadi sistem yang ada sekarang adalah fondasi chatbot dan runtime AI, belum final sebagai chatbot knowledge `deka.dev`.
+- knowledge ingestion dari `deka.dev`
+- retrieval lokal sebelum AI menjawab
+- guard out-of-context agar AI tidak mengarang di luar knowledge Deka
 
 ## Stack
 
 - Laravel app: `app/`
 - Database: PostgreSQL via Docker Compose
 - Runtime AI: `Laravel AI SDK`
+- Knowledge retrieval: PostgreSQL full-text search
 - Frontend chat dasar: React/Inertia di repo yang sama
 
 ## Dokumentasi
@@ -67,6 +69,7 @@ composer install
 npm install
 php artisan key:generate
 php artisan migrate
+php artisan deka:knowledge:ingest --fresh
 php artisan db:seed --class=AdminUserSeeder
 php artisan serve
 ```
@@ -94,8 +97,17 @@ AI_CHAT_TIMEOUT=30
 AI_CHAT_RATE_LIMIT_PER_MINUTE=20
 AI_CHAT_MAX_HISTORY_MESSAGES=6
 AI_CHAT_MAX_HISTORY_CHARACTERS=6000
+AI_CHAT_ANSWER_MAX_TOKENS=160
+AI_CHAT_TEMPERATURE=0.2
 AI_CHAT_IDEMPOTENCY_TTL_MINUTES=10
 MODERATION_MODEL=omni-moderation-latest
+
+DEKA_KNOWLEDGE_ENABLED=true
+DEKA_KNOWLEDGE_BASE_URL=https://deka.dev
+DEKA_KNOWLEDGE_MAX_PAGES=50
+DEKA_KNOWLEDGE_TOP_K=3
+DEKA_KNOWLEDGE_MIN_SCORE=0.02
+DEKA_KNOWLEDGE_MAX_CONTEXT_CHARACTERS=1800
 ```
 
 Untuk email:
@@ -142,16 +154,17 @@ Test chat dan runtime AI:
 
 ```bash
 cd app
-php artisan test --filter='ChatApiTest|AiRuntimeClientTest'
+php artisan test --filter='DekaKnowledgeTest|ChatApiTest|AiRuntimeClientTest'
 ```
 
-## Tahap Berikutnya
+## Knowledge Deka
 
-Yang belum dikerjakan:
+Ingest ulang knowledge setelah konten `deka.dev` berubah:
 
-- crawl `deka.dev`
-- ingestion dokumen
-- vector store / `pgvector`
-- retrieval
-- inject context knowledge Deka ke runtime AI
-- membatasi jawaban agar hanya berbasis knowledge Deka
+```bash
+cd app
+php artisan migrate
+php artisan deka:knowledge:ingest --fresh
+```
+
+Saat `DEKA_KNOWLEDGE_ENABLED=true`, backend mencari konteks dari tabel knowledge sebelum memanggil AI. Kalau tidak ada konteks yang cocok, backend langsung menyimpan dan mengirim jawaban aman tanpa call AI.

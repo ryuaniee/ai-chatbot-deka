@@ -51,7 +51,25 @@ return [
         'rate_limit_per_minute' => env('AI_CHAT_RATE_LIMIT_PER_MINUTE', 20),
         'max_history_messages' => env('AI_CHAT_MAX_HISTORY_MESSAGES', 6),
         'max_history_characters' => env('AI_CHAT_MAX_HISTORY_CHARACTERS', 6000),
+        'answer_max_tokens' => env('AI_CHAT_ANSWER_MAX_TOKENS', 160),
+        'temperature' => env('AI_CHAT_TEMPERATURE', 0.2),
         'idempotency_ttl_minutes' => env('AI_CHAT_IDEMPOTENCY_TTL_MINUTES', 10),
+    ],
+
+    'deka_knowledge' => [
+        'enabled' => env('DEKA_KNOWLEDGE_ENABLED', false),
+        'base_url' => env('DEKA_KNOWLEDGE_BASE_URL', 'https://deka.dev'),
+        'max_pages' => env('DEKA_KNOWLEDGE_MAX_PAGES', 50),
+        'http_timeout' => env('DEKA_KNOWLEDGE_HTTP_TIMEOUT', 45),
+        'top_k' => env('DEKA_KNOWLEDGE_TOP_K', 3),
+        'min_score' => env('DEKA_KNOWLEDGE_MIN_SCORE', 0.02),
+        'max_context_characters' => env('DEKA_KNOWLEDGE_MAX_CONTEXT_CHARACTERS', 1800),
+        'chunk_size' => env('DEKA_KNOWLEDGE_CHUNK_SIZE', 1200),
+        'chunk_overlap' => env('DEKA_KNOWLEDGE_CHUNK_OVERLAP', 180),
+        'out_of_context_response' => env(
+            'DEKA_KNOWLEDGE_OUT_OF_CONTEXT_RESPONSE',
+            'Saya tidak bisa menjawab karena pertanyaan ini tidak berkaitan dengan Deka. Coba tanyakan hal lain yang berkaitan dengan Deka.',
+        ),
     ],
 
 ];

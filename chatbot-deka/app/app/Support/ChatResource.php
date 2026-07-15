@@ -44,6 +44,7 @@ class ChatResource
             'role' => $message->role,
             'content' => $message->content,
             'sequence' => $message->sequence,
+            'metadata' => $message->metadata,
             'created_at' => $message->created_at?->toISOString(),
         ];
     }
