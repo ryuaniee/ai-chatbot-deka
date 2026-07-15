@@ -2,11 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\Ai\Agents\ConversationReplyAgent;
+use App\Ai\Agents\ConversationTitleAgent;
+use App\Ai\Agents\MessageModerationAgent;
 use App\Models\Conversation;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Str;
+use Laravel\Ai\Exceptions\AiException;
 use Tests\TestCase;
 
 class ChatApiTest extends TestCase
@@ -15,24 +17,9 @@ class ChatApiTest extends TestCase
 
     public function test_authenticated_user_can_create_a_conversation_with_a_first_message(): void
     {
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => Http::response([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => 'Halo, ada yang bisa saya bantu?',
-                ],
-                'usage' => ['total_tokens' => 12],
-                'model' => 'gpt-4o-mini',
-            ]),
-            'http://127.0.0.1:8001/chat/title' => Http::response([
-                'title' => 'Sapaan awal',
-            ]),
-        ]);
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['Halo, ada yang bisa saya bantu?']);
+        ConversationTitleAgent::fake(['Sapaan awal']);
 
         $user = User::factory()->create();
 
@@ -143,24 +130,9 @@ class ChatApiTest extends TestCase
 
     public function test_user_can_send_a_message_to_an_existing_conversation(): void
     {
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => Http::response([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => 'Ini balasan lanjutan.',
-                ],
-                'usage' => null,
-                'model' => 'gpt-4o-mini',
-            ]),
-            'http://127.0.0.1:8001/chat/title' => Http::response([
-                'title' => 'Tindak lanjut',
-            ]),
-        ]);
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['Ini balasan lanjutan.']);
+        ConversationTitleAgent::fake(['Tindak lanjut']);
 
         $user = User::factory()->create();
         $conversation = Conversation::factory()->for($user)->create([
@@ -181,15 +153,11 @@ class ChatApiTest extends TestCase
         $this->assertDatabaseCount('messages', 2);
     }
 
-    public function test_ai_service_failure_returns_bad_gateway_and_keeps_user_message(): void
+    public function test_ai_runtime_failure_returns_bad_gateway_and_keeps_user_message(): void
     {
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => Http::response(['message' => 'nope'], 500),
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake([
+            fn () => throw new AiException('upstream down'),
         ]);
 
         $user = User::factory()->create();
@@ -200,7 +168,7 @@ class ChatApiTest extends TestCase
                 'content' => 'Ping',
             ])
             ->assertStatus(502)
-            ->assertJsonPath('code', 'AI_SERVICE_UNAVAILABLE');
+            ->assertJsonPath('code', 'AI_RUNTIME_UNAVAILABLE');
 
         $this->assertDatabaseCount('messages', 1);
         $this->assertDatabaseHas('messages', [
@@ -212,13 +180,11 @@ class ChatApiTest extends TestCase
 
     public function test_first_message_blocked_by_moderation_does_not_create_an_orphan_conversation(): void
     {
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => false,
-                'reason_code' => 'SELF_HARM_INSTRUCTIONS',
-                'message' => 'Message blocked by safety policy.',
-            ]),
-        ]);
+        MessageModerationAgent::fake([[
+            'allowed' => false,
+            'reason_code' => 'SELF_HARM_INSTRUCTIONS',
+            'message' => 'Message blocked by safety policy.',
+        ]]);
 
         $user = User::factory()->create();
 
@@ -235,21 +201,10 @@ class ChatApiTest extends TestCase
 
     public function test_title_generation_failure_does_not_fail_the_chat_request(): void
     {
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => Http::response([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => 'Balasan tetap sukses.',
-                ],
-                'usage' => null,
-                'model' => 'gpt-4o-mini',
-            ]),
-            'http://127.0.0.1:8001/chat/title' => Http::response([], 500),
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['Balasan tetap sukses.']);
+        ConversationTitleAgent::fake([
+            fn () => throw new AiException('title failed'),
         ]);
 
         $user = User::factory()->create();
@@ -272,26 +227,14 @@ class ChatApiTest extends TestCase
 
     public function test_chat_requests_are_rate_limited(): void
     {
-        config()->set('services.ai_service.rate_limit_per_minute', 2);
+        config()->set('services.ai_chat.rate_limit_per_minute', 2);
 
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => Http::response([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => 'ok',
-                ],
-                'usage' => null,
-                'model' => 'gpt-4o-mini',
-            ]),
-            'http://127.0.0.1:8001/chat/title' => Http::response([
-                'title' => 'ok',
-            ]),
+        MessageModerationAgent::fake([
+            $this->allowedModerationPayload(),
+            $this->allowedModerationPayload(),
         ]);
+        ConversationReplyAgent::fake(['ok', 'ok']);
+        ConversationTitleAgent::fake(['ok', 'ok']);
 
         $user = User::factory()->create();
 
@@ -303,29 +246,14 @@ class ChatApiTest extends TestCase
             ->assertTooManyRequests();
     }
 
-    public function test_only_recent_bounded_history_is_sent_to_ai_service(): void
+    public function test_only_recent_bounded_history_is_sent_to_ai_runtime(): void
     {
-        config()->set('services.ai_service.max_history_messages', 3);
-        config()->set('services.ai_service.max_history_characters', 15);
+        config()->set('services.ai_chat.max_history_messages', 3);
+        config()->set('services.ai_chat.max_history_characters', 15);
 
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => Http::response([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => 'bounded',
-                ],
-                'usage' => null,
-                'model' => 'gpt-4o-mini',
-            ]),
-            'http://127.0.0.1:8001/chat/title' => Http::response([
-                'title' => 'Bounded',
-            ]),
-        ]);
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['bounded']);
+        ConversationTitleAgent::fake(['Bounded']);
 
         $user = User::factory()->create();
         $conversation = Conversation::factory()->for($user)->create(['title' => 'Existing']);
@@ -342,30 +270,112 @@ class ChatApiTest extends TestCase
             ])
             ->assertCreated();
 
-        Http::assertSent(function ($request): bool {
-            if ($request->url() !== 'http://127.0.0.1:8001/chat/respond') {
-                return false;
-            }
+        ConversationReplyAgent::assertPrompted(function ($prompt): bool {
+            $messages = array_map(
+                static fn ($message): array => [
+                    'role' => $message->role->value,
+                    'content' => $message->content,
+                ],
+                [...$prompt->agent->messages()],
+            );
 
-            $messages = $request['messages'];
-
-            return $messages === [
+            return $prompt->prompt === '55555' && $messages === [
                 ['role' => 'user', 'content' => '33333'],
                 ['role' => 'assistant', 'content' => '44444'],
-                ['role' => 'user', 'content' => '55555'],
             ];
         });
     }
 
+    public function test_authenticated_user_can_stream_a_first_message_into_a_new_conversation(): void
+    {
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['Halo stream.']);
+        ConversationTitleAgent::fake(['Sapaan stream']);
+
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)
+            ->withHeaders(['Accept' => 'text/event-stream'])
+            ->postJson(route('api.conversations.stream'), [
+                'content' => 'Halo bot',
+            ]);
+
+        $response->assertOk()
+            ->assertStreamed();
+
+        $content = $response->streamedContent();
+
+        $this->assertStringContainsString('"type":"conversation_started"', $content);
+        $this->assertStringContainsString('"type":"text_delta"', $content);
+        $this->assertStringContainsString('"delta":"Halo"', $content);
+        $this->assertStringContainsString('"delta":" stream."', $content);
+        $this->assertStringContainsString('"type":"message_complete"', $content);
+        $this->assertStringContainsString('"content":"Halo stream."', $content);
+        $this->assertStringContainsString('data: [DONE]', $content);
+
+        $this->assertDatabaseCount('conversations', 1);
+        $this->assertDatabaseCount('messages', 2);
+        $this->assertDatabaseHas('conversations', [
+            'user_id' => $user->id,
+            'title' => 'Sapaan stream',
+        ]);
+        $this->assertDatabaseHas('messages', [
+            'role' => 'assistant',
+            'content' => 'Halo stream.',
+        ]);
+    }
+
+    public function test_authenticated_user_can_stream_a_message_into_an_existing_conversation(): void
+    {
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['Balasan stream lanjut.']);
+        ConversationTitleAgent::fake(['Lanjut stream']);
+
+        $user = User::factory()->create();
+        $conversation = Conversation::factory()->for($user)->create([
+            'title' => null,
+        ]);
+
+        $response = $this->actingAs($user)
+            ->withHeaders(['Accept' => 'text/event-stream'])
+            ->postJson(route('api.conversations.messages.stream', $conversation), [
+                'content' => 'Lanjutkan',
+            ]);
+
+        $response->assertOk()
+            ->assertStreamed();
+
+        $content = $response->streamedContent();
+
+        $this->assertStringContainsString('"type":"conversation_started"', $content);
+        $this->assertStringContainsString('"type":"message_complete"', $content);
+        $this->assertStringContainsString('"content":"Balasan stream lanjut."', $content);
+        $this->assertStringContainsString('data: [DONE]', $content);
+
+        $assistantMessage = $conversation->fresh()
+            ->messages()
+            ->where('role', 'assistant')
+            ->first();
+
+        $this->assertNotNull($assistantMessage);
+        $this->assertDatabaseHas('conversations', [
+            'id' => $conversation->id,
+            'title' => 'Lanjut stream',
+        ]);
+        $this->assertDatabaseHas('messages', [
+            'id' => $assistantMessage->id,
+            'reply_to_message_id' => $conversation->messages()->where('role', 'user')->firstOrFail()->id,
+            'content' => 'Balasan stream lanjut.',
+        ]);
+    }
+
     public function test_blocked_message_is_rejected_before_persistence(): void
     {
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => false,
-                'reason_code' => 'SELF_HARM_INSTRUCTIONS',
-                'message' => 'Message blocked by safety policy.',
-            ]),
-        ]);
+        MessageModerationAgent::fake([[
+            'allowed' => false,
+            'reason_code' => 'SELF_HARM_INSTRUCTIONS',
+            'message' => 'Message blocked by safety policy.',
+        ]]);
 
         $user = User::factory()->create();
         $conversation = Conversation::factory()->for($user)->create();
@@ -382,24 +392,9 @@ class ChatApiTest extends TestCase
 
     public function test_same_idempotency_key_replays_the_original_response_without_duplicate_messages(): void
     {
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => Http::response([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => 'Response once.',
-                ],
-                'usage' => null,
-                'model' => 'gpt-4o-mini',
-            ]),
-            'http://127.0.0.1:8001/chat/title' => Http::response([
-                'title' => 'Replay test',
-            ]),
-        ]);
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['Response once.']);
+        ConversationTitleAgent::fake(['Replay test']);
 
         $user = User::factory()->create();
         $conversation = Conversation::factory()->for($user)->create(['title' => null]);
@@ -426,24 +421,9 @@ class ChatApiTest extends TestCase
 
     public function test_reusing_idempotency_key_with_different_payload_is_rejected(): void
     {
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => Http::response([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => 'Response once.',
-                ],
-                'usage' => null,
-                'model' => 'gpt-4o-mini',
-            ]),
-            'http://127.0.0.1:8001/chat/title' => Http::response([
-                'title' => 'Replay test',
-            ]),
-        ]);
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['Response once.']);
+        ConversationTitleAgent::fake(['Replay test']);
 
         $user = User::factory()->create();
         $conversation = Conversation::factory()->for($user)->create(['title' => null]);
@@ -466,29 +446,24 @@ class ChatApiTest extends TestCase
 
     public function test_retryable_failure_is_not_cached_by_idempotency_layer(): void
     {
-        Http::fakeSequence()
-            ->push([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ])
-            ->push(['message' => 'upstream down'], 500)
-            ->push([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ])
-            ->push([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => 'Recovered.',
-                ],
-                'usage' => null,
-                'model' => 'gpt-4o-mini',
-            ])
-            ->push([
-                'title' => 'Recovered title',
-            ]);
+        $replyAttempts = 0;
+
+        MessageModerationAgent::fake([
+            $this->allowedModerationPayload(),
+            $this->allowedModerationPayload(),
+        ]);
+        ConversationReplyAgent::fake([
+            function () use (&$replyAttempts) {
+                $replyAttempts++;
+
+                if ($replyAttempts === 1) {
+                    throw new AiException('upstream down');
+                }
+
+                return 'Recovered.';
+            },
+        ]);
+        ConversationTitleAgent::fake(['Recovered title']);
 
         $user = User::factory()->create();
         $conversation = Conversation::factory()->for($user)->create(['title' => null]);
@@ -519,34 +494,24 @@ class ChatApiTest extends TestCase
 
     public function test_retrying_failed_first_message_with_same_idempotency_key_does_not_create_duplicate_conversations_or_messages(): void
     {
-        $respondAttempts = 0;
+        $replyAttempts = 0;
 
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => function () use (&$respondAttempts) {
-                $respondAttempts++;
+        MessageModerationAgent::fake([
+            $this->allowedModerationPayload(),
+            $this->allowedModerationPayload(),
+        ]);
+        ConversationReplyAgent::fake([
+            function () use (&$replyAttempts) {
+                $replyAttempts++;
 
-                if ($respondAttempts === 1) {
-                    return Http::response(['message' => 'upstream down'], 500);
+                if ($replyAttempts === 1) {
+                    throw new AiException('upstream down');
                 }
 
-                return Http::response([
-                    'message' => [
-                        'role' => 'assistant',
-                        'content' => 'Recovered first turn.',
-                    ],
-                    'usage' => null,
-                    'model' => 'gpt-4o-mini',
-                ]);
+                return 'Recovered first turn.';
             },
-            'http://127.0.0.1:8001/chat/title' => Http::response([
-                'title' => 'Recovered title',
-            ]),
         ]);
+        ConversationTitleAgent::fake(['Recovered title']);
 
         $user = User::factory()->create();
 
@@ -572,24 +537,9 @@ class ChatApiTest extends TestCase
 
     public function test_retry_does_not_attach_a_later_assistant_message_to_an_earlier_user_message(): void
     {
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => Http::response([
-                'message' => [
-                    'role' => 'assistant',
-                    'content' => 'Recovered correct reply.',
-                ],
-                'usage' => null,
-                'model' => 'gpt-4o-mini',
-            ]),
-            'http://127.0.0.1:8001/chat/title' => Http::response([
-                'title' => 'Recovered title',
-            ]),
-        ]);
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['Recovered correct reply.']);
+        ConversationTitleAgent::fake(['Recovered title']);
 
         $user = User::factory()->create();
         $conversation = Conversation::factory()->for($user)->create(['title' => 'Existing']);
@@ -633,9 +583,9 @@ class ChatApiTest extends TestCase
         ]);
     }
 
-    public function test_ai_service_misconfiguration_returns_controlled_service_unavailable_response(): void
+    public function test_ai_runtime_misconfiguration_returns_controlled_service_unavailable_response(): void
     {
-        config()->set('services.ai_service.internal_token', 'change-this-in-production');
+        config()->set('services.ai_chat.provider', 'missing-provider');
 
         $user = User::factory()->create();
         $conversation = Conversation::factory()->for($user)->create();
@@ -645,18 +595,14 @@ class ChatApiTest extends TestCase
                 'content' => 'Ping',
             ])
             ->assertStatus(503)
-            ->assertJsonPath('code', 'AI_SERVICE_MISCONFIGURED');
+            ->assertJsonPath('code', 'AI_RUNTIME_MISCONFIGURED');
     }
 
     public function test_reusing_idempotency_key_after_failed_first_turn_with_different_payload_is_rejected(): void
     {
-        Http::fake([
-            'http://127.0.0.1:8001/chat/moderate' => Http::response([
-                'allowed' => true,
-                'reason_code' => null,
-                'message' => null,
-            ]),
-            'http://127.0.0.1:8001/chat/respond' => Http::response(['message' => 'upstream down'], 500),
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake([
+            fn () => throw new AiException('upstream down'),
         ]);
 
         $user = User::factory()->create();
@@ -675,5 +621,22 @@ class ChatApiTest extends TestCase
             ])
             ->assertStatus(409)
             ->assertJsonPath('code', 'IDEMPOTENCY_KEY_REUSED');
+    }
+
+    private function fakeAllowedModeration(): void
+    {
+        MessageModerationAgent::fake([$this->allowedModerationPayload()]);
+    }
+
+    /**
+     * @return array{allowed: bool, reason_code: string, message: string}
+     */
+    private function allowedModerationPayload(): array
+    {
+        return [
+            'allowed' => true,
+            'reason_code' => '',
+            'message' => '',
+        ];
     }
 }

@@ -41,10 +41,13 @@ return [
         'redirect' => env('GOOGLE_REDIRECT_URI'),
     ],
 
-    'ai_service' => [
-        'url' => env('AI_SERVICE_URL', 'http://127.0.0.1:8001'),
-        'timeout' => env('AI_SERVICE_TIMEOUT', 30),
-        'internal_token' => env('AI_SERVICE_INTERNAL_TOKEN'),
+    'ai_chat' => [
+        'provider' => env('AI_CHAT_PROVIDER', 'openai'),
+        'model' => env('AI_CHAT_MODEL', 'gpt-4o-mini'),
+        'fallback_provider' => env('AI_CHAT_FALLBACK_PROVIDER'),
+        'fallback_model' => env('AI_CHAT_FALLBACK_MODEL'),
+        'moderation_model' => env('MODERATION_MODEL'),
+        'timeout' => env('AI_CHAT_TIMEOUT', 30),
         'rate_limit_per_minute' => env('AI_CHAT_RATE_LIMIT_PER_MINUTE', 20),
         'max_history_messages' => env('AI_CHAT_MAX_HISTORY_MESSAGES', 12),
         'max_history_characters' => env('AI_CHAT_MAX_HISTORY_CHARACTERS', 12000),

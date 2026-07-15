@@ -1,30 +1,29 @@
-import { useEffect, useRef, useState } from 'react';
-import { Head, usePage, useHttp } from '@inertiajs/react';
-import { 
-    Plus, 
-    MessageSquare, 
-    Menu, 
-    X,
-    Paperclip,
-    Mic,
+import { Head, useHttp, usePage } from '@inertiajs/react';
+import {
     ChevronDown,
-    SendHorizontal,
     HelpCircle,
-    Sparkles,
+    Info,
+    Menu,
+    MessageSquare,
+    Mic,
+    Paperclip,
     Phone,
-    Info
+    Plus,
+    SendHorizontal,
+    Sparkles,
+    X,
 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import DekaLogo from '@/components/deka-logo';
-import { 
-    DropdownMenu, 
-    DropdownMenuContent, 
-    DropdownMenuTrigger
+import SettingsModal from '@/components/settings-modal';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { UserInfo } from '@/components/user-info';
 import { UserMenuContent } from '@/components/user-menu-content';
-import SettingsModal from '@/components/settings-modal';
-import { index as getConversations, store as createConversation, show as getConversation } from '@/routes/api/conversations';
-import { store as createMessage } from '@/routes/api/conversations/messages';
+import { index as getConversations, show as getConversation } from '@/routes/api/conversations';
 
 interface ConversationItem {
     id: number;
@@ -45,11 +44,24 @@ interface MessageItem {
     created_at: string;
 }
 
+interface StreamEventPayload {
+    type: 'conversation_started' | 'text_delta' | 'message_complete' | 'error';
+    conversation?: ConversationItem;
+    user_message?: MessageItem;
+    assistant_message?: MessageItem;
+    delta?: string;
+    message?: string;
+}
+
+type StreamRequest = {
+    conversationId: number | null;
+    text: string;
+    tempUserMessage: MessageItem;
+};
+
 export default function ChatPage() {
     const { auth } = usePage().props;
     const { submit } = useHttp();
-    const messageForm = useHttp({ content: '' });
-    const newConversationForm = useHttp({ content: '' });
 
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
     const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
@@ -60,18 +72,10 @@ export default function ChatPage() {
     const [settingsOpen, setSettingsOpen] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const streamAbortRef = useRef<AbortController | null>(null);
+    const nextTempIdRef = useRef(-1);
 
     const user = auth.user;
-
-    // Fetch conversations on load
-    useEffect(() => {
-        fetchConversations();
-    }, []);
-
-    // Scroll to bottom whenever messages or generation state changes
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages, isGenerating]);
 
     const fetchConversations = () => {
         submit(getConversations())
@@ -83,7 +87,34 @@ export default function ChatPage() {
             });
     };
 
+    const nextTempId = () => {
+        const id = nextTempIdRef.current;
+
+        nextTempIdRef.current -= 1;
+
+        return id;
+    };
+
+    useEffect(() => {
+        submit(getConversations())
+            .then((res: any) => {
+                setConversations(res.data || []);
+            })
+            .catch((err) => {
+                console.error('Failed to fetch conversations:', err);
+            });
+    }, [submit]);
+
+    useEffect(() => () => {
+        streamAbortRef.current?.abort();
+    }, []);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isGenerating]);
+
     const handleSelectConversation = (id: number) => {
+        streamAbortRef.current?.abort();
         setActiveConversationId(id);
         setIsGenerating(false);
         setSidebarOpen(false);
@@ -97,6 +128,7 @@ export default function ChatPage() {
     };
 
     const handleNewChat = () => {
+        streamAbortRef.current?.abort();
         setActiveConversationId(null);
         setMessages([]);
         setInputValue('');
@@ -106,72 +138,244 @@ export default function ChatPage() {
 
     const handleSendMessage = async (customText?: string) => {
         const text = (customText || inputValue).trim();
-        if (!text || isGenerating) return;
 
-        // Clear input value if sending from input box
+        if (!text || isGenerating) {
+            return;
+        }
+
         if (!customText) {
             setInputValue('');
         }
 
         setIsGenerating(true);
 
-        // If there's no active conversation, create a new one first
-        if (activeConversationId === null) {
-            // Optimistically add user message to feed
-            const tempUserMsg: MessageItem = { 
-                id: Date.now(), 
-                conversation_id: 0,
-                reply_to_message_id: null,
-                role: 'user', 
-                content: text,
-                sequence: 1,
-                created_at: new Date().toISOString()
-            };
-            setMessages([tempUserMsg]);
+        const tempUserMsg: MessageItem = {
+            id: nextTempId(),
+            conversation_id: activeConversationId ?? 0,
+            reply_to_message_id: null,
+            role: 'user',
+            content: text,
+            sequence: messages.length + 1,
+            created_at: new Date().toISOString(),
+        };
 
-            newConversationForm.setData('content', text);
-            newConversationForm.post(createConversation.url())
-                .then((res: any) => {
-                    if (res.conversation) {
-                        setActiveConversationId(res.conversation.id);
+        if (activeConversationId === null) {
+            setMessages([tempUserMsg]);
+        } else {
+            setMessages((prev) => [...prev, tempUserMsg]);
+        }
+
+        try {
+            await streamChatResponse({
+                conversationId: activeConversationId,
+                text,
+                tempUserMessage: tempUserMsg,
+            });
+        } catch (err) {
+            if (err instanceof DOMException && err.name === 'AbortError') {
+                return;
+            }
+
+            let rolledBackTempUser = false;
+
+            setMessages((prev) => {
+                const next = prev.filter((message) => message.id !== tempUserMsg.id);
+
+                rolledBackTempUser = next.length !== prev.length;
+
+                return next;
+            });
+
+            if (rolledBackTempUser) {
+                setInputValue(text);
+            }
+
+            console.error('Failed to stream chat response:', err);
+        } finally {
+            setIsGenerating(false);
+        }
+    };
+
+    const streamChatResponse = async ({
+        conversationId,
+        text,
+        tempUserMessage,
+    }: StreamRequest) => {
+        streamAbortRef.current?.abort();
+
+        const controller = new AbortController();
+        streamAbortRef.current = controller;
+
+        const csrfToken = document
+            .querySelector<HTMLMetaElement>('meta[name="csrf-token"]')
+            ?.content;
+
+        const url = conversationId === null
+            ? '/api/conversations/stream'
+            : `/api/conversations/${conversationId}/messages/stream`;
+
+        const response = await fetch(url, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                Accept: 'text/event-stream',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken ?? '',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            body: JSON.stringify({ content: text }),
+            signal: controller.signal,
+        });
+
+        if (!response.ok) {
+            const contentType = response.headers.get('content-type') ?? '';
+
+            if (contentType.includes('application/json')) {
+                const payload = await response.json();
+
+                throw new Error(payload.message ?? 'Request failed.');
+            }
+
+            throw new Error(await response.text());
+        }
+
+        if (response.body === null) {
+            throw new Error('Stream body is unavailable.');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        const tempAssistantId = nextTempId();
+        let buffer = '';
+        let streamCompleted = false;
+
+        const drainBufferedEvents = (source: string): string => {
+            const normalized = source.replace(/\r\n/g, '\n');
+            const chunks = normalized.split('\n\n');
+            const remainder = chunks.pop() ?? '';
+
+            for (const chunk of chunks) {
+                const dataLines = chunk
+                    .split('\n')
+                    .filter((line) => line.startsWith('data: '))
+                    .map((line) => line.slice(6));
+
+                if (dataLines.length === 0) {
+                    continue;
+                }
+
+                const payload = dataLines.join('\n');
+
+                if (payload === '[DONE]') {
+                    fetchConversations();
+                    streamCompleted = true;
+
+                    return '';
+                }
+
+                applyEvent(JSON.parse(payload) as StreamEventPayload);
+            }
+
+            return remainder;
+        };
+
+        const applyEvent = (event: StreamEventPayload) => {
+            switch (event.type) {
+                case 'conversation_started':
+                    if (event.conversation) {
+                        setActiveConversationId(event.conversation.id);
+                    }
+
+                    if (event.user_message) {
+                        setMessages((prev) => prev.map((message) => (
+                            message.id === tempUserMessage.id ? event.user_message! : message
+                        )));
+                    }
+
+                    break;
+
+                case 'text_delta':
+                    setMessages((prev) => {
+                        const delta = event.delta ?? '';
+                        const assistantIndex = prev.findIndex((message) => message.id === tempAssistantId);
+
+                        if (assistantIndex === -1) {
+                            const lastMessage = prev[prev.length - 1];
+
+                            return [
+                                ...prev,
+                                {
+                                    id: tempAssistantId,
+                                    conversation_id: lastMessage?.conversation_id ?? 0,
+                                    reply_to_message_id: null,
+                                    role: 'assistant',
+                                    content: delta,
+                                    sequence: prev.length + 1,
+                                    created_at: new Date().toISOString(),
+                                },
+                            ];
+                        }
+
+                        return prev.map((message) => (
+                            message.id === tempAssistantId
+                                ? { ...message, content: message.content + delta }
+                                : message
+                        ));
+                    });
+
+                    break;
+
+                case 'message_complete':
+                    if (event.assistant_message) {
+                        setMessages((prev) => {
+                            const withoutTemp = prev.filter((message) => message.id !== tempAssistantId);
+
+                            return [...withoutTemp, event.assistant_message!];
+                        });
+                    }
+
+                    if (event.conversation) {
+                        setConversations((prev) => {
+                            const filtered = prev.filter((conversation) => conversation.id !== event.conversation!.id);
+
+                            return [event.conversation!, ...filtered];
+                        });
+                    } else {
                         fetchConversations();
                     }
-                    const newMsgs: MessageItem[] = [];
-                    if (res.user_message) newMsgs.push(res.user_message);
-                    if (res.assistant_message) newMsgs.push(res.assistant_message);
-                    setMessages(newMsgs);
-                    setIsGenerating(false);
-                })
-                .catch((err) => {
-                    console.error('Failed to create conversation:', err);
-                    setIsGenerating(false);
-                });
-        } else {
-            // Append user message immediately
-            const userMsg: MessageItem = { 
-                id: Date.now(), 
-                conversation_id: activeConversationId,
-                reply_to_message_id: null,
-                role: 'user', 
-                content: text,
-                sequence: messages.length + 1,
-                created_at: new Date().toISOString()
-            };
-            setMessages(prev => [...prev, userMsg]);
 
-            messageForm.setData('content', text);
-            messageForm.post(createMessage.url(activeConversationId))
-                .then((res: any) => {
-                    if (res.assistant_message) {
-                        setMessages(prev => [...prev, res.assistant_message]);
-                    }
-                    fetchConversations();
-                    setIsGenerating(false);
-                })
-                .catch((err) => {
-                    console.error('Failed to send message:', err);
-                    setIsGenerating(false);
-                });
+                    break;
+
+                case 'error':
+                    setMessages((prev) => prev.filter((message) => message.id !== tempAssistantId));
+
+                    throw new Error(event.message ?? 'Assistant stream failed.');
+            }
+        };
+
+        try {
+            while (true) {
+                const { done, value } = await reader.read();
+
+                if (done) {
+                    break;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+                buffer = drainBufferedEvents(buffer);
+
+                if (streamCompleted) {
+                    return;
+                }
+            }
+
+            if (buffer.trim() !== '') {
+                drainBufferedEvents(buffer);
+            }
+        } finally {
+            if (streamAbortRef.current === controller) {
+                streamAbortRef.current = null;
+            }
         }
     };
 
@@ -189,8 +393,8 @@ export default function ChatPage() {
              <div className="flex h-screen w-screen bg-white text-slate-800 overflow-hidden font-sans relative">
                 {/* Mobile sidebar backdrop */}
                 {sidebarOpen && (
-                    <div 
-                        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden transition-opacity" 
+                    <div
+                        className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm lg:hidden transition-opacity"
                         onClick={() => setSidebarOpen(false)}
                     />
                 )}
@@ -213,7 +417,7 @@ export default function ChatPage() {
 
                     {/* New Chat Button */}
                     <div className="p-4">
-                        <button 
+                        <button
                             onClick={handleNewChat}
                             className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white shadow-sm transition-all duration-200 px-4 py-3 text-sm font-bold cursor-pointer"
                         >

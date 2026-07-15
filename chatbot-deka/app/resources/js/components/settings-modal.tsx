@@ -1,15 +1,15 @@
-import { useState } from 'react';
 import { Form, usePage } from '@inertiajs/react';
 import { X, User, Shield, Palette } from 'lucide-react';
+import { useState } from 'react';
 import ProfileController from '@/actions/App/Http/Controllers/Settings/ProfileController';
 import SecurityController from '@/actions/App/Http/Controllers/Settings/SecurityController';
 import AppearanceToggleTab from '@/components/appearance-tabs';
 import DeleteUser from '@/components/delete-user';
 import InputError from '@/components/input-error';
+import PasswordInput from '@/components/password-input';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import PasswordInput from '@/components/password-input';
 import type { Auth } from '@/types';
 
 type Props = {
@@ -25,7 +25,9 @@ export default function SettingsModal({ isOpen, onClose }: Props) {
     const { auth } = usePage<PageProps>().props;
     const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'appearance'>('profile');
 
-    if (!isOpen) return null;
+    if (!isOpen) {
+        return null;
+    }
 
     const tabs = [
         { id: 'profile' as const, label: 'General', icon: User },
@@ -52,6 +54,7 @@ export default function SettingsModal({ isOpen, onClose }: Props) {
                         {tabs.map((tab) => {
                             const Icon = tab.icon;
                             const isActive = activeTab === tab.id;
+
                             return (
                                 <button
                                     key={tab.id}
@@ -84,9 +87,6 @@ export default function SettingsModal({ isOpen, onClose }: Props) {
                                     {...ProfileController.update.form()}
                                     options={{
                                         preserveScroll: true,
-                                        onSuccess: () => {
-                                            // Handle success logic if needed
-                                        }
                                     }}
                                     className="space-y-4"
                                 >

@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Exceptions\AiServiceConfigurationException;
-use App\Exceptions\AiServiceException;
+use App\Exceptions\AiRuntimeConfigurationException;
+use App\Exceptions\AiRuntimeException;
 use App\Exceptions\IdempotencyConflictException;
 use App\Exceptions\ModerationException;
 use App\Models\Conversation;
@@ -44,6 +44,15 @@ class ConversationController extends Controller
         Request $request,
         ConversationChatService $conversationChatService,
     ): JsonResponse {
+        if ($this->contentWasSubmittedAsBlankString($request)) {
+            return response()->json([
+                'message' => 'The content field must not be empty.',
+                'errors' => [
+                    'content' => ['The content field must not be empty.'],
+                ],
+            ], 422);
+        }
+
         $validated = $request->validate([
             'content' => [
                 'nullable',
@@ -87,15 +96,15 @@ class ConversationController extends Controller
                 'message' => $exception->getMessage(),
                 'code' => $exception->reasonCode,
             ], 422);
-        } catch (AiServiceConfigurationException $exception) {
+        } catch (AiRuntimeConfigurationException $exception) {
             return response()->json([
-                'message' => 'Assistant service is temporarily unavailable.',
-                'code' => 'AI_SERVICE_MISCONFIGURED',
+                'message' => 'Assistant runtime is temporarily unavailable.',
+                'code' => 'AI_RUNTIME_MISCONFIGURED',
             ], 503);
-        } catch (AiServiceException $exception) {
+        } catch (AiRuntimeException $exception) {
             return response()->json([
                 'message' => $exception->getMessage(),
-                'code' => $exception->errorCode ?? 'AI_SERVICE_UNAVAILABLE',
+                'code' => $exception->errorCode ?? 'AI_RUNTIME_UNAVAILABLE',
             ], $exception->status);
         }
 
@@ -113,5 +122,19 @@ class ConversationController extends Controller
         $key = trim((string) $request->header('Idempotency-Key'));
 
         return $key !== '' ? $key : null;
+    }
+
+    private function contentWasSubmittedAsBlankString(Request $request): bool
+    {
+        if (! $request->isJson()) {
+            return false;
+        }
+
+        $payload = json_decode($request->getContent(), true);
+
+        return is_array($payload)
+            && array_key_exists('content', $payload)
+            && is_string($payload['content'])
+            && trim($payload['content']) === '';
     }
 }

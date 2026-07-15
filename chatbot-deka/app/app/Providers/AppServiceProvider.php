@@ -70,7 +70,7 @@ class AppServiceProvider extends ServiceProvider
                 ? sprintf('chat:%s:%s', $user->getAuthIdentifier(), $request->ip())
                 : sprintf('chat:guest:%s', $request->ip());
 
-            return Limit::perMinute((int) config('services.ai_service.rate_limit_per_minute', 20))
+            return Limit::perMinute((int) config('services.ai_chat.rate_limit_per_minute', 20))
                 ->by($key);
         });
     }

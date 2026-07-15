@@ -7,7 +7,7 @@ use App\Exceptions\ModerationException;
 class MessageModerationService
 {
     public function __construct(
-        private readonly AiServiceClient $aiServiceClient,
+        private readonly AiRuntimeClient $aiRuntimeClient,
     ) {
     }
 
@@ -16,7 +16,7 @@ class MessageModerationService
      */
     public function ensureAllowed(string $content): void
     {
-        $result = $this->aiServiceClient->moderate($content);
+        $result = $this->aiRuntimeClient->moderate($content);
 
         if (($result['allowed'] ?? true) === true) {
             return;

@@ -64,7 +64,7 @@ class HandleIdempotency
                     'fingerprint' => $fingerprint,
                     'status' => $response->getStatusCode(),
                     'body' => $response->getContent(),
-                ], now()->addMinutes((int) config('services.ai_service.idempotency_ttl_minutes', 10)));
+                ], now()->addMinutes((int) config('services.ai_chat.idempotency_ttl_minutes', 10)));
             }
 
             return $response;

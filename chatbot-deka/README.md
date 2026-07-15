@@ -1,105 +1,64 @@
 # Chatbot Deka
 
-Backend chatbot Deka saat ini sudah mencakup:
+Backend chatbot Deka saat ini berjalan sebagai aplikasi Laravel tunggal dengan:
 
 - auth API berbasis session
 - role `admin` dan `user`
-- admin panel Filament
-- chat runtime backend
-- AI service internal
-- fallback model
-- kontrak redirect auth untuk admin dan user
-- email verification via Laravel mail
+- panel admin Filament
+- chat runtime via `laravel/ai`
+- endpoint chat biasa dan streaming SSE
+- moderation, rate limit, dan idempotency
 
-Status produk saat ini:
-
-- fondasi backend sudah siap
-- halaman auth dan chat dasar sudah ada di repo ini
-- frontend tetap memakai kontrak API backend yang sudah disiapkan
-- knowledge khusus `deka.dev` belum di-ingest
+Knowledge khusus Deka belum di-ingest. Jadi sistem yang ada sekarang adalah fondasi chatbot dan runtime AI, belum final sebagai chatbot knowledge `deka.dev`.
 
 ## Stack
 
-### Laravel App
-
-Lokasi:
-
-- `app/`
-
-Fungsi:
-
-- auth API
-- role `admin` dan `user`
-- admin panel Filament
-- workflow chat
-- persistence conversation dan message
-
-### AI Service
-
-Lokasi:
-
-- `ai-service/`
-
-Fungsi:
-
-- moderation
-- generate assistant response
-- generate conversation title
-- fallback model
-
-### Database
-
-Yang dipakai:
-
-- PostgreSQL via Docker Compose
+- Laravel app: `app/`
+- Database: PostgreSQL via Docker Compose
+- Runtime AI: `Laravel AI SDK`
+- Frontend chat dasar: React/Inertia di repo yang sama
 
 ## Dokumentasi
 
-Dokumen utama:
-
 - [Setup Local](docs/setup-local.md)
-- [Ringkasan Progres Backend](docs/backend-progress-summary.md)
-- [Arsitektur Backend Final](docs/deka-chatbot-backend-architecture.md)
 - [Frontend Chat API](docs/frontend-chat-api.md)
+- [Arsitektur Backend](docs/deka-chatbot-backend-architecture.md)
+- [Ringkasan Progres Backend](docs/backend-progress-summary.md)
 
-## Status Backend
+## Endpoint Utama
 
-Yang sudah ada:
+Auth:
 
 - `GET /api/auth/csrf`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `GET /api/auth/me`
 - `POST /api/auth/logout`
+
+Chat:
+
 - `GET /api/conversations`
 - `POST /api/conversations`
+- `POST /api/conversations/stream`
 - `GET /api/conversations/{conversation}`
 - `POST /api/conversations/{conversation}/messages`
-- `GET /login`
-- panel admin Filament di `/admin`
+- `POST /api/conversations/{conversation}/messages/stream`
 
-Role yang dipakai hanya dua:
+UI:
 
-- `admin`
-- `user`
-
-Aturan akses:
-
-- user baru otomatis mendapat role `user`
-- hanya `role=admin` yang bisa masuk panel admin
-- user biasa memakai auth API dan flow chat biasa
-- admin tidak memakai halaman chat user
-- response auth menyertakan `redirect_to`
+- login: `/login`
+- chat user: `/chat`
+- admin: `/admin`
 
 ## Quick Start
 
-### 1. Nyalakan Database
+### 1. Nyalakan database
 
 ```bash
 docker compose up -d
 ```
 
-### 2. Jalankan Laravel App
+### 2. Setup app Laravel
 
 ```bash
 cd app
@@ -112,7 +71,34 @@ php artisan db:seed --class=AdminUserSeeder
 php artisan serve
 ```
 
-Konfigurasi mail untuk email verification:
+### 3. Konfigurasi `.env`
+
+Minimal sesuaikan:
+
+```env
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5433
+DB_DATABASE=chatbot_deka
+DB_USERNAME=chatbot_deka
+DB_PASSWORD=secret
+
+OPENAI_API_KEY=your-key
+OPENAI_URL=https://codex.deka.dev/v1
+
+AI_CHAT_PROVIDER=openai
+AI_CHAT_MODEL=gpt-5.4-mini
+AI_CHAT_FALLBACK_PROVIDER=openai
+AI_CHAT_FALLBACK_MODEL=gpt-5.5
+AI_CHAT_TIMEOUT=30
+AI_CHAT_RATE_LIMIT_PER_MINUTE=20
+AI_CHAT_MAX_HISTORY_MESSAGES=12
+AI_CHAT_MAX_HISTORY_CHARACTERS=12000
+AI_CHAT_IDEMPOTENCY_TTL_MINUTES=10
+MODERATION_MODEL=omni-moderation-latest
+```
+
+Untuk email:
 
 ```env
 MAIL_MAILER=resend
@@ -121,69 +107,43 @@ MAIL_FROM_NAME="Chatbot Deka"
 RESEND_API_KEY=your-resend-api-key
 ```
 
-### 3. Jalankan AI Service
+Untuk local tanpa email real, pakai:
 
-```bash
-cd ai-service
-cp .env.example .env
-uv sync
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8001 --reload
+```env
+MAIL_MAILER=log
 ```
 
-### 4. Verifikasi
+## Akses Lokal
 
-Health check AI service:
-
-```bash
-curl http://127.0.0.1:8001/health
-```
-
-Admin panel:
-
-- `http://127.0.0.1:8000/admin`
-
-Login semua role:
-
-- `http://127.0.0.1:8000/login`
-
-Chat user biasa:
-
-- `http://127.0.0.1:8000/chat`
+- app: `http://127.0.0.1:8000`
+- login: `http://127.0.0.1:8000/login`
+- chat: `http://127.0.0.1:8000/chat`
+- admin: `http://127.0.0.1:8000/admin`
 
 Default admin dari `.env.example`:
 
 - email: `admin@deka.dev`
 - password: `password`
 
-## Catatan untuk Frontend Agent
+## Catatan Frontend
 
 Frontend tidak perlu menebak flow auth.
 
-Gunakan kontrak berikut:
-
 - auth memakai session cookie, bukan bearer token
-- ambil `GET /api/auth/csrf` sebelum flow auth jika dibutuhkan client flow
-- login/register memakai endpoint auth API yang sudah tersedia
-- gunakan field `role` dari response auth untuk memisahkan `admin` dan `user`
-- gunakan field `redirect_to` dari response auth sebagai target redirect final
+- ambil `GET /api/auth/csrf` sebelum flow auth jika dibutuhkan
+- gunakan `role` dan `redirect_to` dari response auth
 - user biasa diarahkan ke `/chat` atau `/email/verify`
 - admin diarahkan ke `/admin`
-- endpoint chat yang dipakai frontend sudah didokumentasikan di [Frontend Chat API](docs/frontend-chat-api.md)
+- kontrak endpoint chat ada di [Frontend Chat API](docs/frontend-chat-api.md)
 
-## Email dan Rate Limit
+## Testing
 
-Yang sudah aktif:
+Test chat dan runtime AI:
 
-- email verification custom
-- reset password email custom
-- welcome email setelah user berhasil verify
-- resend verification email rate limit `3x / 10 menit`
-- forgot password rate limit `3x / 10 menit`
-
-Catatan lokal:
-
-- untuk testing cepat tanpa domain email terverifikasi, gunakan `MAIL_MAILER=log`
-- untuk email real via Resend, pakai domain pengirim sendiri yang sudah diverifikasi
+```bash
+cd app
+php artisan test --filter='ChatApiTest|AiRuntimeClientTest'
+```
 
 ## Tahap Berikutnya
 
@@ -193,9 +153,5 @@ Yang belum dikerjakan:
 - ingestion dokumen
 - vector store / `pgvector`
 - retrieval
-- inject context knowledge Deka ke AI service
-- pembatasan jawaban hanya ke knowledge Deka
-
-Secara singkat:
-
-> auth, admin, dan runtime chat sudah siap; knowledge chatbot Deka adalah fase berikutnya.
+- inject context knowledge Deka ke runtime AI
+- membatasi jawaban agar hanya berbasis knowledge Deka

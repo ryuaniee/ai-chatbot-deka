@@ -190,10 +190,11 @@ export default function Register({ passwordRules }: Props) {
                 {/* Google Sign In */}
                 <button
                     type="button"
+                    onClick={() => window.location.assign('/auth/google')}
                     className="w-full h-12 border border-zinc-200 bg-white hover:bg-zinc-50 hover:border-zinc-300 text-zinc-700 font-semibold rounded-xl flex items-center justify-center gap-3 transition-all cursor-pointer shadow-sm active:scale-[0.99]"
                 >
                     <GoogleIcon />
-                    <span className="text-sm font-bold">Sign In With Google</span>
+                    <span className="text-sm font-bold">Daftar atau masuk dengan Google</span>
                 </button>
 
                 {/* Footer - redirects to login */}
