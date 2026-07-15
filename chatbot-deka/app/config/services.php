@@ -49,8 +49,8 @@ return [
         'moderation_model' => env('MODERATION_MODEL'),
         'timeout' => env('AI_CHAT_TIMEOUT', 30),
         'rate_limit_per_minute' => env('AI_CHAT_RATE_LIMIT_PER_MINUTE', 20),
-        'max_history_messages' => env('AI_CHAT_MAX_HISTORY_MESSAGES', 12),
-        'max_history_characters' => env('AI_CHAT_MAX_HISTORY_CHARACTERS', 12000),
+        'max_history_messages' => env('AI_CHAT_MAX_HISTORY_MESSAGES', 6),
+        'max_history_characters' => env('AI_CHAT_MAX_HISTORY_CHARACTERS', 6000),
         'idempotency_ttl_minutes' => env('AI_CHAT_IDEMPOTENCY_TTL_MINUTES', 10),
     ],
 

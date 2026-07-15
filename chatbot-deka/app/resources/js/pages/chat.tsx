@@ -42,6 +42,15 @@ interface MessageItem {
     content: string;
     sequence: number;
     created_at: string;
+    response_time_ms?: number | null;
+    first_delta_at_ms?: number | null;
+    delta_count?: number | null;
+}
+
+interface StreamMetrics {
+    delta_count: number;
+    first_delta_at_ms: number | null;
+    stream_duration_ms: number;
 }
 
 interface StreamEventPayload {
@@ -49,6 +58,7 @@ interface StreamEventPayload {
     conversation?: ConversationItem;
     user_message?: MessageItem;
     assistant_message?: MessageItem;
+    stream_metrics?: StreamMetrics;
     delta?: string;
     message?: string;
 }
@@ -57,6 +67,18 @@ type StreamRequest = {
     conversationId: number | null;
     text: string;
     tempUserMessage: MessageItem;
+};
+
+const formatDuration = (milliseconds: number | null | undefined): string | null => {
+    if (milliseconds === null || milliseconds === undefined) {
+        return null;
+    }
+
+    if (milliseconds < 1000) {
+        return `${Math.round(milliseconds)} ms`;
+    }
+
+    return `${(milliseconds / 1000).toFixed(1)} dtk`;
 };
 
 export default function ChatPage() {
@@ -330,7 +352,12 @@ export default function ChatPage() {
                         setMessages((prev) => {
                             const withoutTemp = prev.filter((message) => message.id !== tempAssistantId);
 
-                            return [...withoutTemp, event.assistant_message!];
+                            return [...withoutTemp, {
+                                ...event.assistant_message!,
+                                response_time_ms: event.stream_metrics?.stream_duration_ms ?? null,
+                                first_delta_at_ms: event.stream_metrics?.first_delta_at_ms ?? null,
+                                delta_count: event.stream_metrics?.delta_count ?? null,
+                            }];
                         });
                     }
 
@@ -548,7 +575,23 @@ export default function ChatPage() {
                                                     <DekaLogo className="h-6 w-6 object-contain" />
                                                 </div>
                                                 <div className="flex-1 bg-white border border-slate-150/70 rounded-2xl rounded-tl-none px-5 py-4 text-sm md:text-base shadow-sm whitespace-pre-wrap text-slate-800 leading-relaxed">
-                                                    {message.content}
+                                                    <div>{message.content}</div>
+                                                    {(message.response_time_ms !== undefined || message.first_delta_at_ms !== undefined) && (
+                                                        <div className="mt-3 text-xs text-slate-400">
+                                                            {[
+                                                                (() => {
+                                                                    const firstDelta = formatDuration(message.first_delta_at_ms);
+
+                                                                    return firstDelta !== null ? `Mulai jawab ${firstDelta}` : null;
+                                                                })(),
+                                                                (() => {
+                                                                    const total = formatDuration(message.response_time_ms);
+
+                                                                    return total !== null ? `selesai ${total}` : null;
+                                                                })(),
+                                                            ].filter(Boolean).join(' | ')}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         )}

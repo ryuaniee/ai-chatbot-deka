@@ -13,6 +13,7 @@ use App\Support\ChatResource;
 use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Responses\StreamableAgentResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -156,6 +157,9 @@ class ConversationStreamController extends Controller
             $assistantMessage = $result['assistant_message'];
             $stream = $result['stream'];
             $state = $result['state'];
+            $startedAt = hrtime(true);
+            $firstDeltaAt = null;
+            $deltaCount = 0;
 
             echo ": stream-start\n\n";
             flush();
@@ -175,12 +179,29 @@ class ConversationStreamController extends Controller
                             continue;
                         }
 
+                        $deltaCount++;
+                        $firstDeltaAt ??= hrtime(true);
+
                         $this->emitEvent([
                             'type' => 'text_delta',
                             'delta' => (string) ($payload['delta'] ?? ''),
                         ]);
                     }
                 } catch (Throwable $exception) {
+                    Log::warning('Chat stream interrupted before completion.', [
+                        'conversation_id' => $conversation->id,
+                        'user_message_id' => $userMessage->id,
+                        'assistant_message_id' => $assistantMessage?->id,
+                        'delta_count' => $deltaCount,
+                        'first_delta_at_ms' => $firstDeltaAt !== null
+                            ? round(($firstDeltaAt - $startedAt) / 1_000_000, 2)
+                            : null,
+                        'stream_duration_ms' => round((hrtime(true) - $startedAt) / 1_000_000, 2),
+                        'connection_aborted' => connection_aborted(),
+                        'exception' => $exception::class,
+                        'message' => $exception->getMessage(),
+                    ]);
+
                     $this->emitEvent([
                         'type' => 'error',
                         'message' => $exception->getMessage(),
@@ -198,16 +219,35 @@ class ConversationStreamController extends Controller
             }
 
             $conversation = $conversation->fresh();
+            $streamMetrics = [
+                'delta_count' => $deltaCount,
+                'first_delta_at_ms' => $firstDeltaAt !== null
+                    ? round(($firstDeltaAt - $startedAt) / 1_000_000, 2)
+                    : null,
+                'stream_duration_ms' => round((hrtime(true) - $startedAt) / 1_000_000, 2),
+            ];
 
             if ($assistantMessage !== null) {
                 $this->emitEvent([
                     'type' => 'message_complete',
                     'conversation' => ChatResource::conversation($conversation),
                     'assistant_message' => ChatResource::message($assistantMessage),
+                    'stream_metrics' => $streamMetrics,
                 ]);
             }
 
+            Log::info('Chat stream lifecycle completed.', [
+                'conversation_id' => $conversation->id,
+                'user_message_id' => $userMessage->id,
+                'assistant_message_id' => $assistantMessage?->id,
+                ...$streamMetrics,
+                'stream_completed' => $assistantMessage !== null,
+                'connection_aborted' => connection_aborted(),
+            ]);
+
             $this->emitDone();
+
+            app(ConversationChatService::class)->ensureTitleGenerated($conversation->id);
         }, 200, [
             'Cache-Control' => 'no-cache, no-store, must-revalidate',
             'Connection' => 'keep-alive',

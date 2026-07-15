@@ -216,6 +216,19 @@ class ConversationChatService
         return $this->prepareAssistantReplyStream($conversation, $user, $userMessage);
     }
 
+    public function ensureTitleGenerated(Conversation|int $conversation): void
+    {
+        $conversation = $conversation instanceof Conversation
+            ? $conversation->fresh()
+            : Conversation::query()->find($conversation);
+
+        if (! $conversation instanceof Conversation || filled($conversation->title)) {
+            return;
+        }
+
+        $this->generateTitle($conversation);
+    }
+
     /**
      * @return array{0: Message, 1: Message}
      */
@@ -295,10 +308,6 @@ class ConversationChatService
                 'usage' => $response->usage->toArray(),
                 'model' => $response->meta->model,
             ]);
-
-            if (blank($conversation->fresh()->title)) {
-                $this->generateTitle($conversation);
-            }
 
             Log::info('Chat stream response persisted.', [
                 'conversation_id' => $conversation->id,
