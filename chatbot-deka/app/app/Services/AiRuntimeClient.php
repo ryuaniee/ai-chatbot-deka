@@ -29,12 +29,12 @@ class AiRuntimeClient
      *     model: string|null
      * }
      */
-    public function respond(int $conversationId, int $userId, array $messages): array
+    public function respond(int $conversationId, int $userId, array $messages, string $knowledgeContext = ''): array
     {
         [$history, $prompt] = $this->splitConversationContext($messages);
 
         try {
-            $response = ConversationReplyAgent::make(messages: $history)->prompt(
+            $response = ConversationReplyAgent::make(messages: $history, knowledgeContext: $knowledgeContext)->prompt(
                 $prompt,
                 provider: $this->providerMatrix(),
                 timeout: $this->timeout(),
@@ -49,12 +49,12 @@ class AiRuntimeClient
     /**
      * @param  array<int, array{role: string, content: string}>  $messages
      */
-    public function stream(int $conversationId, int $userId, array $messages): StreamableAgentResponse
+    public function stream(int $conversationId, int $userId, array $messages, string $knowledgeContext = ''): StreamableAgentResponse
     {
         [$history, $prompt] = $this->splitConversationContext($messages);
 
         try {
-            return ConversationReplyAgent::make(messages: $history)->stream(
+            return ConversationReplyAgent::make(messages: $history, knowledgeContext: $knowledgeContext)->stream(
                 $prompt,
                 provider: $this->providerMatrix(),
                 timeout: $this->timeout(),

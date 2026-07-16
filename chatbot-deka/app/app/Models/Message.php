@@ -35,11 +35,17 @@ class Message extends Model
         ];
     }
 
+    /**
+     * @return BelongsTo<Conversation, $this>
+     */
     public function conversation(): BelongsTo
     {
         return $this->belongsTo(Conversation::class);
     }
 
+    /**
+     * @return BelongsTo<Message, $this>
+     */
     public function replyToMessage(): BelongsTo
     {
         return $this->belongsTo(self::class, 'reply_to_message_id');
