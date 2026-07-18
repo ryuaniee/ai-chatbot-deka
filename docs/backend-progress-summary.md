@@ -118,9 +118,9 @@ Agent yang sudah ada:
 
 Service utama:
 
-- [ConversationChatService](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/ConversationChatService.php:1)
-- [AiRuntimeClient](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/AiRuntimeClient.php:1)
-- [MessageModerationService](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/MessageModerationService.php:1)
+- [ConversationChatService](/home/panzek/project-pkl-deka/app/Services/ConversationChatService.php:1)
+- [AiRuntimeClient](/home/panzek/project-pkl-deka/app/Services/AiRuntimeClient.php:1)
+- [MessageModerationService](/home/panzek/project-pkl-deka/app/Services/MessageModerationService.php:1)
 
 Catatan perubahan terbaru:
 
@@ -133,10 +133,10 @@ Catatan perubahan terbaru:
 
 Implementasi knowledge lama yang spesifik `DekaKnowledge*` sudah dihapus dan diganti dengan service yang lebih umum:
 
-- [KnowledgeIngestor](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/Knowledge/KnowledgeIngestor.php:1)
-- [KnowledgeRetriever](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/Knowledge/KnowledgeRetriever.php:1)
-- [KnowledgeTextExtractor](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/Knowledge/KnowledgeTextExtractor.php:1)
-- [KnowledgeChunker](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/Knowledge/KnowledgeChunker.php:1)
+- [KnowledgeIngestor](/home/panzek/project-pkl-deka/app/Services/Knowledge/KnowledgeIngestor.php:1)
+- [KnowledgeRetriever](/home/panzek/project-pkl-deka/app/Services/Knowledge/KnowledgeRetriever.php:1)
+- [KnowledgeTextExtractor](/home/panzek/project-pkl-deka/app/Services/Knowledge/KnowledgeTextExtractor.php:1)
+- [KnowledgeChunker](/home/panzek/project-pkl-deka/app/Services/Knowledge/KnowledgeChunker.php:1)
 
 ### Ingestion
 
@@ -200,14 +200,14 @@ Tabel knowledge baru:
 
 Migration penting:
 
-- [create_users_table](/home/panzek/project-pkl-deka/chatbot-deka/database/migrations/0001_01_01_000000_create_users_table.php:1)
-- [create_cache_table](/home/panzek/project-pkl-deka/chatbot-deka/database/migrations/0001_01_01_000001_create_cache_table.php:1)
-- [create_jobs_table](/home/panzek/project-pkl-deka/chatbot-deka/database/migrations/0001_01_01_000002_create_jobs_table.php:1)
-- [create_conversations_and_messages_tables](/home/panzek/project-pkl-deka/chatbot-deka/database/migrations/2026_07_13_000000_create_conversations_and_messages_tables.php:1)
-- [add_reply_to_message_id_to_messages_table](/home/panzek/project-pkl-deka/chatbot-deka/database/migrations/2026_07_13_120000_add_reply_to_message_id_to_messages_table.php:1)
-- [add_role_to_users_table](/home/panzek/project-pkl-deka/chatbot-deka/database/migrations/2026_07_13_200000_add_role_to_users_table.php:1)
-- [add_google_id_to_users_table](/home/panzek/project-pkl-deka/chatbot-deka/database/migrations/2026_07_14_160000_add_google_id_to_users_table.php:1)
-- [create_deka_knowledge_tables](/home/panzek/project-pkl-deka/chatbot-deka/database/migrations/2026_07_17_000000_create_deka_knowledge_tables.php:1)
+- [create_users_table](/home/panzek/project-pkl-deka/database/migrations/0001_01_01_000000_create_users_table.php:1)
+- [create_cache_table](/home/panzek/project-pkl-deka/database/migrations/0001_01_01_000001_create_cache_table.php:1)
+- [create_jobs_table](/home/panzek/project-pkl-deka/database/migrations/0001_01_01_000002_create_jobs_table.php:1)
+- [create_conversations_and_messages_tables](/home/panzek/project-pkl-deka/database/migrations/2026_07_13_000000_create_conversations_and_messages_tables.php:1)
+- [add_reply_to_message_id_to_messages_table](/home/panzek/project-pkl-deka/database/migrations/2026_07_13_120000_add_reply_to_message_id_to_messages_table.php:1)
+- [add_role_to_users_table](/home/panzek/project-pkl-deka/database/migrations/2026_07_13_200000_add_role_to_users_table.php:1)
+- [add_google_id_to_users_table](/home/panzek/project-pkl-deka/database/migrations/2026_07_14_160000_add_google_id_to_users_table.php:1)
+- [create_deka_knowledge_tables](/home/panzek/project-pkl-deka/database/migrations/2026_07_17_000000_create_deka_knowledge_tables.php:1)
 
 Perubahan database terbaru:
 
@@ -295,21 +295,21 @@ Catatan: hasil angka test bisa berubah sesuai kondisi database lokal, tetapi sui
 
 | Area | File |
 | --- | --- |
-| Routes | [routes/web.php](/home/panzek/project-pkl-deka/chatbot-deka/routes/web.php:1) |
-| Auth API | [AuthApiController.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Http/Controllers/AuthApiController.php:1) |
-| Chat JSON | [ConversationController.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Http/Controllers/ConversationController.php:1) |
-| Chat Message | [ConversationMessageController.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Http/Controllers/ConversationMessageController.php:1) |
-| Chat Stream | [ConversationStreamController.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Http/Controllers/ConversationStreamController.php:1) |
-| Chat Service | [ConversationChatService.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/ConversationChatService.php:1) |
-| AI Runtime | [AiRuntimeClient.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/AiRuntimeClient.php:1) |
-| Moderation | [MessageModerationService.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/MessageModerationService.php:1) |
-| Reply Agent | [ConversationReplyAgent.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Ai/Agents/ConversationReplyAgent.php:1) |
-| Knowledge Ingestor | [KnowledgeIngestor.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/Knowledge/KnowledgeIngestor.php:1) |
-| Knowledge Retriever | [KnowledgeRetriever.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/Knowledge/KnowledgeRetriever.php:1) |
-| Knowledge Extractor | [KnowledgeTextExtractor.php](/home/panzek/project-pkl-deka/chatbot-deka/app/Services/Knowledge/KnowledgeTextExtractor.php:1) |
-| Knowledge Migration | [create_deka_knowledge_tables](/home/panzek/project-pkl-deka/chatbot-deka/database/migrations/2026_07_17_000000_create_deka_knowledge_tables.php:1) |
-| RAG Tests | [DekaKnowledgeRagTest.php](/home/panzek/project-pkl-deka/chatbot-deka/tests/Feature/DekaKnowledgeRagTest.php:1) |
-| Chat Tests | [ChatApiTest.php](/home/panzek/project-pkl-deka/chatbot-deka/tests/Feature/ChatApiTest.php:1) |
+| Routes | [routes/web.php](/home/panzek/project-pkl-deka/routes/web.php:1) |
+| Auth API | [AuthApiController.php](/home/panzek/project-pkl-deka/app/Http/Controllers/AuthApiController.php:1) |
+| Chat JSON | [ConversationController.php](/home/panzek/project-pkl-deka/app/Http/Controllers/ConversationController.php:1) |
+| Chat Message | [ConversationMessageController.php](/home/panzek/project-pkl-deka/app/Http/Controllers/ConversationMessageController.php:1) |
+| Chat Stream | [ConversationStreamController.php](/home/panzek/project-pkl-deka/app/Http/Controllers/ConversationStreamController.php:1) |
+| Chat Service | [ConversationChatService.php](/home/panzek/project-pkl-deka/app/Services/ConversationChatService.php:1) |
+| AI Runtime | [AiRuntimeClient.php](/home/panzek/project-pkl-deka/app/Services/AiRuntimeClient.php:1) |
+| Moderation | [MessageModerationService.php](/home/panzek/project-pkl-deka/app/Services/MessageModerationService.php:1) |
+| Reply Agent | [ConversationReplyAgent.php](/home/panzek/project-pkl-deka/app/Ai/Agents/ConversationReplyAgent.php:1) |
+| Knowledge Ingestor | [KnowledgeIngestor.php](/home/panzek/project-pkl-deka/app/Services/Knowledge/KnowledgeIngestor.php:1) |
+| Knowledge Retriever | [KnowledgeRetriever.php](/home/panzek/project-pkl-deka/app/Services/Knowledge/KnowledgeRetriever.php:1) |
+| Knowledge Extractor | [KnowledgeTextExtractor.php](/home/panzek/project-pkl-deka/app/Services/Knowledge/KnowledgeTextExtractor.php:1) |
+| Knowledge Migration | [create_deka_knowledge_tables](/home/panzek/project-pkl-deka/database/migrations/2026_07_17_000000_create_deka_knowledge_tables.php:1) |
+| RAG Tests | [DekaKnowledgeRagTest.php](/home/panzek/project-pkl-deka/tests/Feature/DekaKnowledgeRagTest.php:1) |
+| Chat Tests | [ChatApiTest.php](/home/panzek/project-pkl-deka/tests/Feature/ChatApiTest.php:1) |
 
 ## Next Development Backend
 

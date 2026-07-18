@@ -30,7 +30,7 @@ Pastikan mesin lokal punya:
 ## 3. Struktur Folder
 
 ```text
-chatbot-deka/
+project-pkl-deka/
 ├── app/
 ├── bootstrap/
 ├── config/
@@ -64,7 +64,7 @@ Default koneksi lokal:
 Dari root repository:
 
 ```bash
-cd /home/panzek/project-pkl-deka/chatbot-deka
+cd /home/panzek/project-pkl-deka
 ```
 
 Install dependency:
