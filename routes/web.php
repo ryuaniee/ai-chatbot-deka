@@ -12,9 +12,9 @@ use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
 Route::redirect('dashboard', '/chat')->name('dashboard');
-Route::get('admin', fn () => abort(403, 'Admin dashboard is disabled.'))
+Route::inertia('admin', 'admin')
     ->middleware(['auth', 'verified'])
-    ->name('admin.disabled');
+    ->name('admin');
 
 Route::prefix('api/auth')->name('api.auth.')->group(function () {
     Route::get('csrf', [AuthApiController::class, 'csrf'])
