@@ -18,19 +18,19 @@ Yang sudah ada di repo:
 - Laravel app tunggal
 - auth API session-based
 - role `admin` dan `user`
-- panel admin Filament
 - persistence conversation dan message
 - runtime AI langsung di Laravel via `laravel/ai`
 - moderation, idempotency, rate limit
 - endpoint chat JSON dan stream SSE
+- retrieval knowledge Deka berbasis PostgreSQL full-text search dan AI selector/reranker
 
 Yang belum ada:
 
-- crawl `deka.dev`
-- ingestion dokumen
 - embedding
 - vector store
-- retrieval berbasis knowledge Deka
+- admin UI untuk edit knowledge manual
+
+Catatan: panel admin Filament sudah dihapus. Role admin tetap ada, tetapi `/admin` ditutup `403` sampai ada kebutuhan admin UI baru.
 
 ## Gambaran Arsitektur Target
 
@@ -46,7 +46,7 @@ deka.dev
    +------------------------+
    |                        |
    v                        v
-[documents table]     [document_chunks + embeddings]
+[knowledge_documents] [knowledge_chunks]
    |                        |
    +-----------+------------+
                |
@@ -105,7 +105,7 @@ Tanggung jawab runtime:
 - menjalankan stream dan non-stream
 - menjaga prompt policy tetap tipis dan terkontrol
 
-### Retrieval Layer
+### Retrieval Layer Target
 
 Retrieval belum diimplementasikan.
 
@@ -118,7 +118,7 @@ Target ke depan:
 
 Untuk tahap awal, retrieval bisa tetap berada di Laravel service layer.
 
-### Ingestion Worker
+### Ingestion Worker Target
 
 Target tugas ingestion:
 
@@ -162,7 +162,7 @@ User question
 
 ### No-Answer Flow Target
 
-Setelah retrieval knowledge ada:
+Setelah retrieval knowledge versi baru ada:
 
 ```text
 User question
@@ -267,7 +267,7 @@ Role yang dipakai tetap sederhana:
 Aturan:
 
 - `user` memakai aplikasi chat
-- `admin` memakai panel admin
+- `admin` tidak memakai halaman chat user; `/admin` saat ini ditutup
 - satu tabel `users`
 - tidak ada tabel admin terpisah
 
@@ -284,9 +284,10 @@ Aturan:
 
 Urutan kerja yang paling masuk akal sesudah fondasi sekarang:
 
-1. crawl `deka.dev`
-2. simpan `documents` dan `document_chunks`
-3. pasang `pgvector`
-4. implement retrieval
-5. inject context retrieval ke runtime AI
-6. ubah prompt policy agar hanya menjawab dari knowledge Deka
+1. finalkan kebutuhan knowledge Deka dan sumber datanya
+2. desain schema `documents`, `document_chunks`, dan `ingestion_runs`
+3. tentukan retrieval awal: full-text PostgreSQL, `pgvector`, atau hybrid
+4. implement ingestion worker baru
+5. implement retrieval dan threshold
+6. inject context retrieval ke runtime AI
+7. ubah prompt policy agar hanya menjawab dari context Deka yang tersedia

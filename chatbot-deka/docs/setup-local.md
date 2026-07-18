@@ -5,14 +5,14 @@ Dokumen ini menjelaskan cara menjalankan project secara lokal sampai siap dipaka
 - auth API
 - chat user
 - stream chat SSE
-- admin panel Filament
+- role admin tanpa dashboard aktif
 - runtime AI Laravel
 
 ## 1. Stack
 
 Komponen utama:
 
-- Laravel app di `app/`
+- Laravel app di root repository
 - PostgreSQL via Docker Compose
 - runtime AI langsung di Laravel via `laravel/ai`
 
@@ -32,6 +32,12 @@ Pastikan mesin lokal punya:
 ```text
 chatbot-deka/
 ├── app/
+├── bootstrap/
+├── config/
+├── database/
+├── public/
+├── resources/
+├── routes/
 ├── docker-compose.yml
 └── docs/
 ```
@@ -55,10 +61,10 @@ Default koneksi lokal:
 
 ## 5. Setup Laravel
 
-Masuk ke folder app:
+Dari root repository:
 
 ```bash
-cd /home/panzek/project-pkl-deka/chatbot-deka/app
+cd /home/panzek/project-pkl-deka/chatbot-deka
 ```
 
 Install dependency:
@@ -92,23 +98,6 @@ OPENAI_URL=https://codex.deka.dev/v1
 
 AI_CHAT_PROVIDER=openai
 AI_CHAT_MODEL=gpt-5.4-mini
-AI_CHAT_FALLBACK_PROVIDER=
-AI_CHAT_FALLBACK_MODEL=
-AI_CHAT_TIMEOUT=30
-AI_CHAT_RATE_LIMIT_PER_MINUTE=20
-AI_CHAT_MAX_HISTORY_MESSAGES=6
-AI_CHAT_MAX_HISTORY_CHARACTERS=6000
-AI_CHAT_ANSWER_MAX_TOKENS=160
-AI_CHAT_TEMPERATURE=0.2
-AI_CHAT_IDEMPOTENCY_TTL_MINUTES=10
-MODERATION_MODEL=omni-moderation-latest
-
-DEKA_KNOWLEDGE_ENABLED=true
-DEKA_KNOWLEDGE_BASE_URL=https://deka.dev
-DEKA_KNOWLEDGE_MAX_PAGES=50
-DEKA_KNOWLEDGE_TOP_K=3
-DEKA_KNOWLEDGE_MIN_SCORE=0.02
-DEKA_KNOWLEDGE_MAX_CONTEXT_CHARACTERS=1800
 
 ADMIN_NAME="Admin Deka"
 ADMIN_EMAIL=admin@deka.dev
@@ -145,17 +134,19 @@ php artisan db:seed --class=AdminUserSeeder
 
 ## 8. Ingest Knowledge Deka
 
-Ambil konten dari `deka.dev` ke knowledge store lokal:
+Masukkan dokumen PDF/teks:
 
 ```bash
-php artisan deka:knowledge:ingest --fresh
+php artisan knowledge:ingest-file "storage/app/private/docs/DEKA Knowledge Base Draft Rekap.pdf" \
+    --title="DEKA Knowledge Base Draft Rekap" \
+    --source="file://DEKA Knowledge Base Draft Rekap.pdf"
 ```
 
-Catatan:
+Crawl website Deka:
 
-- crawler hanya menyimpan URL dari host `deka.dev`
-- jika tidak ada knowledge yang cocok, chat langsung membalas out-of-context tanpa call AI
-- ulangi command ini setelah konten `deka.dev` berubah
+```bash
+php artisan knowledge:crawl --base=https://deka.dev --limit=50
+```
 
 ## 9. Jalankan App
 
@@ -171,7 +162,7 @@ Default URL:
 
 - login: `http://127.0.0.1:8000/login`
 - chat: `http://127.0.0.1:8000/chat`
-- admin: `http://127.0.0.1:8000/admin`
+- admin: `http://127.0.0.1:8000/admin` menampilkan `403` karena dashboard admin dinonaktifkan
 
 Default admin:
 
@@ -187,7 +178,7 @@ Role yang dipakai:
 
 Aturan akses:
 
-- hanya `admin` boleh ke `/admin`
+- `/admin` ditutup `403` karena dashboard admin sudah dihapus
 - user biasa memakai `/chat`
 - admin tidak memakai halaman chat user
 - auth API memakai session cookie
@@ -216,7 +207,7 @@ Chat:
 Jalankan test chat utama:
 
 ```bash
-php artisan test --filter='DekaKnowledgeTest|ChatApiTest|AiRuntimeClientTest'
+php artisan test --filter='ChatApiTest|AiRuntimeClientTest'
 ```
 
 Kalau PostgreSQL lokal mati, feature test chat akan gagal karena koneksi database.
@@ -226,7 +217,7 @@ Kalau PostgreSQL lokal mati, feature test chat akan gagal karena koneksi databas
 1. buka `/login`
 2. login sebagai user biasa atau admin
 3. user biasa harus masuk `/chat`
-4. admin harus masuk `/admin`
-5. pastikan `php artisan deka:knowledge:ingest --fresh` sudah selesai
-6. kirim pertanyaan yang ada di konteks `deka.dev`
-7. kirim pertanyaan di luar konteks untuk memastikan response aman muncul cepat
+4. admin diarahkan ke `/admin` dan mendapat `403`
+5. pastikan command knowledge sudah selesai kalau ingin jawaban berbasis RAG
+6. kirim pesan dari halaman chat
+7. pastikan balasan assistant tersimpan dan muncul di sidebar conversation

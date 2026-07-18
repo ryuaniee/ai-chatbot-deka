@@ -4,20 +4,16 @@ Backend chatbot Deka saat ini berjalan sebagai aplikasi Laravel tunggal dengan:
 
 - auth API berbasis session
 - role `admin` dan `user`
-- panel admin Filament
 - chat runtime via `laravel/ai`
 - endpoint chat biasa dan streaming SSE
 - moderation, rate limit, dan idempotency
-- knowledge ingestion dari `deka.dev`
-- retrieval lokal sebelum AI menjawab
-- guard out-of-context agar AI tidak mengarang di luar knowledge Deka
+- retrieval knowledge Deka berbasis PostgreSQL full-text search dan AI reranker
 
 ## Stack
 
-- Laravel app: `app/`
+- Laravel app di root repository
 - Database: PostgreSQL via Docker Compose
 - Runtime AI: `Laravel AI SDK`
-- Knowledge retrieval: PostgreSQL full-text search
 - Frontend chat dasar: React/Inertia di repo yang sama
 
 ## Dokumentasi
@@ -50,7 +46,7 @@ UI:
 
 - login: `/login`
 - chat user: `/chat`
-- admin: `/admin`
+- admin: `/admin` ditutup `403` karena dashboard admin dinonaktifkan
 
 ## Quick Start
 
@@ -63,13 +59,11 @@ docker compose up -d
 ### 2. Setup app Laravel
 
 ```bash
-cd app
 cp .env.example .env
 composer install
 npm install
 php artisan key:generate
 php artisan migrate
-php artisan deka:knowledge:ingest --fresh
 php artisan db:seed --class=AdminUserSeeder
 php artisan serve
 ```
@@ -91,23 +85,6 @@ OPENAI_URL=https://codex.deka.dev/v1
 
 AI_CHAT_PROVIDER=openai
 AI_CHAT_MODEL=gpt-5.4-mini
-AI_CHAT_FALLBACK_PROVIDER=
-AI_CHAT_FALLBACK_MODEL=
-AI_CHAT_TIMEOUT=30
-AI_CHAT_RATE_LIMIT_PER_MINUTE=20
-AI_CHAT_MAX_HISTORY_MESSAGES=6
-AI_CHAT_MAX_HISTORY_CHARACTERS=6000
-AI_CHAT_ANSWER_MAX_TOKENS=160
-AI_CHAT_TEMPERATURE=0.2
-AI_CHAT_IDEMPOTENCY_TTL_MINUTES=10
-MODERATION_MODEL=omni-moderation-latest
-
-DEKA_KNOWLEDGE_ENABLED=true
-DEKA_KNOWLEDGE_BASE_URL=https://deka.dev
-DEKA_KNOWLEDGE_MAX_PAGES=50
-DEKA_KNOWLEDGE_TOP_K=3
-DEKA_KNOWLEDGE_MIN_SCORE=0.02
-DEKA_KNOWLEDGE_MAX_CONTEXT_CHARACTERS=1800
 ```
 
 Untuk email:
@@ -130,7 +107,7 @@ MAIL_MAILER=log
 - app: `http://127.0.0.1:8000`
 - login: `http://127.0.0.1:8000/login`
 - chat: `http://127.0.0.1:8000/chat`
-- admin: `http://127.0.0.1:8000/admin`
+- admin: `http://127.0.0.1:8000/admin` menampilkan `403`
 
 Default admin dari `.env.example`:
 
@@ -145,7 +122,7 @@ Frontend tidak perlu menebak flow auth.
 - ambil `GET /api/auth/csrf` sebelum flow auth jika dibutuhkan
 - gunakan `role` dan `redirect_to` dari response auth
 - user biasa diarahkan ke `/chat` atau `/email/verify`
-- admin diarahkan ke `/admin`
+- admin diarahkan ke `/admin`, tetapi dashboard admin saat ini dinonaktifkan
 - kontrak endpoint chat ada di [Frontend Chat API](docs/frontend-chat-api.md)
 
 ## Testing
@@ -153,18 +130,19 @@ Frontend tidak perlu menebak flow auth.
 Test chat dan runtime AI:
 
 ```bash
-cd app
-php artisan test --filter='DekaKnowledgeTest|ChatApiTest|AiRuntimeClientTest'
+php artisan test --filter='ChatApiTest|AiRuntimeClientTest'
 ```
 
 ## Knowledge Deka
 
-Ingest ulang knowledge setelah konten `deka.dev` berubah:
+Knowledge Deka memakai tabel `knowledge_documents`, `knowledge_chunks`, dan `knowledge_ingestion_runs`. Dokumen bisa dimasukkan dari PDF/teks atau hasil crawl website, lalu chat mengambil konteks relevan sebelum meminta jawaban ke AI.
+
+Contoh ingest:
 
 ```bash
-cd app
-php artisan migrate
-php artisan deka:knowledge:ingest --fresh
-```
+php artisan knowledge:ingest-file "storage/app/private/docs/DEKA Knowledge Base Draft Rekap.pdf" \
+    --title="DEKA Knowledge Base Draft Rekap" \
+    --source="file://DEKA Knowledge Base Draft Rekap.pdf"
 
-Saat `DEKA_KNOWLEDGE_ENABLED=true`, backend mencari konteks dari tabel knowledge sebelum memanggil AI. Kalau tidak ada konteks yang cocok, backend langsung menyimpan dan mengirim jawaban aman tanpa call AI.
+php artisan knowledge:crawl --base=https://deka.dev --limit=50
+```
