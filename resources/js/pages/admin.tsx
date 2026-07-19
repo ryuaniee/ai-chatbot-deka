@@ -1,23 +1,27 @@
-import { Head, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     BarChart3,
     BookOpen,
     Bot,
-    CheckCircle2,
     ChevronDown,
     Clock3,
+    Download,
     FileText,
     LayoutDashboard,
     MessageSquare,
+    Printer,
     Search,
     ShieldCheck,
     Sparkles,
+    ThumbsDown,
+    ThumbsUp,
     Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { AdminConversationChart } from '@/components/admin-conversation-chart';
+import { AdminFeedbackBarChart } from '@/components/admin-feedback-bar-chart';
 import { AdminTokenUsageChart } from '@/components/admin-token-usage-chart';
 import DekaLogo from '@/components/deka-logo';
 import { Badge } from '@/components/ui/badge';
@@ -49,8 +53,9 @@ type Metric = {
 };
 
 type Conversation = {
+    dislikes: number;
+    likes: number;
     user: string;
-    topic: string;
     status: string;
     time: string;
 };
@@ -72,6 +77,29 @@ type TokenUsageItem = {
     totalTokens: number;
 };
 
+type AdminUserItem = {
+    name: string;
+    email: string;
+    role: 'admin' | 'user';
+    status: 'active' | 'inactive';
+    joinedAt: string;
+    lastSeen: string;
+    conversations: number;
+};
+
+type AdminActivityItem = {
+    admin: string;
+    email: string;
+    category: 'auth' | 'conversation' | 'user' | 'report' | 'system';
+    action: string;
+    target: string;
+    detail: string;
+    ipAddress: string;
+    time: string;
+};
+
+type ReportPeriod = 'week' | 'month' | 'year';
+
 type ChatTrendItem = {
     date: string;
     conversations: number;
@@ -80,6 +108,9 @@ type ChatTrendItem = {
 
 type SectionId =
     | 'overview'
+    | 'conversations'
+    | 'users'
+    | 'activity-log'
     | 'token-usage'
     | 'chat-trend'
     | 'chat-api'
@@ -88,9 +119,16 @@ type SectionId =
     | 'moderation'
     | 'auth';
 
+type AdminPageProps = {
+    auth: Auth;
+    section?: SectionId;
+};
+
 const metricIcons = {
     message: MessageSquare,
     sparkles: Sparkles,
+    thumbsDown: ThumbsDown,
+    thumbsUp: ThumbsUp,
     users: Users,
     book: BookOpen,
 } satisfies Record<string, LucideIcon>;
@@ -136,28 +174,143 @@ const tokenUsageItems: TokenUsageItem[] = [
 
 const conversations: Conversation[] = [
     {
+        dislikes: 1,
+        likes: 24,
         user: 'Nadia Putri',
-        topic: 'Menanyakan layanan Deka Studio',
         status: 'Selesai',
         time: '2 menit lalu',
     },
     {
+        dislikes: 0,
+        likes: 18,
         user: 'Raka Firmansyah',
-        topic: 'Info lokasi dan jam operasional',
         status: 'Berjalan',
         time: '8 menit lalu',
     },
     {
+        dislikes: 4,
+        likes: 9,
         user: 'Ayu Lestari',
-        topic: 'Pertanyaan di luar data bot',
-        status: 'Butuh cek',
+        status: 'Selesai',
         time: '21 menit lalu',
     },
     {
+        dislikes: 2,
+        likes: 21,
         user: 'Bagus Pratama',
-        topic: 'Kontak customer service Deka',
         status: 'Selesai',
         time: '35 menit lalu',
+    },
+];
+
+const adminUsers: AdminUserItem[] = [
+    {
+        name: 'Admin Deka',
+        email: 'admin@deka.dev',
+        role: 'admin',
+        status: 'active',
+        joinedAt: '13 Jul 2026',
+        lastSeen: 'Baru saja',
+        conversations: 11,
+    },
+    {
+        name: 'Nadia Putri',
+        email: 'nadia@example.com',
+        role: 'user',
+        status: 'active',
+        joinedAt: '14 Jul 2026',
+        lastSeen: '2 menit lalu',
+        conversations: 42,
+    },
+    {
+        name: 'Raka Firmansyah',
+        email: 'raka@example.com',
+        role: 'user',
+        status: 'active',
+        joinedAt: '15 Jul 2026',
+        lastSeen: '8 menit lalu',
+        conversations: 36,
+    },
+    {
+        name: 'Ayu Lestari',
+        email: 'ayu@example.com',
+        role: 'user',
+        status: 'active',
+        joinedAt: '16 Jul 2026',
+        lastSeen: '21 menit lalu',
+        conversations: 28,
+    },
+    {
+        name: 'Bagus Pratama',
+        email: 'bagus@example.com',
+        role: 'user',
+        status: 'inactive',
+        joinedAt: '17 Jul 2026',
+        lastSeen: 'Kemarin',
+        conversations: 9,
+    },
+];
+
+const adminActivityItems: AdminActivityItem[] = [
+    {
+        admin: 'Admin Deka',
+        email: 'admin@deka.dev',
+        category: 'auth',
+        action: 'Login dashboard',
+        target: 'Admin panel',
+        detail: 'Masuk ke halaman Dashboard Ringkasan.',
+        ipAddress: '192.168.10.14',
+        time: 'Baru saja',
+    },
+    {
+        admin: 'Admin Deka',
+        email: 'admin@deka.dev',
+        category: 'conversation',
+        action: 'Membuka percakapan',
+        target: 'Chat Nadia Putri',
+        detail: 'Melihat detail feedback like dan dislike percakapan.',
+        ipAddress: '192.168.10.14',
+        time: '3 menit lalu',
+    },
+    {
+        admin: 'Admin Deka',
+        email: 'admin@deka.dev',
+        category: 'report',
+        action: 'Export laporan',
+        target: 'Kelola Percakapan',
+        detail: 'Mengunduh ringkasan percakapan dan feedback bulan ini.',
+        ipAddress: '192.168.10.14',
+        time: '12 menit lalu',
+    },
+    {
+        admin: 'Admin Deka',
+        email: 'admin@deka.dev',
+        category: 'user',
+        action: 'Cek data pengguna',
+        target: 'Raka Firmansyah',
+        detail: 'Membuka data user aktif dan jumlah chat pengguna.',
+        ipAddress: '192.168.10.14',
+        time: '18 menit lalu',
+    },
+    {
+        admin: 'Admin Deka',
+        email: 'admin@deka.dev',
+        category: 'system',
+        action: 'Melihat token usage',
+        target: 'Token AI',
+        detail: 'Memantau pemakaian token berdasarkan pengguna aktif.',
+        ipAddress: '192.168.10.14',
+        time: '27 menit lalu',
+    },
+    {
+        admin: 'Admin Deka',
+        email: 'admin@deka.dev',
+        category: 'auth',
+        action: 'Logout dashboard',
+        target: 'Admin panel',
+        detail: 'Keluar dari session admin sebelumnya.',
+        ipAddress: '192.168.10.14',
+        time: 'Kemarin',
     },
 ];
 
@@ -208,39 +361,53 @@ const totalTokenUsage = tokenUsageItems.reduce(
     (total, item) => total + item.totalTokens,
     0,
 );
-const totalTokenRequests = tokenUsageItems.reduce(
-    (total, item) => total + item.requests,
+const totalLikes = conversations.reduce(
+    (total, conversation) => total + conversation.likes,
+    0,
+);
+const totalDislikes = conversations.reduce(
+    (total, conversation) => total + conversation.dislikes,
+    0,
+);
+const activeUsers = adminUsers.filter(
+    (item) => item.status === 'active',
+).length;
+const adminUserCount = adminUsers.filter(
+    (item) => item.role === 'admin',
+).length;
+const totalUserConversations = adminUsers.reduce(
+    (total, item) => total + item.conversations,
     0,
 );
 
 const metrics: Metric[] = [
     {
-        label: 'Percakapan aktif',
-        value: '128',
-        description: 'Sesi chat yang masuk hari ini',
+        label: 'Total Percakapan',
+        value: formatNumber(conversations.length),
+        description: 'Seluruh percakapan yang masuk di dashboard.',
         tone: 'blue',
         icon: 'message',
     },
     {
-        label: 'Total token',
-        value: formatNumber(totalTokenUsage),
-        description: 'Pemakaian AI dari semua user',
+        label: 'Total Like',
+        value: formatNumber(totalLikes),
+        description: 'Feedback positif dari jawaban chatbot.',
         tone: 'green',
-        icon: 'sparkles',
+        icon: 'thumbsUp',
     },
     {
-        label: 'User aktif',
-        value: formatNumber(tokenUsageItems.length),
-        description: `${formatNumber(totalTokenRequests)} request tercatat`,
+        label: 'Total Dislike',
+        value: formatNumber(totalDislikes),
+        description: 'Feedback negatif yang perlu dipantau.',
+        tone: 'amber',
+        icon: 'thumbsDown',
+    },
+    {
+        label: 'User Aktif',
+        value: formatNumber(activeUsers),
+        description: 'Pengguna aktif dari data dummy saat ini.',
         tone: 'neutral',
         icon: 'users',
-    },
-    {
-        label: 'Sumber data bot',
-        value: formatNumber(knowledgeItems.length),
-        description: 'Dokumen yang dipakai untuk jawaban',
-        tone: 'amber',
-        icon: 'book',
     },
 ];
 
@@ -252,51 +419,33 @@ const navigation: {
 }[] = [
     {
         id: 'overview',
-        label: 'Dashboard',
-        description: 'Ringkasan chat, user, token, dan knowledge',
+        label: 'Dashboard Ringkasan',
+        description: 'Total percakapan, like, dislike, dan user aktif',
         icon: LayoutDashboard,
     },
     {
-        id: 'token-usage',
-        label: 'Token per User',
-        description: 'Pemakaian token tiap user',
-        icon: Users,
-    },
-    {
-        id: 'chat-trend',
-        label: 'Tren Chat',
-        description: 'Grafik percakapan dan sesi selesai',
-        icon: BarChart3,
-    },
-    {
-        id: 'chat-api',
-        label: 'Chat API',
-        description: 'Endpoint chat dan streaming',
+        id: 'conversations',
+        label: 'Kelola Percakapan',
+        description: 'Daftar percakapan pengguna chatbot',
         icon: MessageSquare,
     },
     {
-        id: 'knowledge',
-        label: 'Data Bot',
-        description: 'Sumber jawaban chatbot Deka',
-        icon: BookOpen,
+        id: 'token-usage',
+        label: 'Token Usage',
+        description: 'Pemakaian token AI per pengguna',
+        icon: Sparkles,
     },
     {
-        id: 'runtime',
-        label: 'Pengaturan AI',
-        description: 'Model dan cara bot menjawab',
-        icon: Bot,
-    },
-    {
-        id: 'moderation',
-        label: 'Keamanan Chat',
-        description: 'Filter pesan dan batas request',
-        icon: ShieldCheck,
-    },
-    {
-        id: 'auth',
-        label: 'Pengguna',
+        id: 'users',
+        label: 'Kelola Pengguna',
         description: 'Admin, user, login, dan role',
         icon: Users,
+    },
+    {
+        id: 'activity-log',
+        label: 'Log Aktivitas',
+        description: 'Riwayat aktivitas admin dan aksi yang dilakukan',
+        icon: Clock3,
     },
 ];
 
@@ -310,31 +459,38 @@ const toneClasses: Record<Metric['tone'], string> = {
 
 const statusClasses: Record<string, string> = {
     active: 'border-transparent bg-[#e8f2ff] text-[#155fc4] dark:bg-[#12365f] dark:text-[#b8d9ff]',
+    inactive:
+        'border-transparent bg-[#eef4fb] text-[#40566f] dark:bg-[#10233a] dark:text-[#b7c7d9]',
     Selesai:
         'border-transparent bg-[#e8f2ff] text-[#155fc4] dark:bg-[#12365f] dark:text-[#b8d9ff]',
     Berjalan:
         'border-transparent bg-[#eaf8ff] text-[#0369a1] dark:bg-[#082f49] dark:text-[#7dd3fc]',
-    'Butuh cek':
-        'border-transparent bg-[#fff4df] text-[#b45309] dark:bg-[#3b2508] dark:text-[#f7c56b]',
 };
 
+const activityCategoryClasses: Record<AdminActivityItem['category'], string> = {
+    auth: 'border-transparent bg-[#e8f2ff] text-[#155fc4] dark:bg-[#12365f] dark:text-[#b8d9ff]',
+    conversation:
+        'border-transparent bg-[#eaf3ff] text-[#2f80ed] dark:bg-[#102b4a] dark:text-[#8fc1ff]',
+    user: 'border-transparent bg-[#eef4fb] text-[#40566f] dark:bg-[#10233a] dark:text-[#b7c7d9]',
+    report: 'border-transparent bg-[#e8f2ff] text-[#155fc4] dark:bg-[#12365f] dark:text-[#b8d9ff]',
+    system: 'border-transparent bg-[#eef4fb] text-[#40566f] dark:bg-[#10233a] dark:text-[#b7c7d9]',
+};
+
+const sectionHref = (sectionId: SectionId) => `/admin/${sectionId}`;
+
+const isSectionId = (value: unknown): value is SectionId =>
+    typeof value === 'string' && navigation.some((item) => item.id === value);
+
 export default function AdminPage() {
-    const { auth } = usePage<{ auth: Auth }>().props;
-    const [activeSection, setActiveSection] = useState<SectionId>('overview');
+    const { auth, section } = usePage<AdminPageProps>().props;
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const activeSection = isSectionId(section) ? section : 'overview';
     const profileInitials = auth.user.name
         .split(' ')
         .map((name) => name[0])
         .join('')
         .slice(0, 2)
         .toUpperCase();
-
-    const handleNavigate = (sectionId: SectionId) => {
-        setActiveSection(sectionId);
-        document
-            .getElementById(sectionId)
-            ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    };
 
     const activeNavigation = navigation.find(
         (item) => item.id === activeSection,
@@ -344,7 +500,7 @@ export default function AdminPage() {
         <>
             <Head title="Admin Dashboard" />
 
-            <div className="min-h-screen bg-background text-foreground">
+            <div className="h-screen overflow-hidden bg-background text-foreground">
                 <aside
                     className={`fixed inset-y-0 left-0 z-30 hidden border-r bg-card transition-[width] duration-200 lg:flex lg:flex-col ${
                         sidebarCollapsed ? 'w-20' : 'w-64'
@@ -383,13 +539,12 @@ export default function AdminPage() {
 
                     <nav className="flex-1 space-y-1.5 px-3 py-4">
                         {navigation.map((item) => (
-                            <button
+                            <Link
                                 key={item.label}
-                                type="button"
+                                href={sectionHref(item.id)}
                                 title={
                                     sidebarCollapsed ? item.label : undefined
                                 }
-                                onClick={() => handleNavigate(item.id)}
                                 className={`flex h-11 w-full items-center rounded-md text-sm font-medium transition-colors ${
                                     activeSection === item.id
                                         ? 'bg-primary text-primary-foreground shadow-sm'
@@ -402,7 +557,7 @@ export default function AdminPage() {
                                 >
                                     {item.label}
                                 </span>
-                            </button>
+                            </Link>
                         ))}
                     </nav>
 
@@ -435,7 +590,7 @@ export default function AdminPage() {
                                 <UserMenuContent
                                     user={auth.user}
                                     onSettingsClick={() =>
-                                        handleNavigate('auth')
+                                        router.visit(sectionHref('users'))
                                     }
                                 />
                             </DropdownMenuContent>
@@ -444,11 +599,11 @@ export default function AdminPage() {
                 </aside>
 
                 <div
-                    className={`transition-[padding] duration-200 ${
+                    className={`flex h-screen min-w-0 flex-col transition-[padding] duration-200 ${
                         sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'
                     }`}
                 >
-                    <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur md:px-6">
+                    <header className="z-20 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur md:px-6">
                         <div className="flex items-center gap-3">
                             <DekaLogo className="h-8 w-auto lg:hidden" />
                             <Separator
@@ -477,12 +632,12 @@ export default function AdminPage() {
                         </div>
                     </header>
 
-                    <main className="flex w-full flex-col gap-6 px-4 py-6 md:px-6">
-                        <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden">
+                    <main className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-hidden px-4 py-6 md:px-6">
+                        <div className="flex shrink-0 gap-2 overflow-x-auto pb-1 lg:hidden">
                             {navigation.map((item) => (
                                 <Button
                                     key={item.id}
-                                    type="button"
+                                    asChild
                                     size="sm"
                                     variant={
                                         activeSection === item.id
@@ -490,80 +645,522 @@ export default function AdminPage() {
                                             : 'outline'
                                     }
                                     className="shrink-0"
-                                    onClick={() => handleNavigate(item.id)}
                                 >
-                                    <item.icon className="h-4 w-4" />
-                                    {item.label}
+                                    <Link href={sectionHref(item.id)}>
+                                        <item.icon className="h-4 w-4" />
+                                        {item.label}
+                                    </Link>
                                 </Button>
                             ))}
                         </div>
 
-                        <section
-                            id="overview"
-                            className="grid scroll-mt-24 gap-4 md:grid-cols-2 2xl:grid-cols-4"
-                        >
-                            {metrics.map((metric) => (
-                                <MetricCard
-                                    key={metric.label}
-                                    metric={metric}
-                                />
-                            ))}
-                        </section>
+                        {activeSection === 'overview' && (
+                            <section className="flex min-h-0 flex-1 flex-col gap-6">
+                                <div className="grid shrink-0 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+                                    {metrics.map((metric) => (
+                                        <MetricCard
+                                            key={metric.label}
+                                            metric={metric}
+                                        />
+                                    ))}
+                                </div>
 
-                        <section
-                            id="token-usage"
-                            className="grid scroll-mt-24 gap-6 xl:grid-cols-2"
-                        >
-                            <Card className="rounded-lg">
-                                <CardHeader className="gap-3">
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <CardTitle>
-                                                Usage token per user
-                                            </CardTitle>
-                                            <CardDescription>
-                                                Ringkasan token AI yang dipakai
-                                                tiap pengguna.
-                                            </CardDescription>
+                                <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-[1.2fr_1fr_1fr]">
+                                    <AdminConversationChart
+                                        data={chatTrendItems}
+                                        className="flex min-h-0 flex-col"
+                                        chartClassName="h-full min-h-[240px]"
+                                    />
+                                    <AdminFeedbackBarChart
+                                        className="flex min-h-0 flex-col"
+                                        chartClassName="h-full min-h-[240px]"
+                                    />
+                                    <AdminTokenUsageChart
+                                        data={tokenUsageItems}
+                                        className="flex min-h-0 flex-col"
+                                        chartClassName="h-full min-h-[240px]"
+                                    />
+                                </div>
+                            </section>
+                        )}
+
+                        {activeSection === 'token-usage' && (
+                            <section className="grid min-h-0 flex-1 gap-6 xl:grid-cols-2">
+                                <Card className="flex min-h-0 flex-col rounded-lg">
+                                    <CardHeader className="gap-3">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <CardTitle>
+                                                    Usage token per user
+                                                </CardTitle>
+                                                <CardDescription>
+                                                    Ringkasan token AI yang
+                                                    dipakai tiap pengguna.
+                                                </CardDescription>
+                                            </div>
+                                            <Badge
+                                                variant="secondary"
+                                                className="w-fit"
+                                            >
+                                                {formatNumber(totalTokenUsage)}{' '}
+                                                total token
+                                            </Badge>
                                         </div>
-                                        <Badge
-                                            variant="secondary"
-                                            className="w-fit"
-                                        >
-                                            {formatNumber(totalTokenUsage)}{' '}
-                                            total token
-                                        </Badge>
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="overflow-hidden rounded-md border">
-                                        <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[220px_100px_120px_120px_120px]">
-                                            <span>User</span>
-                                            <span className="hidden md:block">
-                                                Request
-                                            </span>
-                                            <span className="hidden md:block">
-                                                Prompt
-                                            </span>
-                                            <span className="hidden md:block">
-                                                Completion
-                                            </span>
-                                            <span>Total</span>
+                                    </CardHeader>
+                                    <CardContent className="min-h-0 flex-1">
+                                        <div className="h-full overflow-hidden rounded-md border">
+                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(220px,1fr)_110px_130px_130px_130px]">
+                                                <span>User</span>
+                                                <span className="hidden md:block">
+                                                    Request
+                                                </span>
+                                                <span className="hidden md:block">
+                                                    Prompt
+                                                </span>
+                                                <span className="hidden md:block">
+                                                    Completion
+                                                </span>
+                                                <span>Total</span>
+                                            </div>
+                                            {tokenUsageItems.length > 0 ? (
+                                                tokenUsageItems.map((item) => (
+                                                    <div
+                                                        key={item.email}
+                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(220px,1fr)_110px_130px_130px_130px]"
+                                                    >
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="truncate text-sm font-medium">
+                                                                    {item.user}
+                                                                </p>
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="hidden text-[10px] capitalize sm:inline-flex"
+                                                                >
+                                                                    {item.role}
+                                                                </Badge>
+                                                            </div>
+                                                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                                {item.email}
+                                                            </p>
+                                                        </div>
+                                                        <TokenCell
+                                                            value={formatNumber(
+                                                                item.requests,
+                                                            )}
+                                                        />
+                                                        <TokenCell
+                                                            value={formatNumber(
+                                                                item.promptTokens,
+                                                            )}
+                                                        />
+                                                        <TokenCell
+                                                            value={formatNumber(
+                                                                item.completionTokens,
+                                                            )}
+                                                        />
+                                                        <div className="text-right md:text-left">
+                                                            <p className="text-sm font-semibold">
+                                                                {formatNumber(
+                                                                    item.totalTokens,
+                                                                )}
+                                                            </p>
+                                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                                {formatNumber(
+                                                                    Math.round(
+                                                                        item.totalTokens /
+                                                                            item.requests,
+                                                                    ),
+                                                                )}
+                                                                /req
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            ) : (
+                                                <EmptyTableRow text="Belum ada pemakaian token dari chat AI." />
+                                            )}
                                         </div>
-                                        {tokenUsageItems.length > 0 ? (
-                                            tokenUsageItems.map((item) => (
+                                    </CardContent>
+                                </Card>
+
+                                <AdminTokenUsageChart
+                                    data={tokenUsageItems}
+                                    className="flex min-h-0 flex-col"
+                                    chartClassName="h-full min-h-[420px] max-h-[460px]"
+                                />
+                            </section>
+                        )}
+
+                        {activeSection === 'chat-trend' && (
+                            <section className="min-h-0">
+                                <AdminConversationChart data={chatTrendItems} />
+                            </section>
+                        )}
+
+                        {activeSection === 'conversations' && (
+                            <section className="grid min-h-0 flex-1 gap-6">
+                                <Card className="flex min-h-0 flex-col rounded-lg">
+                                    <CardHeader className="gap-3">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <CardTitle>
+                                                    Kelola Percakapan
+                                                </CardTitle>
+                                                <CardDescription>
+                                                    Percakapan pengguna yang
+                                                    masuk ke chatbot Deka.
+                                                </CardDescription>
+                                            </div>
+                                            <Button variant="outline" size="sm">
+                                                <BarChart3 className="h-4 w-4" />
+                                                Laporan
+                                            </Button>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="min-h-0 flex-1">
+                                        <div className="h-full overflow-hidden rounded-md border">
+                                            <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_140px_140px_160px_160px]">
+                                                <span>User</span>
+                                                <span className="hidden md:block">
+                                                    Like
+                                                </span>
+                                                <span className="hidden md:block">
+                                                    Dislike
+                                                </span>
+                                                <span className="hidden md:block">
+                                                    Status
+                                                </span>
+                                                <span>Waktu</span>
+                                            </div>
+                                            {conversations.length > 0 ? (
+                                                conversations.map(
+                                                    (conversation) => (
+                                                        <div
+                                                            key={`${conversation.user}-${conversation.time}`}
+                                                            className="grid grid-cols-[1fr_auto_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_140px_140px_160px_160px]"
+                                                        >
+                                                            <div className="min-w-0">
+                                                                <p className="truncate text-sm font-medium">
+                                                                    {
+                                                                        conversation.user
+                                                                    }
+                                                                </p>
+                                                                <p className="mt-1 text-xs text-muted-foreground md:hidden">
+                                                                    {
+                                                                        conversation.likes
+                                                                    }{' '}
+                                                                    like ·{' '}
+                                                                    {
+                                                                        conversation.dislikes
+                                                                    }{' '}
+                                                                    dislike
+                                                                </p>
+                                                            </div>
+                                                            <FeedbackCell
+                                                                icon={ThumbsUp}
+                                                                value={
+                                                                    conversation.likes
+                                                                }
+                                                            />
+                                                            <FeedbackCell
+                                                                icon={
+                                                                    ThumbsDown
+                                                                }
+                                                                value={
+                                                                    conversation.dislikes
+                                                                }
+                                                            />
+                                                            <div className="hidden md:block">
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className={statusClass(
+                                                                        conversation.status,
+                                                                    )}
+                                                                >
+                                                                    {conversationStatusLabel(
+                                                                        conversation.status,
+                                                                    )}
+                                                                </Badge>
+                                                            </div>
+                                                            <p className="text-sm whitespace-nowrap text-muted-foreground">
+                                                                {
+                                                                    conversation.time
+                                                                }
+                                                            </p>
+                                                        </div>
+                                                    ),
+                                                )
+                                            ) : (
+                                                <EmptyTableRow text="Belum ada percakapan yang tersimpan." />
+                                            )}
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </section>
+                        )}
+
+                        {activeSection === 'knowledge' && (
+                            <section className="grid min-h-0 gap-6 xl:grid-cols-2">
+                                <Card className="rounded-lg">
+                                    <CardHeader>
+                                        <CardTitle>Data bot</CardTitle>
+                                        <CardDescription>
+                                            Sumber data yang dipakai chatbot
+                                            untuk menjawab pertanyaan user.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-4">
+                                        {knowledgeItems.map((item) => (
+                                            <div
+                                                key={item.title}
+                                                className="flex flex-col gap-3 rounded-md border p-4 sm:flex-row sm:items-center sm:justify-between"
+                                            >
+                                                <div className="flex min-w-0 items-start gap-3">
+                                                    <div className="rounded-md bg-muted p-2">
+                                                        <FileText className="h-4 w-4" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-sm font-medium">
+                                                            {item.title}
+                                                        </p>
+                                                        <p className="mt-1 text-sm text-muted-foreground">
+                                                            {item.source} ·{' '}
+                                                            {item.chunks} chunks
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <Badge
+                                                    variant={
+                                                        item.status === 'active'
+                                                            ? 'secondary'
+                                                            : 'outline'
+                                                    }
+                                                >
+                                                    {knowledgeStatusLabel(
+                                                        item.status,
+                                                    )}
+                                                </Badge>
+                                            </div>
+                                        ))}
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="rounded-lg">
+                                    <CardHeader>
+                                        <CardTitle>Kesiapan data</CardTitle>
+                                        <CardDescription>
+                                            Ringkasan kualitas sumber jawaban
+                                            bot.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-5">
+                                        <QualityBar
+                                            label="Jawaban pakai data bot"
+                                            value={82}
+                                        />
+                                        <QualityBar
+                                            label="Pencarian data siap"
+                                            value={74}
+                                        />
+                                        <QualityBar
+                                            label="Sumber jawaban tercatat"
+                                            value={68}
+                                        />
+                                    </CardContent>
+                                </Card>
+                            </section>
+                        )}
+
+                        {activeSection === 'runtime' && (
+                            <section className="grid min-h-0 gap-6 xl:grid-cols-2">
+                                <Card className="rounded-lg">
+                                    <CardHeader>
+                                        <CardTitle>Pengaturan AI</CardTitle>
+                                        <CardDescription>
+                                            Informasi model dan proses AI yang
+                                            menjalankan chatbot.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="grid gap-4 md:grid-cols-3">
+                                        <RuntimePanel
+                                            icon={Sparkles}
+                                            title="Penyedia AI"
+                                            value="OpenAI compatible"
+                                            detail="Tempat aplikasi mengirim request AI."
+                                        />
+                                        <RuntimePanel
+                                            icon={Bot}
+                                            title="Model"
+                                            value="gpt-5.4-mini"
+                                            detail="Model yang dipakai untuk membuat balasan chatbot."
+                                        />
+                                        <RuntimePanel
+                                            icon={Clock3}
+                                            title="Cara balasan"
+                                            value="SSE aktif"
+                                            detail="Bot bisa membalas biasa atau streaming bertahap."
+                                        />
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="rounded-lg">
+                                    <CardHeader>
+                                        <CardTitle>Status AI</CardTitle>
+                                        <CardDescription>
+                                            Ringkasan kondisi proses jawaban
+                                            bot.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-5">
+                                        <QualityBar
+                                            label="Balasan streaming sukses"
+                                            value={91}
+                                        />
+                                        <QualityBar
+                                            label="Judul chat otomatis"
+                                            value={76}
+                                        />
+                                        <QualityBar
+                                            label="Jawaban aman"
+                                            value={84}
+                                        />
+                                    </CardContent>
+                                </Card>
+                            </section>
+                        )}
+
+                        {activeSection === 'moderation' && (
+                            <section className="grid min-h-0 gap-6 xl:grid-cols-2">
+                                <Card className="rounded-lg">
+                                    <CardHeader>
+                                        <CardTitle>Keamanan chat</CardTitle>
+                                        <CardDescription>
+                                            Proteksi agar chatbot tetap aman dan
+                                            tidak disalahgunakan.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="grid gap-3 md:grid-cols-2">
+                                        <GuardrailItem
+                                            title="Filter pesan user"
+                                            description="Pesan dicek dulu sebelum dikirim ke AI."
+                                        />
+                                        <GuardrailItem
+                                            title="Batas request"
+                                            description="Chat dan login dibatasi agar tidak spam."
+                                        />
+                                        <GuardrailItem
+                                            title="Privasi percakapan"
+                                            description="User hanya bisa membuka chat miliknya sendiri."
+                                        />
+                                        <GuardrailItem
+                                            title="Anti request duplikat"
+                                            description="Request chat yang sama tidak diproses berkali-kali."
+                                        />
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="rounded-lg">
+                                    <CardHeader>
+                                        <CardTitle>Kualitas jawaban</CardTitle>
+                                        <CardDescription>
+                                            Sinyal operasional dari chat
+                                            runtime.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="space-y-5">
+                                        <QualityBar
+                                            label="Selesai tanpa eskalasi"
+                                            value={74}
+                                        />
+                                        <QualityBar
+                                            label="Feedback positif"
+                                            value={68}
+                                        />
+                                        <div className="rounded-md border border-[#f5d08b] bg-[#fff4df] p-3 text-sm text-[#8a3c06] dark:border-[#7c4a08] dark:bg-[#3b2508] dark:text-[#f7c56b]">
+                                            <div className="flex items-center gap-2 font-medium">
+                                                <AlertTriangle className="h-4 w-4" />
+                                                Perlu review
+                                            </div>
+                                            <p className="mt-1 leading-5">
+                                                Beberapa pertanyaan user belum
+                                                memiliki sumber knowledge yang
+                                                kuat.
+                                            </p>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </section>
+                        )}
+
+                        {activeSection === 'users' && (
+                            <section className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-6">
+                                <div className="grid shrink-0 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+                                    <UserMetricCard
+                                        icon={Users}
+                                        label="Total user"
+                                        tone="blue"
+                                        value={formatNumber(adminUsers.length)}
+                                    />
+                                    <UserMetricCard
+                                        icon={Users}
+                                        label="User aktif"
+                                        tone="green"
+                                        value={formatNumber(activeUsers)}
+                                    />
+                                    <UserMetricCard
+                                        icon={ShieldCheck}
+                                        label="Admin"
+                                        tone="neutral"
+                                        value={formatNumber(adminUserCount)}
+                                    />
+                                    <UserMetricCard
+                                        icon={MessageSquare}
+                                        label="Total chat"
+                                        tone="amber"
+                                        value={formatNumber(
+                                            totalUserConversations,
+                                        )}
+                                    />
+                                </div>
+
+                                <Card className="flex min-h-0 flex-col rounded-lg">
+                                    <CardHeader>
+                                        <CardTitle>Daftar Pengguna</CardTitle>
+                                        <CardDescription>
+                                            Data dummy user yang terdaftar di
+                                            chatbot Deka.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent className="min-h-0 flex-1">
+                                        <div className="h-full overflow-hidden rounded-md border">
+                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_140px_140px_140px_160px]">
+                                                <span>Pengguna</span>
+                                                <span className="hidden md:block">
+                                                    Role
+                                                </span>
+                                                <span className="hidden md:block">
+                                                    Status
+                                                </span>
+                                                <span className="hidden md:block">
+                                                    Chat
+                                                </span>
+                                                <span>Aktif</span>
+                                            </div>
+
+                                            {adminUsers.map((item) => (
                                                 <div
                                                     key={item.email}
-                                                    className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[220px_100px_120px_120px_120px]"
+                                                    className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_140px_140px_140px_160px]"
                                                 >
                                                     <div className="min-w-0">
                                                         <div className="flex items-center gap-2">
                                                             <p className="truncate text-sm font-medium">
-                                                                {item.user}
+                                                                {item.name}
                                                             </p>
                                                             <Badge
                                                                 variant="outline"
-                                                                className="hidden text-[10px] capitalize sm:inline-flex"
+                                                                className="text-[10px] capitalize md:hidden"
                                                             >
                                                                 {item.role}
                                                             </Badge>
@@ -572,477 +1169,225 @@ export default function AdminPage() {
                                                             {item.email}
                                                         </p>
                                                     </div>
-                                                    <TokenCell
-                                                        value={formatNumber(
-                                                            item.requests,
-                                                        )}
-                                                    />
-                                                    <TokenCell
-                                                        value={formatNumber(
-                                                            item.promptTokens,
-                                                        )}
-                                                    />
-                                                    <TokenCell
-                                                        value={formatNumber(
-                                                            item.completionTokens,
-                                                        )}
-                                                    />
-                                                    <div className="text-right md:text-left">
-                                                        <p className="text-sm font-semibold">
-                                                            {formatNumber(
-                                                                item.totalTokens,
-                                                            )}
-                                                        </p>
-                                                        <p className="mt-1 text-xs text-muted-foreground">
-                                                            {formatNumber(
-                                                                Math.round(
-                                                                    item.totalTokens /
-                                                                        item.requests,
-                                                                ),
-                                                            )}
-                                                            /req
-                                                        </p>
+                                                    <div className="hidden md:block">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className="capitalize"
+                                                        >
+                                                            {item.role}
+                                                        </Badge>
                                                     </div>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <EmptyTableRow text="Belum ada pemakaian token dari chat AI." />
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <AdminTokenUsageChart data={tokenUsageItems} />
-                        </section>
-
-                        <section id="chat-trend" className="scroll-mt-24">
-                            <AdminConversationChart data={chatTrendItems} />
-                        </section>
-
-                        <section
-                            id="chat-api"
-                            className="grid scroll-mt-24 gap-6 xl:grid-cols-2"
-                        >
-                            <Card className="rounded-lg">
-                                <CardHeader className="gap-3">
-                                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                        <div>
-                                            <CardTitle>Chat API</CardTitle>
-                                            <CardDescription>
-                                                Endpoint conversation dan
-                                                message sesuai kontrak frontend.
-                                            </CardDescription>
-                                        </div>
-                                        <Button variant="outline" size="sm">
-                                            <BarChart3 className="h-4 w-4" />
-                                            Laporan
-                                        </Button>
-                                    </div>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="overflow-hidden rounded-md border">
-                                        <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[180px_1fr_120px_120px]">
-                                            <span>User</span>
-                                            <span className="hidden md:block">
-                                                Topik
-                                            </span>
-                                            <span className="hidden md:block">
-                                                Status
-                                            </span>
-                                            <span>Waktu</span>
-                                        </div>
-                                        {conversations.length > 0 ? (
-                                            conversations.map(
-                                                (conversation) => (
-                                                    <div
-                                                        key={`${conversation.user}-${conversation.time}`}
-                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[180px_1fr_120px_120px]"
-                                                    >
-                                                        <div className="min-w-0">
-                                                            <p className="truncate text-sm font-medium">
-                                                                {
-                                                                    conversation.user
-                                                                }
-                                                            </p>
-                                                            <p className="mt-1 truncate text-xs text-muted-foreground md:hidden">
-                                                                {
-                                                                    conversation.topic
-                                                                }
-                                                            </p>
-                                                        </div>
-                                                        <p className="hidden min-w-0 truncate text-sm text-muted-foreground md:block">
-                                                            {conversation.topic}
-                                                        </p>
-                                                        <div className="hidden md:block">
-                                                            <Badge
-                                                                variant="outline"
-                                                                className={statusClass(
-                                                                    conversation.status,
-                                                                )}
-                                                            >
-                                                                {conversationStatusLabel(
-                                                                    conversation.status,
-                                                                )}
-                                                            </Badge>
-                                                        </div>
-                                                        <p className="text-sm whitespace-nowrap text-muted-foreground">
-                                                            {conversation.time}
-                                                        </p>
+                                                    <div className="hidden md:block">
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={statusClass(
+                                                                item.status,
+                                                            )}
+                                                        >
+                                                            {userStatusLabel(
+                                                                item.status,
+                                                            )}
+                                                        </Badge>
                                                     </div>
-                                                ),
-                                            )
-                                        ) : (
-                                            <EmptyTableRow text="Belum ada percakapan yang tersimpan." />
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <div className="grid gap-6">
-                                <Card className="rounded-lg">
-                                    <CardHeader>
-                                        <CardTitle>Kontrak endpoint</CardTitle>
-                                        <CardDescription>
-                                            Dipakai halaman chat dengan session
-                                            cookie Laravel.
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-3">
-                                        <EndpointRow
-                                            method="GET"
-                                            path="/api/conversations"
-                                        />
-                                        <EndpointRow
-                                            method="POST"
-                                            path="/api/conversations"
-                                        />
-                                        <EndpointRow
-                                            method="POST"
-                                            path="/api/conversations/stream"
-                                        />
-                                        <EndpointRow
-                                            method="GET"
-                                            path="/api/conversations/{id}"
-                                        />
-                                        <EndpointRow
-                                            method="POST"
-                                            path="/api/conversations/{id}/messages/stream"
-                                        />
-                                    </CardContent>
-                                </Card>
-
-                                <Card className="rounded-lg">
-                                    <CardHeader>
-                                        <CardTitle>Streaming SSE</CardTitle>
-                                        <CardDescription>
-                                            Urutan event yang diterima frontend.
-                                        </CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <RuntimeRow
-                                            icon={MessageSquare}
-                                            label="conversation_started"
-                                            value="awal stream"
-                                        />
-                                        <RuntimeRow
-                                            icon={Sparkles}
-                                            label="text_delta"
-                                            value="token bertahap"
-                                        />
-                                        <RuntimeRow
-                                            icon={CheckCircle2}
-                                            label="message_complete"
-                                            value="final message"
-                                        />
-                                    </CardContent>
-                                </Card>
-                            </div>
-                        </section>
-
-                        <section
-                            id="knowledge"
-                            className="grid scroll-mt-24 gap-6 xl:grid-cols-2"
-                        >
-                            <Card className="rounded-lg">
-                                <CardHeader>
-                                    <CardTitle>Data bot</CardTitle>
-                                    <CardDescription>
-                                        Sumber data yang dipakai chatbot untuk
-                                        menjawab pertanyaan user.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                    {knowledgeItems.map((item) => (
-                                        <div
-                                            key={item.title}
-                                            className="flex flex-col gap-3 rounded-md border p-4 sm:flex-row sm:items-center sm:justify-between"
-                                        >
-                                            <div className="flex min-w-0 items-start gap-3">
-                                                <div className="rounded-md bg-muted p-2">
-                                                    <FileText className="h-4 w-4" />
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="truncate text-sm font-medium">
-                                                        {item.title}
+                                                    <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
+                                                        {formatNumber(
+                                                            item.conversations,
+                                                        )}
                                                     </p>
-                                                    <p className="mt-1 text-sm text-muted-foreground">
-                                                        {item.source} ·{' '}
-                                                        {item.chunks} chunks
+                                                    <p className="text-sm whitespace-nowrap text-muted-foreground">
+                                                        {item.lastSeen}
                                                     </p>
                                                 </div>
-                                            </div>
-                                            <Badge
-                                                variant={
-                                                    item.status === 'active'
-                                                        ? 'secondary'
-                                                        : 'outline'
-                                                }
-                                            >
-                                                {knowledgeStatusLabel(
-                                                    item.status,
-                                                )}
-                                            </Badge>
+                                            ))}
                                         </div>
-                                    ))}
-                                </CardContent>
-                            </Card>
+                                    </CardContent>
+                                </Card>
+                            </section>
+                        )}
 
-                            <Card className="rounded-lg">
-                                <CardHeader>
-                                    <CardTitle>Kesiapan data</CardTitle>
-                                    <CardDescription>
-                                        Ringkasan kualitas sumber jawaban bot.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-5">
-                                    <QualityBar
-                                        label="Jawaban pakai data bot"
-                                        value={82}
-                                    />
-                                    <QualityBar
-                                        label="Pencarian data siap"
-                                        value={74}
-                                    />
-                                    <QualityBar
-                                        label="Sumber jawaban tercatat"
-                                        value={68}
-                                    />
-                                </CardContent>
-                            </Card>
-                        </section>
-
-                        <section
-                            id="runtime"
-                            className="grid scroll-mt-24 gap-6 xl:grid-cols-2"
-                        >
-                            <Card className="rounded-lg">
-                                <CardHeader>
-                                    <CardTitle>Pengaturan AI</CardTitle>
-                                    <CardDescription>
-                                        Informasi model dan proses AI yang
-                                        menjalankan chatbot.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="grid gap-4 md:grid-cols-3">
-                                    <RuntimePanel
-                                        icon={Sparkles}
-                                        title="Penyedia AI"
-                                        value="OpenAI compatible"
-                                        detail="Tempat aplikasi mengirim request AI."
-                                    />
-                                    <RuntimePanel
-                                        icon={Bot}
-                                        title="Model"
-                                        value="gpt-5.4-mini"
-                                        detail="Model yang dipakai untuk membuat balasan chatbot."
-                                    />
-                                    <RuntimePanel
+                        {activeSection === 'activity-log' && (
+                            <section className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-6">
+                                <div className="grid shrink-0 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+                                    <UserMetricCard
                                         icon={Clock3}
-                                        title="Cara balasan"
-                                        value="SSE aktif"
-                                        detail="Bot bisa membalas biasa atau streaming bertahap."
+                                        label="Aktivitas hari ini"
+                                        tone="blue"
+                                        value={formatNumber(5)}
                                     />
-                                </CardContent>
-                            </Card>
+                                    <UserMetricCard
+                                        icon={ShieldCheck}
+                                        label="Admin aktif"
+                                        tone="neutral"
+                                        value={formatNumber(adminUserCount)}
+                                    />
+                                    <UserMetricCard
+                                        icon={MessageSquare}
+                                        label="Aksi percakapan"
+                                        tone="green"
+                                        value={formatNumber(
+                                            adminActivityItems.filter(
+                                                (item) =>
+                                                    item.category ===
+                                                    'conversation',
+                                            ).length,
+                                        )}
+                                    />
+                                    <UserMetricCard
+                                        icon={BarChart3}
+                                        label="Export laporan"
+                                        tone="amber"
+                                        value={formatNumber(
+                                            adminActivityItems.filter(
+                                                (item) =>
+                                                    item.category === 'report',
+                                            ).length,
+                                        )}
+                                    />
+                                </div>
 
-                            <Card className="rounded-lg">
-                                <CardHeader>
-                                    <CardTitle>Status AI</CardTitle>
-                                    <CardDescription>
-                                        Ringkasan kondisi proses jawaban bot.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-5">
-                                    <QualityBar
-                                        label="Balasan streaming sukses"
-                                        value={91}
-                                    />
-                                    <QualityBar
-                                        label="Judul chat otomatis"
-                                        value={76}
-                                    />
-                                    <QualityBar
-                                        label="Jawaban aman"
-                                        value={84}
-                                    />
-                                </CardContent>
-                            </Card>
-                        </section>
-
-                        <section
-                            id="moderation"
-                            className="grid scroll-mt-24 gap-6 xl:grid-cols-2"
-                        >
-                            <Card className="rounded-lg">
-                                <CardHeader>
-                                    <CardTitle>Keamanan chat</CardTitle>
-                                    <CardDescription>
-                                        Proteksi agar chatbot tetap aman dan
-                                        tidak disalahgunakan.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="grid gap-3 md:grid-cols-2">
-                                    <GuardrailItem
-                                        title="Filter pesan user"
-                                        description="Pesan dicek dulu sebelum dikirim ke AI."
-                                    />
-                                    <GuardrailItem
-                                        title="Batas request"
-                                        description="Chat dan login dibatasi agar tidak spam."
-                                    />
-                                    <GuardrailItem
-                                        title="Privasi percakapan"
-                                        description="User hanya bisa membuka chat miliknya sendiri."
-                                    />
-                                    <GuardrailItem
-                                        title="Anti request duplikat"
-                                        description="Request chat yang sama tidak diproses berkali-kali."
-                                    />
-                                </CardContent>
-                            </Card>
-
-                            <Card className="rounded-lg">
-                                <CardHeader>
-                                    <CardTitle>Kualitas jawaban</CardTitle>
-                                    <CardDescription>
-                                        Sinyal operasional dari chat runtime.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="space-y-5">
-                                    <QualityBar
-                                        label="Selesai tanpa eskalasi"
-                                        value={74}
-                                    />
-                                    <QualityBar
-                                        label="Feedback positif"
-                                        value={68}
-                                    />
-                                    <div className="rounded-md border border-[#f5d08b] bg-[#fff4df] p-3 text-sm text-[#8a3c06] dark:border-[#7c4a08] dark:bg-[#3b2508] dark:text-[#f7c56b]">
-                                        <div className="flex items-center gap-2 font-medium">
-                                            <AlertTriangle className="h-4 w-4" />
-                                            Perlu review
+                                <Card className="flex min-h-0 flex-col rounded-lg">
+                                    <CardHeader className="gap-3">
+                                        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                                            <div>
+                                                <CardTitle>
+                                                    Log Aktivitas Admin
+                                                </CardTitle>
+                                                <CardDescription>
+                                                    Riwayat dummy admin dan aksi
+                                                    yang dilakukan di dashboard.
+                                                </CardDescription>
+                                            </div>
+                                            <div className="flex flex-wrap gap-2">
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        exportAdminActivityReport(
+                                                            'week',
+                                                        )
+                                                    }
+                                                >
+                                                    <Download className="h-4 w-4" />
+                                                    Mingguan
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        exportAdminActivityReport(
+                                                            'month',
+                                                        )
+                                                    }
+                                                >
+                                                    <Download className="h-4 w-4" />
+                                                    Bulanan
+                                                </Button>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        exportAdminActivityReport(
+                                                            'year',
+                                                        )
+                                                    }
+                                                >
+                                                    <Download className="h-4 w-4" />
+                                                    Tahunan
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        printAdminDashboardReport(
+                                                            'month',
+                                                        )
+                                                    }
+                                                >
+                                                    <Printer className="h-4 w-4" />
+                                                    Cetak Semua
+                                                </Button>
+                                            </div>
                                         </div>
-                                        <p className="mt-1 leading-5">
-                                            Beberapa pertanyaan user belum
-                                            memiliki sumber knowledge yang kuat.
-                                        </p>
-                                    </div>
-                                </CardContent>
-                            </Card>
-                        </section>
+                                    </CardHeader>
+                                    <CardContent className="min-h-0 flex-1">
+                                        <div className="h-full overflow-hidden rounded-md border">
+                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(220px,1fr)_150px_minmax(220px,1.1fr)_150px_150px]">
+                                                <span>Admin</span>
+                                                <span className="hidden md:block">
+                                                    Kategori
+                                                </span>
+                                                <span className="hidden md:block">
+                                                    Aktivitas
+                                                </span>
+                                                <span className="hidden md:block">
+                                                    IP
+                                                </span>
+                                                <span>Waktu</span>
+                                            </div>
 
-                        <section
-                            id="auth"
-                            className="grid scroll-mt-24 gap-6 xl:grid-cols-2"
-                        >
-                            <Card className="rounded-lg">
-                                <CardHeader>
-                                    <CardTitle>Admin aktif</CardTitle>
-                                    <CardDescription>
-                                        Session pengguna saat ini.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent>
-                                    <UserInfo user={auth.user} showEmail />
-                                    <Separator className="my-4" />
-                                    <div className="grid grid-cols-2 gap-3 text-sm">
-                                        <div>
-                                            <p className="text-muted-foreground">
-                                                Role
-                                            </p>
-                                            <p className="mt-1 font-medium">
-                                                {String(
-                                                    auth.user.role ?? 'admin',
-                                                )}
-                                            </p>
+                                            {adminActivityItems.length > 0 ? (
+                                                adminActivityItems.map(
+                                                    (item) => (
+                                                        <div
+                                                            key={`${item.action}-${item.time}`}
+                                                            className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(220px,1fr)_150px_minmax(220px,1.1fr)_150px_150px]"
+                                                        >
+                                                            <div className="min-w-0">
+                                                                <p className="truncate text-sm font-medium">
+                                                                    {item.admin}
+                                                                </p>
+                                                                <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                                    {item.email}
+                                                                </p>
+                                                            </div>
+                                                            <div className="hidden md:block">
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className={activityCategoryClass(
+                                                                        item.category,
+                                                                    )}
+                                                                >
+                                                                    {activityCategoryLabel(
+                                                                        item.category,
+                                                                    )}
+                                                                </Badge>
+                                                            </div>
+                                                            <div className="hidden min-w-0 md:block">
+                                                                <p className="truncate text-sm font-medium">
+                                                                    {
+                                                                        item.action
+                                                                    }
+                                                                </p>
+                                                                <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                                    {
+                                                                        item.target
+                                                                    }{' '}
+                                                                    ·{' '}
+                                                                    {
+                                                                        item.detail
+                                                                    }
+                                                                </p>
+                                                            </div>
+                                                            <p className="hidden font-mono text-sm text-muted-foreground md:block">
+                                                                {item.ipAddress}
+                                                            </p>
+                                                            <p className="text-sm whitespace-nowrap text-muted-foreground">
+                                                                {item.time}
+                                                            </p>
+                                                        </div>
+                                                    ),
+                                                )
+                                            ) : (
+                                                <EmptyTableRow text="Belum ada aktivitas admin yang tercatat." />
+                                            )}
                                         </div>
-                                        <div>
-                                            <p className="text-muted-foreground">
-                                                Email
-                                            </p>
-                                            <p className="mt-1 font-medium">
-                                                {auth.user.email_verified_at
-                                                    ? 'Verified'
-                                                    : 'Unverified'}
-                                            </p>
-                                        </div>
-                                    </div>
-                                </CardContent>
-                            </Card>
-
-                            <Card className="rounded-lg">
-                                <CardHeader>
-                                    <CardTitle>Data login pengguna</CardTitle>
-                                    <CardDescription>
-                                        Endpoint yang dipakai frontend untuk
-                                        login, register, cek user, dan logout.
-                                    </CardDescription>
-                                </CardHeader>
-                                <CardContent className="grid gap-3 md:grid-cols-2">
-                                    <EndpointRow
-                                        method="GET"
-                                        path="/api/auth/csrf"
-                                    />
-                                    <EndpointRow
-                                        method="POST"
-                                        path="/api/auth/login"
-                                    />
-                                    <EndpointRow
-                                        method="POST"
-                                        path="/api/auth/register"
-                                    />
-                                    <EndpointRow
-                                        method="GET"
-                                        path="/api/auth/me"
-                                    />
-                                    <EndpointRow
-                                        method="POST"
-                                        path="/api/auth/logout"
-                                    />
-                                    <EndpointRow
-                                        method="GET"
-                                        path="/auth/google/callback"
-                                    />
-                                </CardContent>
-                            </Card>
-                        </section>
+                                    </CardContent>
+                                </Card>
+                            </section>
+                        )}
                     </main>
                 </div>
             </div>
         </>
-    );
-}
-
-function EndpointRow({ method, path }: { method: string; path: string }) {
-    return (
-        <div className="flex items-center justify-between gap-3 rounded-md border bg-card px-3 py-2 text-sm">
-            <Badge variant="secondary" className="font-mono">
-                {method}
-            </Badge>
-            <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">
-                {path}
-            </span>
-        </div>
     );
 }
 
@@ -1086,6 +1431,218 @@ function conversationStatusLabel(status: string) {
     }
 
     return status;
+}
+
+function userStatusLabel(status: AdminUserItem['status']) {
+    return status === 'active' ? 'Aktif' : 'Nonaktif';
+}
+
+function activityCategoryClass(category: AdminActivityItem['category']) {
+    return activityCategoryClasses[category];
+}
+
+function activityCategoryLabel(category: AdminActivityItem['category']) {
+    const labels: Record<AdminActivityItem['category'], string> = {
+        auth: 'Login',
+        conversation: 'Percakapan',
+        user: 'Pengguna',
+        report: 'Laporan',
+        system: 'Sistem',
+    };
+
+    return labels[category];
+}
+
+function reportPeriodLabel(period: ReportPeriod) {
+    const labels: Record<ReportPeriod, string> = {
+        week: 'Mingguan',
+        month: 'Bulanan',
+        year: 'Tahunan',
+    };
+
+    return labels[period];
+}
+
+function exportAdminActivityReport(period: ReportPeriod) {
+    const periodLabel = reportPeriodLabel(period);
+    const rows = adminActivityItems.map((item) => [
+        item.admin,
+        item.email,
+        activityCategoryLabel(item.category),
+        item.action,
+        item.target,
+        item.detail,
+        item.ipAddress,
+        item.time,
+    ]);
+    const csv = [
+        [
+            'Admin',
+            'Email',
+            'Kategori',
+            'Aktivitas',
+            'Target',
+            'Detail',
+            'IP',
+            'Waktu',
+        ],
+        ...rows,
+    ]
+        .map((row) =>
+            row
+                .map((cell) => `"${String(cell).replaceAll('"', '""')}"`)
+                .join(','),
+        )
+        .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = `log-aktivitas-admin-${period}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    console.info(`Laporan aktivitas admin ${periodLabel} diexport.`);
+}
+
+function printAdminDashboardReport(period: ReportPeriod) {
+    const periodLabel = reportPeriodLabel(period);
+    const metricCards = metrics
+        .map(
+            (metric) => `
+                <div class="summary-card">
+                    <span>${metric.label}</span>
+                    <strong>${metric.value}</strong>
+                    <small>${metric.description}</small>
+                </div>
+            `,
+        )
+        .join('');
+    const feedbackRows = conversations
+        .map(
+            (item) => `
+                <tr>
+                    <td>${item.user}</td>
+                    <td>${formatNumber(item.likes)}</td>
+                    <td>${formatNumber(item.dislikes)}</td>
+                    <td>${conversationStatusLabel(item.status)}</td>
+                    <td>${item.time}</td>
+                </tr>
+            `,
+        )
+        .join('');
+    const tokenRows = tokenUsageItems
+        .map(
+            (item) => `
+                <tr>
+                    <td>${item.user}</td>
+                    <td>${item.role}</td>
+                    <td>${formatNumber(item.requests)}</td>
+                    <td>${formatNumber(item.promptTokens)}</td>
+                    <td>${formatNumber(item.completionTokens)}</td>
+                    <td>${formatNumber(item.totalTokens)}</td>
+                </tr>
+            `,
+        )
+        .join('');
+    const printableRows = adminActivityItems
+        .map(
+            (item) => `
+                <tr>
+                    <td>${item.admin}</td>
+                    <td>${activityCategoryLabel(item.category)}</td>
+                    <td>${item.action}</td>
+                    <td>${item.target}</td>
+                    <td>${item.ipAddress}</td>
+                    <td>${item.time}</td>
+                </tr>
+            `,
+        )
+        .join('');
+    const printWindow = window.open('', '_blank', 'width=960,height=720');
+
+    if (!printWindow) {
+        window.print();
+        return;
+    }
+
+    printWindow.document.write(`
+        <html>
+            <head>
+                <title>Laporan Dashboard Admin ${periodLabel}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; color: #0f172a; padding: 24px; }
+                    h1 { margin: 0 0 6px; font-size: 22px; }
+                    h2 { margin: 28px 0 10px; font-size: 16px; }
+                    p { margin: 0 0 18px; color: #526782; }
+                    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0 22px; }
+                    .summary-card { border: 1px solid #d8e4f2; border-radius: 8px; padding: 12px; }
+                    .summary-card span { display: block; color: #526782; font-size: 12px; }
+                    .summary-card strong { display: block; margin: 8px 0; font-size: 24px; }
+                    .summary-card small { color: #526782; line-height: 1.4; }
+                    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+                    th, td { border: 1px solid #d8e4f2; padding: 10px; text-align: left; vertical-align: top; }
+                    th { background: #eef4fb; font-size: 11px; text-transform: uppercase; }
+                    @media print { body { padding: 0; } .summary { grid-template-columns: repeat(2, 1fr); } }
+                </style>
+            </head>
+            <body>
+                <h1>Laporan Dashboard Admin ${periodLabel}</h1>
+                <p>Ringkasan dashboard, feedback, token usage, dan aktivitas admin Deka.</p>
+
+                <h2>Dashboard Ringkasan</h2>
+                <div class="summary">${metricCards}</div>
+
+                <h2>Feedback Percakapan</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Like</th>
+                            <th>Dislike</th>
+                            <th>Status</th>
+                            <th>Waktu</th>
+                        </tr>
+                    </thead>
+                    <tbody>${feedbackRows}</tbody>
+                </table>
+
+                <h2>Token Usage</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>User</th>
+                            <th>Role</th>
+                            <th>Request</th>
+                            <th>Prompt</th>
+                            <th>Completion</th>
+                            <th>Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>${tokenRows}</tbody>
+                </table>
+
+                <h2>Log Aktivitas Admin</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Admin</th>
+                            <th>Kategori</th>
+                            <th>Aktivitas</th>
+                            <th>Target</th>
+                            <th>IP</th>
+                            <th>Waktu</th>
+                        </tr>
+                    </thead>
+                    <tbody>${printableRows}</tbody>
+                </table>
+            </body>
+        </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
 }
 
 function knowledgeStatusLabel(status: string) {
@@ -1145,33 +1702,52 @@ function GuardrailItem({
     );
 }
 
-function RuntimeRow({
-    icon: Icon,
-    label,
-    value,
-}: {
-    icon: LucideIcon;
-    label: string;
-    value: string;
-}) {
-    return (
-        <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-                <div className="rounded-md bg-muted p-2">
-                    <Icon className="h-4 w-4" />
-                </div>
-                <span className="text-sm text-muted-foreground">{label}</span>
-            </div>
-            <span className="text-sm font-medium">{value}</span>
-        </div>
-    );
-}
-
 function TokenCell({ value }: { value: string }) {
     return (
         <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
             {value}
         </p>
+    );
+}
+
+function FeedbackCell({
+    icon: Icon,
+    value,
+}: {
+    icon: LucideIcon;
+    value: number;
+}) {
+    return (
+        <div className="hidden items-center gap-2 text-sm font-medium text-muted-foreground md:flex">
+            <Icon className="h-4 w-4 text-primary" />
+            {formatNumber(value)}
+        </div>
+    );
+}
+
+function UserMetricCard({
+    icon: Icon,
+    label,
+    tone,
+    value,
+}: {
+    icon: LucideIcon;
+    label: string;
+    tone: Metric['tone'];
+    value: string;
+}) {
+    return (
+        <div className="rounded-lg border bg-card p-5">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <p className="text-sm text-muted-foreground">{label}</p>
+                    <p className="mt-4 text-3xl font-semibold">{value}</p>
+                </div>
+                <span className={`rounded-md p-2 ring-1 ${toneClasses[tone]}`}>
+                    <Icon className="h-4 w-4" />
+                </span>
+            </div>
+        </div>
     );
 }
 

@@ -9,12 +9,26 @@ use App\Http\Controllers\PasswordResetLinkController;
 use App\Http\Controllers\PublicEmailVerificationController;
 use App\Http\Controllers\VerificationNotificationController;
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
 Route::inertia('/', 'welcome')->name('home');
 Route::redirect('dashboard', '/chat')->name('dashboard');
-Route::inertia('admin', 'admin')
+Route::redirect('admin', '/admin/overview')->name('admin');
+Route::get('admin/{section}', function (string $section) {
+    abort_unless(in_array($section, [
+        'overview',
+        'conversations',
+        'token-usage',
+        'users',
+        'activity-log',
+    ], true), 404);
+
+    return Inertia::render('admin', [
+        'section' => $section,
+    ]);
+})
     ->middleware(['auth', 'verified'])
-    ->name('admin');
+    ->name('admin.section');
 
 Route::prefix('api/auth')->name('api.auth.')->group(function () {
     Route::get('csrf', [AuthApiController::class, 'csrf'])

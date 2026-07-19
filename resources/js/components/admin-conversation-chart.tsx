@@ -22,15 +22,16 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
 
 const chartConfig = {
     conversations: {
         label: 'Masuk',
-        color: 'var(--chart-1)',
+        color: 'var(--primary)',
     },
     resolved: {
         label: 'Selesai',
-        color: 'var(--chart-2)',
+        color: 'color-mix(in oklab, var(--primary) 52%, white)',
     },
 } satisfies ChartConfig;
 
@@ -41,8 +42,12 @@ type ConversationChartItem = {
 };
 
 export function AdminConversationChart({
+    chartClassName,
+    className,
     data,
 }: {
+    chartClassName?: string;
+    className?: string;
     data: ConversationChartItem[];
 }) {
     const [timeRange, setTimeRange] = React.useState('90d');
@@ -65,7 +70,7 @@ export function AdminConversationChart({
     });
 
     return (
-        <Card className="rounded-lg pt-0">
+        <Card className={cn('rounded-lg pt-0', className)}>
             <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
                 <div className="grid flex-1 gap-1">
                     <CardTitle>Tren percakapan</CardTitle>
@@ -94,10 +99,13 @@ export function AdminConversationChart({
                     </SelectContent>
                 </Select>
             </CardHeader>
-            <CardContent className="px-2 pt-4 sm:px-6 sm:pt-6">
+            <CardContent className="min-h-0 flex-1 px-2 pt-4 sm:px-6 sm:pt-6">
                 <ChartContainer
                     config={chartConfig}
-                    className="aspect-auto h-[250px] w-full"
+                    className={cn(
+                        'aspect-auto h-[250px] w-full',
+                        chartClassName,
+                    )}
                 >
                     <AreaChart data={filteredData}>
                         <defs>

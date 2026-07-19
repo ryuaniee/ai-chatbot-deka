@@ -1,6 +1,6 @@
 import { router } from '@inertiajs/react';
-import type { User } from '@/types';
 import { logout } from '@/routes';
+import type { User } from '@/types';
 
 type Props = {
     isOpen: boolean;
@@ -9,7 +9,9 @@ type Props = {
 };
 
 export default function LogoutConfirmModal({ isOpen, onClose, user }: Props) {
-    if (!isOpen) return null;
+    if (!isOpen) {
+return null;
+}
 
     const handleLogout = () => {
         onClose();

@@ -5,7 +5,6 @@ import {
     History,
     Info,
     MessageSquare,
-    Mic,
     Phone,
     Plus,
     SendHorizontal,
@@ -17,8 +16,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import DekaLogo from '@/components/deka-logo';
-import SettingsModal from '@/components/settings-modal';
 import LogoutConfirmModal from '@/components/logout-confirm-modal';
+import SettingsModal from '@/components/settings-modal';
 import {
     DropdownMenu,
     DropdownMenuContent,

@@ -32,6 +32,7 @@ export function UserMenuContent({ user, onSettingsClick, onLogoutClick }: Props)
 
     const handleLogout = (e: Event) => {
         cleanup();
+
         if (onLogoutClick) {
             e.preventDefault();
             onLogoutClick();

@@ -1,31 +1,35 @@
 import { Head, Link, usePage } from '@inertiajs/react';
 import {
-    ArrowRight,
     Clock,
     Info,
-    LogIn,
     MapPin,
     MessageSquare,
-    ShieldCheck,
-    Sparkles,
-    UserPlus,
 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import DekaLogo from '@/components/deka-logo';
-import { login, register } from '@/routes';
+import { login } from '@/routes';
 
 function InteractiveCanvas() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     useEffect(() => {
         const canvas = canvasRef.current;
-        if (!canvas) return;
+
+        if (!canvas) {
+return;
+}
 
         const ctx = canvas.getContext('2d');
-        if (!ctx) return;
+
+        if (!ctx) {
+return;
+}
 
         const container = canvas.parentElement;
-        if (!container) return;
+
+        if (!container) {
+return;
+}
 
         const resizeCanvas = () => {
             const rect = container.getBoundingClientRect();
@@ -70,6 +74,7 @@ function InteractiveCanvas() {
 
         // Initialize ambient particles
         const particleCount = 45;
+
         for (let i = 0; i < particleCount; i++) {
             particles.push({
                 x: Math.random() * canvas.width,
@@ -106,6 +111,7 @@ function InteractiveCanvas() {
 
             if (d > 1) {
                 const steps = Math.min(4, Math.floor(d / 3) + 1);
+
                 for (let k = 0; k < steps; k++) {
                     const ratio = k / steps;
                     const px = mouse.lastX + dx * ratio;
@@ -122,6 +128,7 @@ function InteractiveCanvas() {
                         decay: Math.random() * 0.012 + 0.008
                     });
                 }
+
                 mouse.lastX = mouse.x;
                 mouse.lastY = mouse.y;
             }
@@ -152,6 +159,7 @@ function InteractiveCanvas() {
 
                 if (d > 1) {
                     const steps = Math.min(4, Math.floor(d / 3) + 1);
+
                     for (let k = 0; k < steps; k++) {
                         const ratio = k / steps;
                         const px = mouse.lastX + dx * ratio;
@@ -168,6 +176,7 @@ function InteractiveCanvas() {
                             decay: Math.random() * 0.012 + 0.008
                         });
                     }
+
                     mouse.lastX = mouse.x;
                     mouse.lastY = mouse.y;
                 }
@@ -191,16 +200,28 @@ function InteractiveCanvas() {
                 p.y += p.vy * p.speedMultiplier;
 
                 // Wrap boundaries
-                if (p.x < -p.radius) p.x = canvas.width + p.radius;
-                if (p.x > canvas.width + p.radius) p.x = -p.radius;
-                if (p.y < -p.radius) p.y = canvas.height + p.radius;
-                if (p.y > canvas.height + p.radius) p.y = -p.radius;
+                if (p.x < -p.radius) {
+p.x = canvas.width + p.radius;
+}
+
+                if (p.x > canvas.width + p.radius) {
+p.x = -p.radius;
+}
+
+                if (p.y < -p.radius) {
+p.y = canvas.height + p.radius;
+}
+
+                if (p.y > canvas.height + p.radius) {
+p.y = -p.radius;
+}
 
                 // Mouse interaction
                 if (mouse.active) {
                     const dx = mouse.x - p.x;
                     const dy = mouse.y - p.y;
                     const dist = Math.sqrt(dx * dx + dy * dy);
+
                     if (dist < 180) {
                         const force = ((180 - dist) / 180) * 0.025;
                         p.vx += (dx / dist) * force;
@@ -209,6 +230,7 @@ function InteractiveCanvas() {
                 }
 
                 const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+
                 if (speed > 0.8) {
                     p.vx = (p.vx / speed) * 0.8;
                     p.vy = (p.vy / speed) * 0.8;
