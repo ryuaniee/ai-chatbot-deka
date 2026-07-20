@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AuthApiController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\ConversationMessageController;
@@ -20,6 +21,15 @@ Route::redirect('admin', '/admin/overview')
 Route::get('admin/activity-log/items', [AdminDashboardController::class, 'activityLogItems'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.activity-log.items');
+Route::post('admin/users', [AdminUserController::class, 'store'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.users.store');
+Route::put('admin/users/{user}', [AdminUserController::class, 'update'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.users.update');
+Route::delete('admin/users/{user}', [AdminUserController::class, 'destroy'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.users.destroy');
 Route::get('admin/{section}', AdminDashboardController::class)
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.section');

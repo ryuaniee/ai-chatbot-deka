@@ -1,4 +1,4 @@
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     BarChart3,
@@ -10,20 +10,25 @@ import {
     FileText,
     LayoutDashboard,
     MessageSquare,
+    Pencil,
+    Plus,
     Printer,
     Search,
     ShieldCheck,
     Sparkles,
     ThumbsDown,
     ThumbsUp,
+    Trash2,
     Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { type FormEvent, useEffect, useState } from 'react';
 import { AdminConversationChart } from '@/components/admin-conversation-chart';
 import { AdminFeedbackBarChart } from '@/components/admin-feedback-bar-chart';
 import { AdminTokenUsageChart } from '@/components/admin-token-usage-chart';
 import DekaLogo from '@/components/deka-logo';
+import InputError from '@/components/input-error';
+import SettingsModal from '@/components/settings-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -39,6 +44,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { UserInfo } from '@/components/user-info';
 import { UserMenuContent } from '@/components/user-menu-content';
@@ -89,6 +95,7 @@ type TokenUsageItem = {
 };
 
 type AdminUserItem = {
+    id: number;
     name: string;
     email: string;
     role: 'admin' | 'user';
@@ -176,6 +183,22 @@ type ActivityLogLivePayload = {
     totals: ActivityLogTotals;
 };
 
+type AdminUserFormData = {
+    name: string;
+    email: string;
+    role: AdminUserItem['role'];
+    password: string;
+    password_confirmation: string;
+};
+
+const emptyAdminUserForm: AdminUserFormData = {
+    name: '',
+    email: '',
+    role: 'user',
+    password: '',
+    password_confirmation: '',
+};
+
 const metricIcons = {
     message: MessageSquare,
     sparkles: Sparkles,
@@ -257,6 +280,7 @@ const conversations: Conversation[] = [
 
 const adminUsers: AdminUserItem[] = [
     {
+        id: 1,
         name: 'Admin Deka',
         email: 'admin@deka.dev',
         role: 'admin',
@@ -266,6 +290,7 @@ const adminUsers: AdminUserItem[] = [
         conversations: 11,
     },
     {
+        id: 2,
         name: 'Nadia Putri',
         email: 'nadia@example.com',
         role: 'user',
@@ -275,6 +300,7 @@ const adminUsers: AdminUserItem[] = [
         conversations: 42,
     },
     {
+        id: 3,
         name: 'Raka Firmansyah',
         email: 'raka@example.com',
         role: 'user',
@@ -284,6 +310,7 @@ const adminUsers: AdminUserItem[] = [
         conversations: 36,
     },
     {
+        id: 4,
         name: 'Ayu Lestari',
         email: 'ayu@example.com',
         role: 'user',
@@ -293,6 +320,7 @@ const adminUsers: AdminUserItem[] = [
         conversations: 28,
     },
     {
+        id: 5,
         name: 'Bagus Pratama',
         email: 'bagus@example.com',
         role: 'user',
@@ -565,6 +593,12 @@ export default function AdminPage() {
         useState(adminActivityItems);
     const [liveActivityTotals, setLiveActivityTotals] =
         useState<ActivityLogTotals | null>(null);
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [userDialogOpen, setUserDialogOpen] = useState(false);
+    const [selectedUser, setSelectedUser] = useState<AdminUserItem | null>(
+        null,
+    );
+    const userForm = useForm<AdminUserFormData>(emptyAdminUserForm);
     const [activityLiveStatus, setActivityLiveStatus] = useState<
         'live' | 'updating' | 'error'
     >('live');
@@ -669,6 +703,67 @@ export default function AdminPage() {
         };
     }, [activeSection, activityPeriod, filters?.search]);
 
+    const openCreateUserDialog = () => {
+        setSelectedUser(null);
+        userForm.clearErrors();
+        userForm.setData({ ...emptyAdminUserForm });
+        setUserDialogOpen(true);
+    };
+
+    const openEditUserDialog = (user: AdminUserItem) => {
+        setSelectedUser(user);
+        userForm.clearErrors();
+        userForm.setData({
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            password: '',
+            password_confirmation: '',
+        });
+        setUserDialogOpen(true);
+    };
+
+    const closeUserDialog = () => {
+        setUserDialogOpen(false);
+        setSelectedUser(null);
+        userForm.clearErrors();
+        userForm.setData({ ...emptyAdminUserForm });
+    };
+
+    const handleUserSubmit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        const options = {
+            preserveScroll: true,
+            onSuccess: closeUserDialog,
+        };
+
+        if (selectedUser) {
+            userForm.put(`/admin/users/${selectedUser.id}`, options);
+
+            return;
+        }
+
+        userForm.post('/admin/users', options);
+    };
+
+    const handleDeleteUser = (user: AdminUserItem) => {
+        if (
+            user.id === auth.user.id ||
+            (user.role === 'admin' && adminUserCount <= 1)
+        ) {
+            return;
+        }
+
+        if (! window.confirm(`Hapus pengguna ${user.email}?`)) {
+            return;
+        }
+
+        router.delete(`/admin/users/${user.id}`, {
+            preserveScroll: true,
+        });
+    };
+
     return (
         <>
             <Head title="Admin Dashboard" />
@@ -763,7 +858,7 @@ export default function AdminPage() {
                                 <UserMenuContent
                                     user={auth.user}
                                     onSettingsClick={() =>
-                                        router.visit(sectionHref('users'))
+                                        setSettingsOpen(true)
                                     }
                                 />
                             </DropdownMenuContent>
@@ -1240,15 +1335,30 @@ export default function AdminPage() {
                                 </div>
 
                                 <Card className="flex min-h-0 flex-col rounded-lg">
-                                    <CardHeader>
-                                        <CardTitle>Daftar Pengguna</CardTitle>
-                                        <CardDescription>
-                                            User yang terdaftar di chatbot Deka.
-                                        </CardDescription>
+                                    <CardHeader className="gap-3">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div>
+                                                <CardTitle>
+                                                    Daftar Pengguna
+                                                </CardTitle>
+                                                <CardDescription>
+                                                    User yang terdaftar di
+                                                    chatbot Deka.
+                                                </CardDescription>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                onClick={openCreateUserDialog}
+                                            >
+                                                <Plus className="h-4 w-4" />
+                                                Tambah Pengguna
+                                            </Button>
+                                        </div>
                                     </CardHeader>
                                     <CardContent className="min-h-0 flex-1">
                                         <div className="h-full overflow-hidden rounded-md border">
-                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_140px_140px_140px_160px]">
+                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_120px_120px_120px_140px_120px]">
                                                 <span>Pengguna</span>
                                                 <span className="hidden md:block">
                                                     Role
@@ -1259,14 +1369,19 @@ export default function AdminPage() {
                                                 <span className="hidden md:block">
                                                     Chat
                                                 </span>
-                                                <span>Aktif</span>
+                                                <span className="hidden md:block">
+                                                    Aktif
+                                                </span>
+                                                <span className="text-right">
+                                                    Aksi
+                                                </span>
                                             </div>
 
                                             {adminUsers.length > 0 ? (
                                                 adminUsers.map((item) => (
                                                     <div
-                                                        key={item.email}
-                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_140px_140px_140px_160px]"
+                                                        key={item.id}
+                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_120px_120px_120px_140px_120px]"
                                                     >
                                                         <div className="min-w-0">
                                                             <div className="flex items-center gap-2">
@@ -1309,9 +1424,48 @@ export default function AdminPage() {
                                                                 item.conversations,
                                                             )}
                                                         </p>
-                                                        <p className="text-sm whitespace-nowrap text-muted-foreground">
+                                                        <p className="hidden text-sm whitespace-nowrap text-muted-foreground md:block">
                                                             {item.lastSeen}
                                                         </p>
+                                                        <div className="flex justify-end gap-1">
+                                                            <Button
+                                                                type="button"
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                title="Edit pengguna"
+                                                                onClick={() =>
+                                                                    openEditUserDialog(
+                                                                        item,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                title="Hapus pengguna"
+                                                                disabled={
+                                                                    item.id ===
+                                                                        auth
+                                                                            .user
+                                                                            .id ||
+                                                                    (item.role ===
+                                                                        'admin' &&
+                                                                        adminUserCount <=
+                                                                            1)
+                                                                }
+                                                                onClick={() =>
+                                                                    handleDeleteUser(
+                                                                        item,
+                                                                    )
+                                                                }
+                                                                className="text-destructive hover:text-destructive"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
                                                     </div>
                                                 ))
                                             ) : (
@@ -1557,6 +1711,163 @@ export default function AdminPage() {
                     </main>
                 </div>
             </div>
+            <SettingsModal
+                isOpen={settingsOpen}
+                onClose={() => setSettingsOpen(false)}
+            />
+            {userDialogOpen && (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[1.5px]">
+                    <div className="w-full max-w-lg rounded-lg border bg-background p-6 shadow-xl">
+                        <div className="mb-5">
+                            <h2 className="text-lg font-semibold">
+                                {selectedUser
+                                    ? 'Edit Pengguna'
+                                    : 'Tambah Pengguna'}
+                            </h2>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Kelola nama, email, role, dan password akun.
+                            </p>
+                        </div>
+
+                        <form
+                            onSubmit={handleUserSubmit}
+                            className="space-y-4"
+                        >
+                            <div className="grid gap-2">
+                                <Label htmlFor="admin-user-name">Nama</Label>
+                                <Input
+                                    id="admin-user-name"
+                                    value={userForm.data.name}
+                                    onChange={(event) =>
+                                        userForm.setData(
+                                            'name',
+                                            event.target.value,
+                                        )
+                                    }
+                                    required
+                                    autoComplete="name"
+                                    placeholder="Nama pengguna"
+                                />
+                                <InputError message={userForm.errors.name} />
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="admin-user-email">Email</Label>
+                                <Input
+                                    id="admin-user-email"
+                                    type="email"
+                                    value={userForm.data.email}
+                                    onChange={(event) =>
+                                        userForm.setData(
+                                            'email',
+                                            event.target.value,
+                                        )
+                                    }
+                                    required
+                                    autoComplete="email"
+                                    placeholder="nama@email.com"
+                                />
+                                <InputError message={userForm.errors.email} />
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="admin-user-role">Role</Label>
+                                <select
+                                    id="admin-user-role"
+                                    value={userForm.data.role}
+                                    onChange={(event) =>
+                                        userForm.setData(
+                                            'role',
+                                            event.target.value as AdminUserItem['role'],
+                                        )
+                                    }
+                                    className="border-input bg-background ring-offset-background focus-visible:ring-ring h-9 rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                                >
+                                    <option value="user">User</option>
+                                    <option value="admin">Admin</option>
+                                </select>
+                                <InputError message={userForm.errors.role} />
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="admin-user-password">
+                                    Password
+                                </Label>
+                                <Input
+                                    id="admin-user-password"
+                                    type="password"
+                                    value={userForm.data.password}
+                                    onChange={(event) =>
+                                        userForm.setData(
+                                            'password',
+                                            event.target.value,
+                                        )
+                                    }
+                                    required={!selectedUser}
+                                    autoComplete="new-password"
+                                    placeholder={
+                                        selectedUser
+                                            ? 'Kosongkan jika tidak diubah'
+                                            : 'Minimal 8 karakter'
+                                    }
+                                />
+                                <InputError
+                                    message={userForm.errors.password}
+                                />
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="admin-user-password-confirmation">
+                                    Konfirmasi Password
+                                </Label>
+                                <Input
+                                    id="admin-user-password-confirmation"
+                                    type="password"
+                                    value={
+                                        userForm.data.password_confirmation
+                                    }
+                                    onChange={(event) =>
+                                        userForm.setData(
+                                            'password_confirmation',
+                                            event.target.value,
+                                        )
+                                    }
+                                    required={!selectedUser}
+                                    autoComplete="new-password"
+                                    placeholder="Ulangi password"
+                                />
+                            </div>
+
+                            <InputError
+                                message={
+                                    (
+                                        userForm.errors as Record<
+                                            string,
+                                            string
+                                        >
+                                    ).user
+                                }
+                            />
+
+                            <div className="flex justify-end gap-2 pt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={closeUserDialog}
+                                >
+                                    Batal
+                                </Button>
+                                <Button
+                                    type="submit"
+                                    disabled={userForm.processing}
+                                >
+                                    {selectedUser ? 'Simpan' : 'Tambah'}
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </>
     );
 }
