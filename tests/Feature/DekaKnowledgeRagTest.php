@@ -436,6 +436,156 @@ class DekaKnowledgeRagTest extends TestCase
         $this->assertSame('manual://deka-founder', data_get($assistantMessage->metadata, 'knowledge.sources.0.source_uri'));
     }
 
+    public function test_chat_resolves_short_contact_follow_up_with_local_query_expansion(): void
+    {
+        $this->configureKnowledge();
+        config()->set('services.deka_knowledge.retrieval_mode', 'fulltext');
+        config()->set('services.deka_knowledge.query_rewrite_enabled', false);
+        $this->fakeAllowedModeration();
+        Embeddings::fake()->preventStrayEmbeddings();
+        ConversationReplyAgent::fake(['Kontak DEKA tersedia melalui website deka.dev.']);
+
+        app(KnowledgeIngestor::class)->ingestText(
+            sourceType: 'file',
+            sourceUri: 'manual://deka-contact',
+            content: str_repeat('Kontak DEKA tersedia melalui website deka.dev dan alamat kantor DEKA di Samarinda. ', 4),
+            title: 'Kontak Deka',
+        );
+
+        $user = User::factory()->create();
+        $conversation = Conversation::factory()->for($user)->create(['title' => 'Existing']);
+        $conversation->messages()->create([
+            'role' => 'assistant',
+            'content' => 'Kamu bisa tanya profil, layanan, proyek, founder, sejarah, atau kontak DEKA.',
+            'sequence' => 1,
+        ]);
+
+        $this->actingAs($user)
+            ->postJson(route('api.conversations.messages.store', $conversation), [
+                'content' => 'kontaknya',
+            ])
+            ->assertCreated();
+
+        $assistantMessage = $conversation->fresh()
+            ->messages()
+            ->where('role', 'assistant')
+            ->latest('sequence')
+            ->firstOrFail();
+
+        $this->assertContains('kontak DEKA', data_get($assistantMessage->metadata, 'knowledge.queries'));
+        $this->assertSame('manual://deka-contact', data_get($assistantMessage->metadata, 'knowledge.sources.0.source_uri'));
+    }
+
+    public function test_chat_tolerates_deka_typo_in_knowledge_query(): void
+    {
+        $this->configureKnowledge();
+        config()->set('services.deka_knowledge.retrieval_mode', 'fulltext');
+        config()->set('services.deka_knowledge.query_rewrite_enabled', false);
+        $this->fakeAllowedModeration();
+        Embeddings::fake()->preventStrayEmbeddings();
+        ConversationReplyAgent::fake(['Alamat DEKA berada di Samarinda.']);
+
+        app(KnowledgeIngestor::class)->ingestText(
+            sourceType: 'file',
+            sourceUri: 'manual://deka-address',
+            content: str_repeat('Alamat DEKA berada di Samarinda dan kontak DEKA tersedia untuk layanan pelanggan. ', 4),
+            title: 'Alamat Deka',
+        );
+
+        $user = User::factory()->create();
+        $conversation = Conversation::factory()->for($user)->create(['title' => 'Existing']);
+
+        $this->actingAs($user)
+            ->postJson(route('api.conversations.messages.store', $conversation), [
+                'content' => 'kontak deak',
+            ])
+            ->assertCreated();
+
+        $assistantMessage = $conversation->fresh()
+            ->messages()
+            ->where('role', 'assistant')
+            ->firstOrFail();
+
+        $this->assertContains('kontak DEKA', data_get($assistantMessage->metadata, 'knowledge.queries'));
+        $this->assertSame('manual://deka-address', data_get($assistantMessage->metadata, 'knowledge.sources.0.source_uri'));
+    }
+
+    public function test_chat_expands_riski_alias_to_rizky_hajar_queries(): void
+    {
+        $this->configureKnowledge();
+        config()->set('services.deka_knowledge.retrieval_mode', 'fulltext');
+        config()->set('services.deka_knowledge.query_rewrite_enabled', false);
+        $this->fakeAllowedModeration();
+        Embeddings::fake()->preventStrayEmbeddings();
+        ConversationReplyAgent::fake(['Muhammad Rizky Hajar adalah founder DEKA.']);
+
+        app(KnowledgeIngestor::class)->ingestText(
+            sourceType: 'file',
+            sourceUri: 'manual://deka-rizky',
+            content: str_repeat('Founder DEKA adalah Muhammad Rizky Hajar dan DEKA dirintis di Samarinda pada 2012. ', 4),
+            title: 'Founder Deka',
+        );
+
+        $user = User::factory()->create();
+        $conversation = Conversation::factory()->for($user)->create(['title' => 'Existing']);
+
+        $this->actingAs($user)
+            ->postJson(route('api.conversations.messages.store', $conversation), [
+                'content' => 'pak riski siapa deka?',
+            ])
+            ->assertCreated();
+
+        $assistantMessage = $conversation->fresh()
+            ->messages()
+            ->where('role', 'assistant')
+            ->firstOrFail();
+
+        $this->assertContains('Muhammad Rizky Hajar', data_get($assistantMessage->metadata, 'knowledge.queries'));
+        $this->assertSame('manual://deka-rizky', data_get($assistantMessage->metadata, 'knowledge.sources.0.source_uri'));
+    }
+
+    public function test_chat_asks_clarification_for_ambiguous_deka_person_question_without_context(): void
+    {
+        $this->configureKnowledge();
+        config()->set('services.deka_knowledge.retrieval_mode', 'fulltext');
+        config()->set('services.deka_knowledge.query_rewrite_enabled', false);
+        $this->fakeAllowedModeration();
+        Embeddings::fake()->preventStrayEmbeddings();
+        ConversationReplyAgent::fake(['Maksud kamu orang DEKA yang mana: founder, tim awal, atau kontak resmi DEKA?']);
+
+        app(KnowledgeIngestor::class)->ingestText(
+            sourceType: 'file',
+            sourceUri: 'manual://deka-profile',
+            content: str_repeat('DEKA adalah perusahaan digital di Samarinda. ', 4),
+            title: 'Profil Deka',
+        );
+
+        $user = User::factory()->create();
+        $conversation = Conversation::factory()->for($user)->create(['title' => 'Existing']);
+
+        $this->actingAs($user)
+            ->postJson(route('api.conversations.messages.store', $conversation), [
+                'content' => 'pak siapa di deka?',
+            ])
+            ->assertCreated();
+
+        ConversationReplyAgent::assertPrompted(function ($prompt): bool {
+            $messages = array_map(
+                static fn ($message): array => [
+                    'role' => $message->role->value,
+                    'content' => $message->content,
+                ],
+                [...$prompt->agent->messages()],
+            );
+
+            $knowledgeMessage = collect($messages)
+                ->first(fn (array $message): bool => str_contains($message['content'], 'DEKA_KNOWLEDGE_CANDIDATES'));
+
+            return is_array($knowledgeMessage)
+                && str_contains($knowledgeMessage['content'], 'ajukan pertanyaan klarifikasi singkat');
+        });
+    }
+
     private function configureKnowledge(): void
     {
         config()->set('services.deka_knowledge.enabled', true);

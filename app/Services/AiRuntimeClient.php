@@ -124,7 +124,7 @@ class AiRuntimeClient
     /**
      * @return array<int, string>
      */
-    public function rewriteKnowledgeQueries(string $question): array
+    public function rewriteKnowledgeQueries(string $question, array $history = []): array
     {
         $question = trim($question);
 
@@ -132,9 +132,20 @@ class AiRuntimeClient
             return [];
         }
 
+        $prompt = $question;
+
+        if ($history !== []) {
+            $context = collect($history)
+                ->slice(-4)
+                ->map(static fn (array $message): string => sprintf('%s: %s', $message['role'] ?? 'unknown', $message['content'] ?? ''))
+                ->implode("\n");
+
+            $prompt = "Conversation context:\n{$context}\n\nLatest user question:\n{$question}";
+        }
+
         try {
             $response = KnowledgeSearchQueryAgent::make()->prompt(
-                $question,
+                $prompt,
                 provider: $this->providerMatrix(),
                 timeout: $this->timeout(),
             );

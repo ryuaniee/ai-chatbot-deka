@@ -40,7 +40,7 @@ class KnowledgeRetriever
         }
 
         $chunks = $this->usesVectorRetrieval()
-            ? $this->retrieveWithVector($query)
+            ? $this->retrieveWithVector($query, $alternateQueries)
             : $this->retrieveWithFullText($query, $alternateQueries);
 
         if ($chunks === []) {
@@ -83,10 +83,11 @@ class KnowledgeRetriever
     /**
      * @return array<int, array{id: int, document_id: int, source_uri: string, title: string|null, content: string, score: float}>
      */
-    private function retrieveWithVector(string $query): array
+    private function retrieveWithVector(string $query, array $alternateQueries = []): array
     {
         try {
-            $embedding = $this->embeddingService->embed([$query])[0] ?? null;
+            $queries = $this->candidateQueries($query, $alternateQueries);
+            $embeddings = $this->embeddingService->embed($queries);
         } catch (Throwable $exception) {
             Log::warning('Knowledge retrieval embedding failed.', [
                 'exception' => $exception::class,
@@ -96,13 +97,26 @@ class KnowledgeRetriever
             return [];
         }
 
-        if ($embedding === null) {
+        if ($embeddings === []) {
             return [];
         }
 
-        return DB::getDriverName() === 'pgsql'
-            ? $this->retrieveWithPgvector($embedding)
-            : $this->retrieveWithPhpCosine($embedding);
+        $chunks = [];
+
+        foreach ($embeddings as $embedding) {
+            if (! is_array($embedding)) {
+                continue;
+            }
+
+            $chunks = [
+                ...$chunks,
+                ...(DB::getDriverName() === 'pgsql'
+                    ? $this->retrieveWithPgvector($embedding)
+                    : $this->retrieveWithPhpCosine($embedding)),
+            ];
+        }
+
+        return $this->rankUniqueChunks($chunks);
     }
 
     /**
