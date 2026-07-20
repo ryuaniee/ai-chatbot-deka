@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts';
 import {
     Card,
     CardContent,
@@ -111,7 +111,10 @@ export function AdminConversationChart({
                         chartClassName,
                     )}
                 >
-                    <AreaChart data={filteredData}>
+                    <AreaChart
+                        data={filteredData}
+                        margin={{ top: 8, right: 8, bottom: 12, left: 8 }}
+                    >
                         <defs>
                             <linearGradient
                                 id="fillConversations"
@@ -155,7 +158,7 @@ export function AdminConversationChart({
                             dataKey="date"
                             tickLine={false}
                             axisLine={false}
-                            tickMargin={8}
+                            tickMargin={12}
                             minTickGap={32}
                             tickFormatter={(value) => {
                                 const date = new Date(String(value));
@@ -165,6 +168,11 @@ export function AdminConversationChart({
                                     day: 'numeric',
                                 });
                             }}
+                        />
+                        <YAxis
+                            hide
+                            domain={[0, 'dataMax + 1']}
+                            allowDataOverflow={false}
                         />
                         <ChartTooltip
                             cursor={false}
@@ -185,14 +193,14 @@ export function AdminConversationChart({
                         />
                         <Area
                             dataKey="resolved"
-                            type="natural"
+                            type="monotone"
                             fill="url(#fillResolved)"
                             stroke="var(--color-resolved)"
                             stackId="a"
                         />
                         <Area
                             dataKey="conversations"
-                            type="natural"
+                            type="monotone"
                             fill="url(#fillConversations)"
                             stroke="var(--color-conversations)"
                             stackId="a"

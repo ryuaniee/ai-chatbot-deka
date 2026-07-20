@@ -25,9 +25,11 @@ class MessageFeedbackController extends Controller
                 MessageFeedback::TYPE_LIKE,
                 MessageFeedback::TYPE_DISLIKE,
             ])],
+            'reason' => ['nullable', 'string', 'max:500'],
         ]);
 
         $type = $validated['type'] ?? null;
+        $reason = trim((string) ($validated['reason'] ?? ''));
 
         if ($type === null) {
             MessageFeedback::query()
@@ -40,7 +42,16 @@ class MessageFeedbackController extends Controller
                     'message_id' => $message->id,
                     'user_id' => $request->user()->id,
                 ],
-                ['type' => $type],
+                [
+                    'type' => $type,
+                    'reason' => $type === MessageFeedback::TYPE_DISLIKE && $reason !== ''
+                        ? $reason
+                        : null,
+                    'review_status' => $type === MessageFeedback::TYPE_DISLIKE
+                        ? MessageFeedback::REVIEW_STATUS_OPEN
+                        : MessageFeedback::REVIEW_STATUS_RESOLVED,
+                    'reviewed_at' => null,
+                ],
             );
         }
 

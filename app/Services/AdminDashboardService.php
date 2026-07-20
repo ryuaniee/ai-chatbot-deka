@@ -28,6 +28,7 @@ class AdminDashboardService
             'tokenUsageItems' => $tokenUsageItems,
             'adminUsers' => $adminUsers,
             'adminActivityItems' => $adminActivityItems,
+            'feedbackReviewItems' => $this->feedbackReviewItems(),
             'chatTrendItems' => $this->chatTrendItems(),
             'feedbackChartItems' => $this->feedbackChartItems(),
             'totals' => [
@@ -242,6 +243,38 @@ class AdminDashboardService
     }
 
     /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function feedbackReviewItems(): array
+    {
+        return MessageFeedback::query()
+            ->with([
+                'user:id,name,email',
+                'message:id,conversation_id,content',
+                'message.conversation:id,title',
+            ])
+            ->where('type', MessageFeedback::TYPE_DISLIKE)
+            ->latest('created_at')
+            ->limit(50)
+            ->get()
+            ->map(function (MessageFeedback $feedback): array {
+                $message = $feedback->message;
+
+                return [
+                    'id' => $feedback->id,
+                    'user' => $feedback->user?->name ?? 'User',
+                    'email' => $feedback->user?->email ?? '-',
+                    'conversation' => $message?->conversation?->title ?: 'Percakapan tanpa judul',
+                    'answer' => str($message?->content ?? '-')->limit(180)->toString(),
+                    'reason' => $feedback->reason ?: 'Tidak ada alasan tertulis',
+                    'status' => $this->normalizedFeedbackReviewStatus($feedback->review_status),
+                    'createdAt' => $this->relativeTime($feedback->created_at),
+                ];
+            })
+            ->all();
+    }
+
+    /**
      * @return array{activityToday: int, conversationActions: int, reportExports: int}
      */
     private function activityTotals(): array
@@ -325,7 +358,8 @@ class AdminDashboardService
     private function categoryForSection(string $section): string
     {
         return match ($section) {
-            'users' => 'user',
+            'users', 'roles' => 'user',
+            'feedback-review' => 'conversation',
             'token-usage' => 'report',
             default => 'system',
         };
@@ -335,7 +369,9 @@ class AdminDashboardService
     {
         return match ($section) {
             'token-usage' => 'Token Usage',
+            'feedback-review' => 'Review Feedback',
             'users' => 'Kelola Pengguna',
+            'roles' => 'Kelola Roles',
             'activity-log' => 'Log Aktivitas',
             default => 'Dashboard Ringkasan',
         };
@@ -363,6 +399,15 @@ class AdminDashboardService
         return in_array($category, ['auth', 'conversation', 'user', 'report', 'system'], true)
             ? $category
             : 'system';
+    }
+
+    private function normalizedFeedbackReviewStatus(?string $status): string
+    {
+        return in_array($status, [
+            MessageFeedback::REVIEW_STATUS_OPEN,
+            MessageFeedback::REVIEW_STATUS_REVIEWING,
+            MessageFeedback::REVIEW_STATUS_RESOLVED,
+        ], true) ? $status : MessageFeedback::REVIEW_STATUS_OPEN;
     }
 
     private function relativeTime(?CarbonInterface $time): string

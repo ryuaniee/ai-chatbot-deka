@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="620" viewBox="0 0 900 620">
+  <rect width="900" height="620" fill="#f5f8fc"/>
+  <rect x="74" y="58" width="752" height="504" rx="10" fill="#ffffff" stroke="#d8e3f2"/>
+  <text x="450" y="105" text-anchor="middle" font-family="Arial, sans-serif" font-size="18" font-weight="700" fill="#142033">Distribusi Token</text>
+  <text x="450" y="132" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#60728d">Porsi pemakaian token antar pengguna aktif.</text>
+
+  <g font-family="Arial, sans-serif">
+    <rect x="122" y="176" width="206" height="56" rx="7" fill="#f8fbff" stroke="#d8e3f2"/>
+    <text x="225" y="199" text-anchor="middle" font-size="12" fill="#60728d">Total</text>
+    <text x="225" y="219" text-anchor="middle" font-size="16" font-weight="700" fill="#142033">0</text>
+
+    <rect x="347" y="176" width="206" height="56" rx="7" fill="#f8fbff" stroke="#d8e3f2"/>
+    <text x="450" y="199" text-anchor="middle" font-size="12" fill="#60728d">Input</text>
+    <text x="450" y="219" text-anchor="middle" font-size="16" font-weight="700" fill="#142033">0</text>
+
+    <rect x="572" y="176" width="206" height="56" rx="7" fill="#f8fbff" stroke="#d8e3f2"/>
+    <text x="675" y="199" text-anchor="middle" font-size="12" fill="#60728d">Output</text>
+    <text x="675" y="219" text-anchor="middle" font-size="16" font-weight="700" fill="#142033">0</text>
+  </g>
+
+  <rect x="180" y="278" width="540" height="184" rx="8" fill="#f8fbff" stroke="#cfe0f5" stroke-dasharray="8 8"/>
+  <rect x="424" y="314" width="52" height="52" rx="8" fill="#eef5ff" stroke="#d8e8ff"/>
+  <circle cx="450" cy="340" r="14" fill="none" stroke="#2f80ed" stroke-width="4"/>
+  <path d="M450 326 A14 14 0 0 1 464 340 L450 340 Z" fill="#2f80ed"/>
+  <text x="450" y="396" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#142033">Belum ada penggunaan token</text>
+  <text x="450" y="423" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#60728d">Data distribusi akan muncul setelah pengguna mulai chat</text>
+  <text x="450" y="445" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#60728d">dan respons AI mencatat pemakaian token.</text>
+
+  <text x="450" y="512" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#142033">Menunggu data pemakaian token</text>
+  <text x="450" y="536" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#60728d">Berdasarkan percakapan yang sudah tersimpan</text>
+</svg>

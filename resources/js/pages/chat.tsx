@@ -135,6 +135,13 @@ const formatDuration = (
     return `${(milliseconds / 1000).toFixed(1)} dtk`;
 };
 
+const dislikeReasonOptions = [
+    'Jawaban kurang lengkap',
+    'Tidak menjawab pertanyaan',
+    'Data tidak akurat',
+    'Bahasa sulit dipahami',
+];
+
 export default function ChatPage() {
     const { auth } = usePage().props;
     const { submit } = useHttp();
@@ -163,10 +170,26 @@ export default function ChatPage() {
             return {};
         }
     });
+    const [feedbackReasons, setFeedbackReasons] = useState<
+        Record<string | number, string>
+    >(() => {
+        try {
+            const saved = localStorage.getItem('deka_chat_feedback_reasons');
+
+            return saved ? JSON.parse(saved) : {};
+        } catch {
+            return {};
+        }
+    });
+    const [dislikeDialogMessageId, setDislikeDialogMessageId] = useState<
+        string | number | null
+    >(null);
+    const [dislikeReason, setDislikeReason] = useState('');
 
     const persistFeedback = async (
         messageId: string | number,
         type: 'like' | 'dislike' | null,
+        reason?: string,
     ) => {
         const message = messages.find((item) => item.id === messageId);
         const csrfToken = document
@@ -186,7 +209,52 @@ export default function ChatPage() {
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': csrfToken,
                 },
-                body: JSON.stringify({ type }),
+                body: JSON.stringify({ type, reason }),
+            },
+        );
+    };
+
+    const applyFeedback = (
+        messageId: string | number,
+        type: 'like' | 'dislike' | null,
+        reason?: string,
+    ) => {
+        const normalizedReason = reason?.trim() ?? '';
+
+        setFeedbackReasons((prev) => {
+            const next = { ...prev };
+
+            if (type === 'dislike' && normalizedReason) {
+                next[messageId] = normalizedReason;
+            } else {
+                delete next[messageId];
+            }
+
+            localStorage.setItem(
+                'deka_chat_feedback_reasons',
+                JSON.stringify(next),
+            );
+
+            return next;
+        });
+
+        setMsgFeedback((prev) => {
+            const next = { ...prev };
+
+            if (type === null) {
+                delete next[messageId];
+            } else {
+                next[messageId] = type;
+            }
+
+            localStorage.setItem('deka_chat_feedback', JSON.stringify(next));
+
+            return next;
+        });
+
+        void persistFeedback(messageId, type, normalizedReason).catch(
+            (error) => {
+                console.error('Failed to persist feedback:', error);
             },
         );
     };
@@ -197,23 +265,23 @@ export default function ChatPage() {
     ) => {
         const nextType = msgFeedback[messageId] === type ? null : type;
 
-        setMsgFeedback((prev) => {
-            const next = { ...prev };
+        if (type === 'dislike' && nextType === 'dislike') {
+            setDislikeDialogMessageId(messageId);
+            setDislikeReason(feedbackReasons[messageId] ?? '');
+            return;
+        }
 
-            if (nextType === null) {
-                delete next[messageId];
-            } else {
-                next[messageId] = nextType;
-            }
+        applyFeedback(messageId, nextType);
+    };
 
-            localStorage.setItem('deka_chat_feedback', JSON.stringify(next));
+    const submitDislikeReason = () => {
+        if (dislikeDialogMessageId === null) {
+            return;
+        }
 
-            return next;
-        });
-
-        void persistFeedback(messageId, nextType).catch((error) => {
-            console.error('Failed to persist feedback:', error);
-        });
+        applyFeedback(dislikeDialogMessageId, 'dislike', dislikeReason);
+        setDislikeDialogMessageId(null);
+        setDislikeReason('');
     };
 
     const getFollowUpSuggestions = (lastMessageContent: string) => {
@@ -1075,6 +1143,21 @@ export default function ChatPage() {
                                                                     />
                                                                 </button>
                                                             </div>
+                                                            {msgFeedback[
+                                                                message.id
+                                                            ] === 'dislike' &&
+                                                                feedbackReasons[
+                                                                    message.id
+                                                                ] && (
+                                                                    <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
+                                                                        {
+                                                                            feedbackReasons[
+                                                                                message
+                                                                                    .id
+                                                                            ]
+                                                                        }
+                                                                    </span>
+                                                                )}
 
                                                             {/* Timing Info */}
                                                             {(message.response_time_ms !==
@@ -1221,6 +1304,71 @@ export default function ChatPage() {
                         isOpen={settingsOpen}
                         onClose={() => setSettingsOpen(false)}
                     />
+                    {dislikeDialogMessageId !== null && (
+                        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-[1.5px]">
+                            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+                                <div>
+                                    <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                                        Kenapa jawabannya kurang membantu?
+                                    </h2>
+                                    <p className="mt-1 text-sm leading-5 text-slate-500 dark:text-slate-400">
+                                        Alasan ini membantu admin memperbaiki
+                                        kualitas jawaban AI.
+                                    </p>
+                                </div>
+
+                                <div className="mt-4 grid gap-2">
+                                    {dislikeReasonOptions.map((reason) => (
+                                        <button
+                                            key={reason}
+                                            type="button"
+                                            onClick={() =>
+                                                setDislikeReason(reason)
+                                            }
+                                            className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
+                                                dislikeReason === reason
+                                                    ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200'
+                                                    : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900'
+                                            }`}
+                                        >
+                                            {reason}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                <textarea
+                                    value={dislikeReason}
+                                    onChange={(event) =>
+                                        setDislikeReason(event.target.value)
+                                    }
+                                    rows={3}
+                                    className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 transition outline-none focus:border-rose-300 focus:ring-4 focus:ring-rose-500/10 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                                    placeholder="Tulis alasan lain..."
+                                />
+
+                                <div className="mt-4 flex justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setDislikeDialogMessageId(null);
+                                            setDislikeReason('');
+                                        }}
+                                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900"
+                                    >
+                                        Batal
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={submitDislikeReason}
+                                        disabled={!dislikeReason.trim()}
+                                        className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:bg-rose-300"
+                                    >
+                                        Kirim feedback
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {user && (
                         <LogoutConfirmModal
                             isOpen={logoutConfirmOpen}

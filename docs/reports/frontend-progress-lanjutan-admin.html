@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <title>Lanjutan Progres Frontend - Chatbot Deka</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 18mm 16mm;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            color: #142033;
+            background: #ffffff;
+            font-family: Inter, Arial, sans-serif;
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        h1,
+        h2,
+        h3,
+        p {
+            margin: 0;
+        }
+
+        h1 {
+            font-size: 30px;
+            line-height: 1.15;
+            letter-spacing: 0;
+        }
+
+        h2 {
+            margin-bottom: 12px;
+            font-size: 20px;
+        }
+
+        h3 {
+            font-size: 15px;
+        }
+
+        .page {
+            page-break-after: always;
+        }
+
+        .page:last-child {
+            page-break-after: auto;
+        }
+
+        .eyebrow {
+            margin-bottom: 10px;
+            color: #2f80ed;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: .08em;
+            text-transform: uppercase;
+        }
+
+        .subtitle {
+            margin-top: 12px;
+            max-width: 620px;
+            color: #60728d;
+            font-size: 15px;
+        }
+
+        .section {
+            margin-top: 24px;
+        }
+
+        .grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .grid-3 {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .card {
+            border: 1px solid #d8e3f2;
+            border-radius: 8px;
+            background: #ffffff;
+            padding: 14px;
+        }
+
+        .muted {
+            color: #60728d;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            background: #eef5ff;
+            color: #1c64c8;
+            padding: 3px 9px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        ul {
+            margin: 8px 0 0 18px;
+            padding: 0;
+        }
+
+        li {
+            margin: 5px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            overflow: hidden;
+            border: 1px solid #d8e3f2;
+            border-radius: 8px;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid #d8e3f2;
+            padding: 10px 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            background: #f4f8fd;
+            color: #526780;
+            font-size: 11px;
+            letter-spacing: .05em;
+            text-transform: uppercase;
+        }
+
+        tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .flow {
+            display: table;
+            width: 100%;
+            margin-top: 12px;
+        }
+
+        .step {
+            display: table-cell;
+            width: 20%;
+            border: 1px solid #cfe0f5;
+            border-radius: 8px;
+            background: #f8fbff;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .step strong {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+
+        .shot {
+            width: 100%;
+            max-height: 155mm;
+            object-fit: contain;
+            border: 1px solid #d8e3f2;
+            border-radius: 8px;
+            box-shadow: 0 8px 24px rgba(20, 32, 51, .12);
+        }
+
+        .caption {
+            margin-top: 10px;
+            color: #60728d;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .footer {
+            margin-top: 16px;
+            border-top: 1px solid #d8e3f2;
+            padding-top: 8px;
+            color: #60728d;
+            font-size: 11px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <section class="page">
+        <p class="eyebrow">Lanjutan Progres Frontend</p>
+        <h1>Chatbot Deka - Update Frontend Admin</h1>
+        <p class="subtitle">
+            Dokumen ini melanjutkan laporan frontend sebelumnya dengan progres terbaru pada area admin dashboard,
+            khususnya Kelola Pengguna, menu settings admin, dan perbaikan tampilan chart saat data masih kosong.
+        </p>
+
+        <div class="section grid grid-3">
+            <div class="card">
+                <span class="badge">Admin Dashboard</span>
+                <h3 class="section">Navigasi admin dipadatkan</h3>
+                <p class="muted">Sidebar, header, metric cards, chart, dan tabel admin sudah dipakai sebagai area kerja utama.</p>
+            </div>
+            <div class="card">
+                <span class="badge">Kelola Pengguna</span>
+                <h3 class="section">CRUD user/admin</h3>
+                <p class="muted">Admin dapat menambah, mengubah, dan menghapus pengguna dari section Kelola Pengguna.</p>
+            </div>
+            <div class="card">
+                <span class="badge">UX Empty State</span>
+                <h3 class="section">Chart tidak kosong lagi</h3>
+                <p class="muted">Distribusi token menampilkan empty state saat belum ada pemakaian token.</p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Status Akhir Terbaru</h2>
+            <ul>
+                <li>Halaman admin sudah memiliki menu Kelola Pengguna yang terhubung dengan data user dari backend.</li>
+                <li>Admin dapat membuat user baru dengan nama, email, role, password, dan konfirmasi password.</li>
+                <li>Admin dapat mengedit nama, email, role, dan password pengguna. Password pada mode edit bisa dikosongkan.</li>
+                <li>Admin dapat menghapus pengguna, dengan proteksi agar tidak menghapus akun sendiri.</li>
+                <li>Backend menjaga minimal tetap ada satu akun admin sehingga akses dashboard tidak terkunci.</li>
+                <li>Menu profile admin membuka settings modal seperti user biasa, bukan pindah ke section lain.</li>
+                <li>Chart token usage memiliki empty state yang menjelaskan kenapa grafik belum muncul.</li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <span>Chatbot Deka - Frontend Report</span>
+            <span>Lanjutan Admin | 1</span>
+        </div>
+    </section>
+
+    <section class="page">
+        <h2>Timeline Tambahan</h2>
+        <div class="grid grid-2">
+            <div class="card">
+                <h3>Admin Profile Menu</h3>
+                <p class="muted">Dropdown profile admin dipertahankan seperti pola user menu dan item Settings membuka modal pengaturan akun.</p>
+            </div>
+            <div class="card">
+                <h3>Users Section</h3>
+                <p class="muted">Tabel daftar pengguna dilengkapi tombol tambah, aksi edit, aksi hapus, dan kolom aksi yang konsisten.</p>
+            </div>
+            <div class="card">
+                <h3>User Form Modal</h3>
+                <p class="muted">Form reusable dipakai untuk tambah dan edit, lengkap dengan validasi error dari backend.</p>
+            </div>
+            <div class="card">
+                <h3>Token Empty State</h3>
+                <p class="muted">Area chart diganti dengan pesan kosong saat total token masih 0 agar dashboard tidak terlihat blank.</p>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Alur CRUD Kelola Pengguna</h2>
+            <div class="flow">
+                <div class="step">
+                    <strong>Admin</strong>
+                    Buka menu Kelola Pengguna
+                </div>
+                <div class="step">
+                    <strong>Form</strong>
+                    Tambah atau edit data user
+                </div>
+                <div class="step">
+                    <strong>Inertia</strong>
+                    Submit ke route admin users
+                </div>
+                <div class="step">
+                    <strong>Backend</strong>
+                    Validasi dan simpan data
+                </div>
+                <div class="step">
+                    <strong>UI</strong>
+                    Tabel refresh dan toast tampil
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Rincian Fitur Admin</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Area</th>
+                        <th>Status</th>
+                        <th>Keterangan</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Tambah pengguna</td>
+                        <td>Selesai</td>
+                        <td>Admin bisa membuat akun user atau admin baru melalui modal di dashboard.</td>
+                    </tr>
+                    <tr>
+                        <td>Edit pengguna</td>
+                        <td>Selesai</td>
+                        <td>Data nama, email, role, dan password dapat diperbarui dari tabel pengguna.</td>
+                    </tr>
+                    <tr>
+                        <td>Hapus pengguna</td>
+                        <td>Selesai</td>
+                        <td>Aksi hapus tersedia per baris dengan konfirmasi dan proteksi akun admin.</td>
+                    </tr>
+                    <tr>
+                        <td>Settings admin</td>
+                        <td>Selesai</td>
+                        <td>Dropdown profile admin membuka settings modal yang sama dengan user area.</td>
+                    </tr>
+                    <tr>
+                        <td>Distribusi token</td>
+                        <td>Selesai dasar</td>
+                        <td>Chart menampilkan empty state saat belum ada token, lalu otomatis menjadi pie chart saat data tersedia.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="footer">
+            <span>Chatbot Deka - Frontend Report</span>
+            <span>Lanjutan Admin | 2</span>
+        </div>
+    </section>
+
+    <section class="page">
+        <h2>Dokumentasi UI - Kelola Pengguna</h2>
+        <img class="shot" src="assets/admin-users-crud.png" alt="Halaman Kelola Pengguna admin">
+        <p class="caption">
+            Gambar 8. Section Kelola Pengguna pada admin dashboard berisi metric user, daftar pengguna,
+            role, status, total chat, aktivitas terakhir, dan area aksi CRUD.
+        </p>
+
+        <div class="footer">
+            <span>Chatbot Deka - Frontend Report</span>
+            <span>Lanjutan Admin | 3</span>
+        </div>
+    </section>
+
+    <section class="page">
+        <h2>Dokumentasi UI - Empty State Distribusi Token</h2>
+        <img class="shot" src="assets/admin-token-empty.png" alt="Empty state chart distribusi token">
+        <p class="caption">
+            Gambar 9. Area Distribusi Token diperbaiki agar tidak terlihat kosong saat belum ada data token.
+            Empty state menjelaskan bahwa data akan muncul setelah percakapan tersimpan dengan pemakaian token.
+        </p>
+
+        <div class="footer">
+            <span>Chatbot Deka - Frontend Report</span>
+            <span>Lanjutan Admin | 4</span>
+        </div>
+    </section>
+</body>
+</html>

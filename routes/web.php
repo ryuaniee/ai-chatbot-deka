@@ -21,6 +21,12 @@ Route::redirect('admin', '/admin/overview')
 Route::get('admin/activity-log/items', [AdminDashboardController::class, 'activityLogItems'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.activity-log.items');
+Route::get('admin/activity-log/report', [AdminDashboardController::class, 'activityLogReport'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.activity-log.report');
+Route::patch('admin/feedback-review/{feedback}/status', [AdminDashboardController::class, 'updateFeedbackReviewStatus'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.feedback-review.status');
 Route::post('admin/users', [AdminUserController::class, 'store'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.users.store');

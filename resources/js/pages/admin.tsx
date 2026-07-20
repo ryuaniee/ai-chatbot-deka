@@ -7,13 +7,13 @@ import {
     ChevronDown,
     Clock3,
     Download,
+    DollarSign,
     FileText,
     LayoutDashboard,
     MessageSquare,
     Pencil,
     Plus,
     Printer,
-    Search,
     ShieldCheck,
     Sparkles,
     ThumbsDown,
@@ -41,6 +41,9 @@ import {
 import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -98,7 +101,7 @@ type AdminUserItem = {
     id: number;
     name: string;
     email: string;
-    role: 'admin' | 'user';
+    role: string;
     status: 'active' | 'inactive';
     joinedAt: string;
     lastSeen: string;
@@ -118,6 +121,27 @@ type AdminActivityItem = {
     time: string;
 };
 
+type FeedbackReviewItem = {
+    id: number;
+    user: string;
+    email: string;
+    conversation: string;
+    answer: string;
+    reason: string;
+    status: 'open' | 'reviewing' | 'resolved';
+    createdAt: string;
+};
+
+type RoleItem = {
+    id: number;
+    slug: string;
+    name: string;
+    description: string;
+    permissions: string[];
+    usersCount: number;
+    system: boolean;
+};
+
 type ReportPeriod = 'week' | 'month' | 'year';
 
 type ChatTrendItem = {
@@ -129,6 +153,8 @@ type ChatTrendItem = {
 type SectionId =
     | 'overview'
     | 'users'
+    | 'roles'
+    | 'feedback-review'
     | 'activity-log'
     | 'token-usage'
     | 'chat-trend'
@@ -146,6 +172,7 @@ type AdminPageProps = {
     tokenUsageItems?: TokenUsageItem[];
     adminUsers?: AdminUserItem[];
     adminActivityItems?: AdminActivityItem[];
+    feedbackReviewItems?: FeedbackReviewItem[];
     chatTrendItems?: ChatTrendItem[];
     feedbackChartItems?: {
         month: string;
@@ -186,9 +213,14 @@ type ActivityLogLivePayload = {
 type AdminUserFormData = {
     name: string;
     email: string;
-    role: AdminUserItem['role'];
+    role: string;
     password: string;
     password_confirmation: string;
+};
+
+type AdminRoleFormData = {
+    name: string;
+    description: string;
 };
 
 const emptyAdminUserForm: AdminUserFormData = {
@@ -198,6 +230,37 @@ const emptyAdminUserForm: AdminUserFormData = {
     password: '',
     password_confirmation: '',
 };
+
+const emptyAdminRoleForm: AdminRoleFormData = {
+    name: '',
+    description: '',
+};
+
+const defaultRoleItems: RoleItem[] = [
+    {
+        id: 1,
+        slug: 'admin',
+        name: 'Admin',
+        description: 'Akses penuh untuk mengatur dasbor dan pengguna.',
+        permissions: [
+            'Dashboard',
+            'Analytic',
+            'Kelola pengguna',
+            'Log aktivitas',
+        ],
+        usersCount: 0,
+        system: true,
+    },
+    {
+        id: 2,
+        slug: 'user',
+        name: 'Pengguna',
+        description: 'Akses percakapan chatbot dan riwayat milik akun sendiri.',
+        permissions: ['Chatbot', 'Riwayat chat', 'Profil akun'],
+        usersCount: 0,
+        system: true,
+    },
+];
 
 const metricIcons = {
     message: MessageSquare,
@@ -381,7 +444,7 @@ const adminActivityItems: AdminActivityItem[] = [
         admin: 'Admin Deka',
         email: 'admin@deka.dev',
         category: 'system',
-        action: 'Melihat token usage',
+        action: 'Melihat pemakaian token',
         target: 'Token AI',
         detail: 'Memantau pemakaian token berdasarkan pengguna aktif.',
         ipAddress: '192.168.10.14',
@@ -447,6 +510,8 @@ const totalTokenUsage = tokenUsageItems.reduce(
     (total, item) => total + item.totalTokens,
     0,
 );
+const tokenInputPricePerMillion = 0.15;
+const tokenOutputPricePerMillion = 0.6;
 const totalLikes = conversations.reduce(
     (total, conversation) => total + conversation.likes,
     0,
@@ -491,7 +556,7 @@ const metrics: Metric[] = [
     {
         label: 'User Aktif',
         value: formatNumber(activeUsers),
-        description: 'Pengguna aktif dari data dummy saat ini.',
+        description: 'Pengguna aktif dari data contoh saat ini.',
         tone: 'neutral',
         icon: 'users',
     },
@@ -511,15 +576,27 @@ const navigation: {
     },
     {
         id: 'token-usage',
-        label: 'Token Usage',
+        label: 'Analytic',
         description: 'Pemakaian token AI per pengguna',
         icon: Sparkles,
     },
     {
+        id: 'feedback-review',
+        label: 'Review Feedback',
+        description: 'Alasan dislike dan jawaban yang perlu ditinjau',
+        icon: ThumbsDown,
+    },
+    {
         id: 'users',
         label: 'Kelola Pengguna',
-        description: 'Admin, user, login, dan role',
+        description: 'Admin, pengguna, dan masuk',
         icon: Users,
+    },
+    {
+        id: 'roles',
+        label: 'Kelola Roles',
+        description: 'Tambah role tampilan admin',
+        icon: ShieldCheck,
     },
     {
         id: 'activity-log',
@@ -574,6 +651,17 @@ function updateActivityPeriod(period: ReportPeriod, search?: string) {
     );
 }
 
+function openActivityLogReport(period: ReportPeriod, search?: string) {
+    const params = new URLSearchParams({ period });
+    const normalizedSearch = search?.trim();
+
+    if (normalizedSearch) {
+        params.set('search', normalizedSearch);
+    }
+
+    window.open(`/admin/activity-log/report?${params.toString()}`, '_blank');
+}
+
 export default function AdminPage() {
     const {
         auth,
@@ -583,6 +671,7 @@ export default function AdminPage() {
         tokenUsageItems = [],
         adminUsers = [],
         adminActivityItems = [],
+        feedbackReviewItems = [],
         chatTrendItems = [],
         feedbackChartItems = [],
         totals,
@@ -593,12 +682,20 @@ export default function AdminPage() {
         useState(adminActivityItems);
     const [liveActivityTotals, setLiveActivityTotals] =
         useState<ActivityLogTotals | null>(null);
+    const [localFeedbackReviewItems, setLocalFeedbackReviewItems] =
+        useState(feedbackReviewItems);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [userDialogOpen, setUserDialogOpen] = useState(false);
+    const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+    const [selectedRole, setSelectedRole] = useState<RoleItem | null>(null);
     const [selectedUser, setSelectedUser] = useState<AdminUserItem | null>(
         null,
     );
     const userForm = useForm<AdminUserFormData>(emptyAdminUserForm);
+    const [roleForm, setRoleForm] =
+        useState<AdminRoleFormData>(emptyAdminRoleForm);
+    const [localRoleItems, setLocalRoleItems] =
+        useState<RoleItem[]>(defaultRoleItems);
     const [activityLiveStatus, setActivityLiveStatus] = useState<
         'live' | 'updating' | 'error'
     >('live');
@@ -606,6 +703,40 @@ export default function AdminPage() {
     const totalTokenUsage =
         totals?.totalTokenUsage ??
         tokenUsageItems.reduce((total, item) => total + item.totalTokens, 0);
+    const totalPromptTokens = tokenUsageItems.reduce(
+        (total, item) => total + item.promptTokens,
+        0,
+    );
+    const totalCompletionTokens = tokenUsageItems.reduce(
+        (total, item) => total + item.completionTokens,
+        0,
+    );
+    const totalAiRequests = tokenUsageItems.reduce(
+        (total, item) => total + item.requests,
+        0,
+    );
+    const estimatedInputCost =
+        (totalPromptTokens / 1_000_000) * tokenInputPricePerMillion;
+    const estimatedOutputCost =
+        (totalCompletionTokens / 1_000_000) * tokenOutputPricePerMillion;
+    const estimatedTokenCost = estimatedInputCost + estimatedOutputCost;
+    const averageTokensPerRequest = Math.round(
+        totalTokenUsage / Math.max(totalAiRequests, 1),
+    );
+    const topTokenUser =
+        tokenUsageItems.reduce<TokenUsageItem | null>(
+            (topUser, item) =>
+                !topUser || item.totalTokens > topUser.totalTokens
+                    ? item
+                    : topUser,
+            null,
+        ) ?? null;
+    const promptTokenShare = Math.round(
+        (totalPromptTokens / Math.max(totalTokenUsage, 1)) * 100,
+    );
+    const completionTokenShare = Math.round(
+        (totalCompletionTokens / Math.max(totalTokenUsage, 1)) * 100,
+    );
     const activeUsers =
         totals?.activeUsers ??
         adminUsers.filter((item) => item.status === 'active').length;
@@ -615,6 +746,14 @@ export default function AdminPage() {
     const totalUserConversations =
         totals?.totalUserConversations ??
         adminUsers.reduce((total, item) => total + item.conversations, 0);
+    const roleItems = localRoleItems.map((role) => ({
+        ...role,
+        usersCount: adminUsers.filter((user) => user.role === role.slug).length,
+    }));
+    const defaultUserRole =
+        roleItems.find((item) => item.slug === 'user')?.slug ??
+        roleItems[0]?.slug ??
+        'user';
     const activityPeriod = filters?.period ?? 'month';
     const activityStats = {
         activityToday:
@@ -626,6 +765,15 @@ export default function AdminPage() {
         reportExports:
             liveActivityTotals?.reportExports ?? totals?.reportExports ?? 0,
     };
+    const openFeedbackReviews = localFeedbackReviewItems.filter(
+        (item) => item.status === 'open',
+    ).length;
+    const activeFeedbackReviews = localFeedbackReviewItems.filter(
+        (item) => item.status !== 'resolved',
+    ).length;
+    const resolvedFeedbackReviews = localFeedbackReviewItems.filter(
+        (item) => item.status === 'resolved',
+    ).length;
     const profileInitials = auth.user.name
         .split(' ')
         .map((name) => name[0])
@@ -641,6 +789,10 @@ export default function AdminPage() {
         setLiveActivityItems(adminActivityItems);
         setLiveActivityTotals(null);
     }, [adminActivityItems]);
+
+    useEffect(() => {
+        setLocalFeedbackReviewItems(feedbackReviewItems);
+    }, [feedbackReviewItems]);
 
     useEffect(() => {
         if (activeSection !== 'activity-log') {
@@ -706,7 +858,7 @@ export default function AdminPage() {
     const openCreateUserDialog = () => {
         setSelectedUser(null);
         userForm.clearErrors();
-        userForm.setData({ ...emptyAdminUserForm });
+        userForm.setData({ ...emptyAdminUserForm, role: defaultUserRole });
         setUserDialogOpen(true);
     };
 
@@ -727,7 +879,7 @@ export default function AdminPage() {
         setUserDialogOpen(false);
         setSelectedUser(null);
         userForm.clearErrors();
-        userForm.setData({ ...emptyAdminUserForm });
+        userForm.setData({ ...emptyAdminUserForm, role: defaultUserRole });
     };
 
     const handleUserSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -755,12 +907,129 @@ export default function AdminPage() {
             return;
         }
 
-        if (! window.confirm(`Hapus pengguna ${user.email}?`)) {
+        if (!window.confirm(`Hapus pengguna ${user.email}?`)) {
             return;
         }
 
         router.delete(`/admin/users/${user.id}`, {
             preserveScroll: true,
+        });
+    };
+
+    const handleRoleSubmit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        const name = roleForm.name.trim();
+
+        if (!name) {
+            return;
+        }
+
+        const slug = name
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '');
+
+        if (
+            !slug ||
+            localRoleItems.some(
+                (role) => role.slug === slug && role.id !== selectedRole?.id,
+            )
+        ) {
+            return;
+        }
+
+        if (selectedRole) {
+            setLocalRoleItems((items) =>
+                items.map((role) =>
+                    role.id === selectedRole.id
+                        ? {
+                              ...role,
+                              slug: role.system ? role.slug : slug,
+                              name,
+                              description:
+                                  roleForm.description.trim() ||
+                                  'Role pengguna kustom.',
+                          }
+                        : role,
+                ),
+            );
+        } else {
+            setLocalRoleItems((items) => [
+                ...items,
+                {
+                    id: Date.now(),
+                    slug,
+                    name,
+                    description:
+                        roleForm.description.trim() || 'Role pengguna kustom.',
+                    permissions: ['Chatbot'],
+                    usersCount: 0,
+                    system: false,
+                },
+            ]);
+        }
+
+        setRoleForm(emptyAdminRoleForm);
+        setSelectedRole(null);
+        setRoleDialogOpen(false);
+    };
+
+    const handleDeleteRole = (role: RoleItem) => {
+        if (role.system || role.usersCount > 0) {
+            return;
+        }
+
+        if (!window.confirm(`Hapus role ${role.name}?`)) {
+            return;
+        }
+
+        setLocalRoleItems((items) =>
+            items.filter((item) => item.id !== role.id),
+        );
+    };
+
+    const openEditRoleDialog = (role: RoleItem) => {
+        setSelectedRole(role);
+        setRoleForm({
+            name: role.name,
+            description: role.description,
+        });
+        setRoleDialogOpen(true);
+    };
+
+    const closeRoleDialog = () => {
+        setRoleDialogOpen(false);
+        setSelectedRole(null);
+        setRoleForm(emptyAdminRoleForm);
+    };
+
+    const updateFeedbackReviewStatus = (
+        id: number,
+        status: FeedbackReviewItem['status'],
+    ) => {
+        setLocalFeedbackReviewItems((items) =>
+            items.map((item) => (item.id === id ? { ...item, status } : item)),
+        );
+
+        const csrfToken = document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute('content');
+
+        if (!csrfToken) {
+            return;
+        }
+
+        void fetch(`/admin/feedback-review/${id}/status`, {
+            method: 'PATCH',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            body: JSON.stringify({ status }),
+        }).catch((error) => {
+            console.error('Failed to update feedback review status:', error);
         });
     };
 
@@ -888,41 +1157,6 @@ export default function AdminPage() {
                                 </p>
                             </div>
                         </div>
-
-                        <div className="flex items-center gap-2">
-                            <div className="relative hidden w-72 md:block">
-                                <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                <Input
-                                    className="h-9 pl-9"
-                                    defaultValue={filters?.search ?? ''}
-                                    onKeyDown={(event) => {
-                                        if (event.key !== 'Enter') {
-                                            return;
-                                        }
-
-                                        const value =
-                                            event.currentTarget.value.trim();
-
-                                        router.get(
-                                            sectionHref(activeSection),
-                                            {
-                                                ...(value === ''
-                                                    ? {}
-                                                    : { search: value }),
-                                                ...(activeSection ===
-                                                'activity-log'
-                                                    ? {
-                                                          period: activityPeriod,
-                                                      }
-                                                    : {}),
-                                            },
-                                            { preserveState: false },
-                                        );
-                                    }}
-                                    placeholder="Cari data dashboard"
-                                />
-                            </div>
-                        </div>
                     </header>
 
                     <main className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-hidden px-4 py-6 md:px-6">
@@ -979,128 +1213,371 @@ export default function AdminPage() {
                         )}
 
                         {activeSection === 'token-usage' && (
-                            <section className="grid min-h-0 items-start gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-                                <Card className="rounded-lg">
-                                    <CardHeader className="gap-3 pb-4">
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <section className="flex min-h-0 flex-1 flex-col gap-6">
+                                <div className="grid shrink-0 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+                                    <UserMetricCard
+                                        icon={Sparkles}
+                                        label="Total token"
+                                        tone="blue"
+                                        value={formatNumber(totalTokenUsage)}
+                                    />
+                                    <UserMetricCard
+                                        icon={DollarSign}
+                                        label="Estimasi biaya"
+                                        tone="green"
+                                        value={formatUsd(estimatedTokenCost)}
+                                    />
+                                    <UserMetricCard
+                                        icon={BarChart3}
+                                        label="Total request"
+                                        tone="neutral"
+                                        value={formatNumber(totalAiRequests)}
+                                    />
+                                    <UserMetricCard
+                                        icon={MessageSquare}
+                                        label="Rata-rata / request"
+                                        tone="amber"
+                                        value={formatNumber(
+                                            averageTokensPerRequest,
+                                        )}
+                                    />
+                                </div>
+
+                                <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+                                    <div className="grid gap-6">
+                                        <Card className="rounded-lg">
+                                            <CardHeader className="gap-3 pb-4">
+                                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div>
+                                                        <CardTitle>
+                                                            Usage token per user
+                                                        </CardTitle>
+                                                        <CardDescription>
+                                                            Ringkasan token AI
+                                                            yang dipakai tiap
+                                                            pengguna. Input
+                                                            adalah token dari
+                                                            pertanyaan dan
+                                                            konteks, output
+                                                            adalah token jawaban
+                                                            AI.
+                                                        </CardDescription>
+                                                    </div>
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="w-fit"
+                                                    >
+                                                        {formatNumber(
+                                                            totalTokenUsage,
+                                                        )}{' '}
+                                                        total token
+                                                    </Badge>
+                                                </div>
+                                            </CardHeader>
+                                            <CardContent className="flex flex-1 flex-col gap-4">
+                                                <div className="grid gap-3 sm:grid-cols-3">
+                                                    <TokenInsightCard
+                                                        label="Pengguna tertinggi"
+                                                        value={
+                                                            topTokenUser
+                                                                ? topTokenUser.user
+                                                                : '-'
+                                                        }
+                                                        detail={
+                                                            topTokenUser
+                                                                ? `${formatNumber(topTokenUser.totalTokens)} token`
+                                                                : 'Belum ada data'
+                                                        }
+                                                    />
+                                                    <TokenInsightCard
+                                                        label="Porsi input"
+                                                        value={`${promptTokenShare}%`}
+                                                        detail={`${formatNumber(totalPromptTokens)} token pertanyaan`}
+                                                    />
+                                                    <TokenInsightCard
+                                                        label="Porsi output"
+                                                        value={`${completionTokenShare}%`}
+                                                        detail={`${formatNumber(totalCompletionTokens)} token jawaban`}
+                                                    />
+                                                </div>
+                                                <div className="overflow-hidden rounded-md border">
+                                                    <div className="min-w-0">
+                                                        <div className="grid grid-cols-[minmax(140px,1fr)_70px_96px_96px_106px] items-center gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                            <span>
+                                                                Pengguna
+                                                            </span>
+                                                            <span className="text-right">
+                                                                Req
+                                                            </span>
+                                                            <span className="text-right">
+                                                                Input
+                                                            </span>
+                                                            <span className="text-right">
+                                                                Output
+                                                            </span>
+                                                            <span className="text-right">
+                                                                Total
+                                                            </span>
+                                                        </div>
+                                                        {tokenUsageItems.length >
+                                                        0 ? (
+                                                            tokenUsageItems.map(
+                                                                (item) => (
+                                                                    <div
+                                                                        key={
+                                                                            item.email
+                                                                        }
+                                                                        className="grid grid-cols-[minmax(140px,1fr)_70px_96px_96px_106px] items-center gap-3 border-b px-4 py-3 last:border-b-0"
+                                                                    >
+                                                                        <div className="min-w-0">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <p className="truncate text-sm leading-5 font-medium">
+                                                                                    {
+                                                                                        item.user
+                                                                                    }
+                                                                                </p>
+                                                                                <Badge
+                                                                                    variant="outline"
+                                                                                    className="hidden text-[10px] capitalize sm:inline-flex"
+                                                                                >
+                                                                                    {
+                                                                                        item.role
+                                                                                    }
+                                                                                </Badge>
+                                                                            </div>
+                                                                            <p className="truncate text-xs text-muted-foreground">
+                                                                                {
+                                                                                    item.email
+                                                                                }
+                                                                            </p>
+                                                                        </div>
+                                                                        <TokenCell
+                                                                            value={formatNumber(
+                                                                                item.requests,
+                                                                            )}
+                                                                        />
+                                                                        <TokenCell
+                                                                            value={formatNumber(
+                                                                                item.promptTokens,
+                                                                            )}
+                                                                        />
+                                                                        <TokenCell
+                                                                            value={formatNumber(
+                                                                                item.completionTokens,
+                                                                            )}
+                                                                        />
+                                                                        <div className="text-right">
+                                                                            <p className="text-sm leading-5 font-semibold tabular-nums">
+                                                                                {formatNumber(
+                                                                                    item.totalTokens,
+                                                                                )}
+                                                                            </p>
+                                                                            <p className="text-xs text-muted-foreground tabular-nums">
+                                                                                {formatNumber(
+                                                                                    Math.round(
+                                                                                        item.totalTokens /
+                                                                                            Math.max(
+                                                                                                item.requests,
+                                                                                                1,
+                                                                                            ),
+                                                                                    ),
+                                                                                )}
+                                                                                /req
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                ),
+                                                            )
+                                                        ) : (
+                                                            <EmptyTableRow text="Belum ada pemakaian token dari chat AI." />
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+
+                                    <AdminTokenUsageChart
+                                        data={tokenUsageItems}
+                                        className="flex min-h-[520px] flex-col"
+                                        chartClassName="h-full min-h-[260px] max-h-[320px] max-w-[320px]"
+                                    />
+                                </div>
+                            </section>
+                        )}
+
+                        {activeSection === 'feedback-review' && (
+                            <section className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-6">
+                                <div className="grid shrink-0 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+                                    <UserMetricCard
+                                        icon={ThumbsDown}
+                                        label="Feedback aktif"
+                                        tone="amber"
+                                        value={formatNumber(
+                                            activeFeedbackReviews,
+                                        )}
+                                    />
+                                    <UserMetricCard
+                                        icon={AlertTriangle}
+                                        label="Belum ditinjau"
+                                        tone="blue"
+                                        value={formatNumber(
+                                            openFeedbackReviews,
+                                        )}
+                                    />
+                                    <UserMetricCard
+                                        icon={ShieldCheck}
+                                        label="Selesai"
+                                        tone="green"
+                                        value={formatNumber(
+                                            resolvedFeedbackReviews,
+                                        )}
+                                    />
+                                    <UserMetricCard
+                                        icon={MessageSquare}
+                                        label="Total dislike"
+                                        tone="neutral"
+                                        value={formatNumber(
+                                            totals?.totalDislikes ??
+                                                totalDislikes,
+                                        )}
+                                    />
+                                </div>
+
+                                <Card className="flex min-h-0 flex-col rounded-lg">
+                                    <CardHeader className="gap-3">
+                                        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                                             <div>
                                                 <CardTitle>
-                                                    Usage token per user
+                                                    Review alasan dislike
                                                 </CardTitle>
                                                 <CardDescription>
-                                                    Ringkasan token AI yang
-                                                    dipakai tiap pengguna. Input
-                                                    adalah token dari pertanyaan
-                                                    dan konteks, output adalah
-                                                    token jawaban AI.
+                                                    Daftar jawaban AI yang
+                                                    mendapat dislike beserta
+                                                    alasan dari user.
                                                 </CardDescription>
                                             </div>
                                             <Badge
                                                 variant="secondary"
                                                 className="w-fit"
                                             >
-                                                {formatNumber(totalTokenUsage)}{' '}
-                                                total token
+                                                {formatNumber(
+                                                    localFeedbackReviewItems.length,
+                                                )}{' '}
+                                                feedback masuk
                                             </Badge>
                                         </div>
                                     </CardHeader>
-                                    <CardContent>
-                                        <div className="overflow-hidden rounded-md border">
-                                            <div className="min-w-0">
-                                                <div className="grid grid-cols-[minmax(140px,1fr)_70px_96px_96px_106px] items-center gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                    <CardContent className="min-h-0 flex-1">
+                                        <div className="h-full overflow-x-auto rounded-md border">
+                                            <div className="min-w-[920px]">
+                                                <div className="grid grid-cols-[minmax(190px,0.9fr)_minmax(230px,1fr)_minmax(260px,1.2fr)_140px_120px_170px] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                     <span>User</span>
-                                                    <span className="text-right">
-                                                        Req
+                                                    <span>Alasan</span>
+                                                    <span>
+                                                        Ringkasan jawaban
                                                     </span>
+                                                    <span>Status</span>
+                                                    <span>Waktu</span>
                                                     <span className="text-right">
-                                                        Input
-                                                    </span>
-                                                    <span className="text-right">
-                                                        Output
-                                                    </span>
-                                                    <span className="text-right">
-                                                        Total
+                                                        Aksi
                                                     </span>
                                                 </div>
-                                                {tokenUsageItems.length > 0 ? (
-                                                    tokenUsageItems.map(
+
+                                                {localFeedbackReviewItems.length >
+                                                0 ? (
+                                                    localFeedbackReviewItems.map(
                                                         (item) => (
                                                             <div
-                                                                key={item.email}
-                                                                className="grid grid-cols-[minmax(140px,1fr)_70px_96px_96px_106px] items-center gap-3 border-b px-4 py-3 last:border-b-0"
+                                                                key={item.id}
+                                                                className="grid grid-cols-[minmax(190px,0.9fr)_minmax(230px,1fr)_minmax(260px,1.2fr)_140px_120px_170px] gap-3 border-b px-4 py-4 last:border-b-0"
                                                             >
                                                                 <div className="min-w-0">
-                                                                    <div className="flex items-center gap-2">
-                                                                        <p className="truncate text-sm leading-5 font-medium">
-                                                                            {
-                                                                                item.user
-                                                                            }
-                                                                        </p>
-                                                                        <Badge
-                                                                            variant="outline"
-                                                                            className="hidden text-[10px] capitalize sm:inline-flex"
-                                                                        >
-                                                                            {
-                                                                                item.role
-                                                                            }
-                                                                        </Badge>
-                                                                    </div>
-                                                                    <p className="truncate text-xs text-muted-foreground">
+                                                                    <p className="truncate text-sm font-medium">
+                                                                        {
+                                                                            item.user
+                                                                        }
+                                                                    </p>
+                                                                    <p className="mt-1 truncate text-xs text-muted-foreground">
                                                                         {
                                                                             item.email
                                                                         }
                                                                     </p>
                                                                 </div>
-                                                                <TokenCell
-                                                                    value={formatNumber(
-                                                                        item.requests,
-                                                                    )}
-                                                                />
-                                                                <TokenCell
-                                                                    value={formatNumber(
-                                                                        item.promptTokens,
-                                                                    )}
-                                                                />
-                                                                <TokenCell
-                                                                    value={formatNumber(
-                                                                        item.completionTokens,
-                                                                    )}
-                                                                />
-                                                                <div className="text-right">
-                                                                    <p className="text-sm leading-5 font-semibold tabular-nums">
-                                                                        {formatNumber(
-                                                                            item.totalTokens,
-                                                                        )}
+                                                                <div className="min-w-0">
+                                                                    <p className="truncate text-sm font-medium">
+                                                                        {
+                                                                            item.reason
+                                                                        }
                                                                     </p>
-                                                                    <p className="text-xs text-muted-foreground tabular-nums">
-                                                                        {formatNumber(
-                                                                            Math.round(
-                                                                                item.totalTokens /
-                                                                                    Math.max(
-                                                                                        item.requests,
-                                                                                        1,
-                                                                                    ),
-                                                                            ),
-                                                                        )}
-                                                                        /req
+                                                                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                                        {
+                                                                            item.conversation
+                                                                        }
                                                                     </p>
+                                                                </div>
+                                                                <p className="line-clamp-2 text-sm leading-5 text-muted-foreground">
+                                                                    {
+                                                                        item.answer
+                                                                    }
+                                                                </p>
+                                                                <div>
+                                                                    <FeedbackReviewStatusBadge
+                                                                        status={
+                                                                            item.status
+                                                                        }
+                                                                    />
+                                                                </div>
+                                                                <p className="text-sm whitespace-nowrap text-muted-foreground">
+                                                                    {
+                                                                        item.createdAt
+                                                                    }
+                                                                </p>
+                                                                <div className="flex justify-end gap-2">
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
+                                                                        variant="outline"
+                                                                        disabled={
+                                                                            item.status ===
+                                                                            'reviewing'
+                                                                        }
+                                                                        onClick={() =>
+                                                                            updateFeedbackReviewStatus(
+                                                                                item.id,
+                                                                                'reviewing',
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Proses
+                                                                    </Button>
+                                                                    <Button
+                                                                        type="button"
+                                                                        size="sm"
+                                                                        disabled={
+                                                                            item.status ===
+                                                                            'resolved'
+                                                                        }
+                                                                        onClick={() =>
+                                                                            updateFeedbackReviewStatus(
+                                                                                item.id,
+                                                                                'resolved',
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Selesai
+                                                                    </Button>
                                                                 </div>
                                                             </div>
                                                         ),
                                                     )
                                                 ) : (
-                                                    <EmptyTableRow text="Belum ada pemakaian token dari chat AI." />
+                                                    <EmptyTableRow text="Belum ada alasan dislike yang masuk." />
                                                 )}
                                             </div>
                                         </div>
                                     </CardContent>
                                 </Card>
-
-                                <AdminTokenUsageChart
-                                    data={tokenUsageItems}
-                                    className="flex flex-col"
-                                    chartClassName="h-[240px] max-h-[240px] max-w-[260px]"
-                                />
                             </section>
                         )}
 
@@ -1297,6 +1774,196 @@ export default function AdminPage() {
                                                 memiliki sumber knowledge yang
                                                 kuat.
                                             </p>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </section>
+                        )}
+
+                        {activeSection === 'roles' && (
+                            <section className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-6">
+                                <div className="grid shrink-0 gap-4 md:grid-cols-2 2xl:grid-cols-4">
+                                    <UserMetricCard
+                                        icon={ShieldCheck}
+                                        label="Total roles"
+                                        tone="blue"
+                                        value={formatNumber(roleItems.length)}
+                                    />
+                                    <UserMetricCard
+                                        icon={ShieldCheck}
+                                        label="Role bawaan"
+                                        tone="neutral"
+                                        value={formatNumber(
+                                            roleItems.filter(
+                                                (item) => item.system,
+                                            ).length,
+                                        )}
+                                    />
+                                    <UserMetricCard
+                                        icon={Users}
+                                        label="Role kustom"
+                                        tone="green"
+                                        value={formatNumber(
+                                            roleItems.filter(
+                                                (item) => !item.system,
+                                            ).length,
+                                        )}
+                                    />
+                                    <UserMetricCard
+                                        icon={Users}
+                                        label="Role terpakai"
+                                        tone="amber"
+                                        value={formatNumber(
+                                            roleItems.filter(
+                                                (item) => item.usersCount > 0,
+                                            ).length,
+                                        )}
+                                    />
+                                </div>
+
+                                <Card className="flex min-h-0 flex-col rounded-lg">
+                                    <CardHeader className="gap-3">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                            <div>
+                                                <CardTitle>
+                                                    Daftar Roles
+                                                </CardTitle>
+                                                <CardDescription>
+                                                    Role yang tersedia untuk
+                                                    pilihan pengguna di
+                                                    dashboard.
+                                                </CardDescription>
+                                            </div>
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                onClick={() => {
+                                                    setSelectedRole(null);
+                                                    setRoleForm(
+                                                        emptyAdminRoleForm,
+                                                    );
+                                                    setRoleDialogOpen(true);
+                                                }}
+                                            >
+                                                <Plus className="h-4 w-4" />
+                                                Tambah Role
+                                            </Button>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="min-h-0 flex-1">
+                                        <div className="h-full overflow-hidden rounded-md border">
+                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_120px_120px_minmax(220px,1fr)_120px]">
+                                                <span>Role</span>
+                                                <span className="hidden md:block">
+                                                    Tipe
+                                                </span>
+                                                <span className="hidden md:block">
+                                                    Akun
+                                                </span>
+                                                <span className="hidden md:block">
+                                                    Akses
+                                                </span>
+                                                <span className="text-right">
+                                                    Aksi
+                                                </span>
+                                            </div>
+
+                                            {roleItems.map((item) => {
+                                                const canDelete =
+                                                    !item.system &&
+                                                    item.usersCount === 0;
+
+                                                return (
+                                                    <div
+                                                        key={item.id}
+                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_120px_120px_minmax(220px,1fr)_120px]"
+                                                    >
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="truncate text-sm font-medium">
+                                                                    {item.name}
+                                                                </p>
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="text-[10px] md:hidden"
+                                                                >
+                                                                    {item.system
+                                                                        ? 'Bawaan'
+                                                                        : 'Kustom'}
+                                                                </Badge>
+                                                            </div>
+                                                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                                {
+                                                                    item.description
+                                                                }
+                                                            </p>
+                                                        </div>
+                                                        <div className="hidden md:block">
+                                                            <Badge variant="outline">
+                                                                {item.system
+                                                                    ? 'Bawaan'
+                                                                    : 'Kustom'}
+                                                            </Badge>
+                                                        </div>
+                                                        <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
+                                                            {formatNumber(
+                                                                item.usersCount,
+                                                            )}
+                                                        </p>
+                                                        <div className="hidden min-w-0 flex-wrap gap-2 md:flex">
+                                                            {item.permissions.map(
+                                                                (
+                                                                    permission,
+                                                                ) => (
+                                                                    <Badge
+                                                                        key={
+                                                                            permission
+                                                                        }
+                                                                        variant="secondary"
+                                                                        className="font-normal"
+                                                                    >
+                                                                        {
+                                                                            permission
+                                                                        }
+                                                                    </Badge>
+                                                                ),
+                                                            )}
+                                                        </div>
+                                                        <div className="flex justify-end gap-1">
+                                                            <Button
+                                                                type="button"
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                title="Edit role"
+                                                                onClick={() =>
+                                                                    openEditRoleDialog(
+                                                                        item,
+                                                                    )
+                                                                }
+                                                            >
+                                                                <Pencil className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                type="button"
+                                                                size="icon"
+                                                                variant="ghost"
+                                                                title="Hapus role"
+                                                                disabled={
+                                                                    !canDelete
+                                                                }
+                                                                onClick={() =>
+                                                                    handleDeleteRole(
+                                                                        item,
+                                                                    )
+                                                                }
+                                                                className="text-destructive hover:text-destructive"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -1526,7 +2193,7 @@ export default function AdminPage() {
                                                     10 detik.
                                                 </CardDescription>
                                             </div>
-                                            <div className="flex flex-wrap gap-2">
+                                            <div className="flex flex-wrap items-center gap-2">
                                                 <Badge
                                                     variant="outline"
                                                     className={
@@ -1544,88 +2211,102 @@ export default function AdminPage() {
                                                           ? 'Memuat realtime'
                                                           : 'Live realtime'}
                                                 </Badge>
-                                                <Button
-                                                    variant={
-                                                        activityPeriod ===
-                                                        'week'
-                                                            ? 'default'
-                                                            : 'outline'
-                                                    }
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        updateActivityPeriod(
-                                                            'week',
-                                                            filters?.search,
-                                                        )
-                                                    }
-                                                >
-                                                    <Clock3 className="h-4 w-4" />
-                                                    Mingguan
-                                                </Button>
-                                                <Button
-                                                    variant={
-                                                        activityPeriod ===
-                                                        'month'
-                                                            ? 'default'
-                                                            : 'outline'
-                                                    }
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        updateActivityPeriod(
-                                                            'month',
-                                                            filters?.search,
-                                                        )
-                                                    }
-                                                >
-                                                    <Clock3 className="h-4 w-4" />
-                                                    Bulanan
-                                                </Button>
-                                                <Button
-                                                    variant={
-                                                        activityPeriod ===
-                                                        'year'
-                                                            ? 'default'
-                                                            : 'outline'
-                                                    }
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        updateActivityPeriod(
-                                                            'year',
-                                                            filters?.search,
-                                                        )
-                                                    }
-                                                >
-                                                    <Clock3 className="h-4 w-4" />
-                                                    Tahunan
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        exportAdminActivityReport(
-                                                            activityPeriod,
-                                                            liveActivityItems,
-                                                        )
-                                                    }
-                                                >
-                                                    <Download className="h-4 w-4" />
-                                                    CSV
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    onClick={() =>
-                                                        printAdminDashboardReport(
-                                                            'month',
-                                                            metrics,
-                                                            conversations,
-                                                            tokenUsageItems,
-                                                            liveActivityItems,
-                                                        )
-                                                    }
-                                                >
-                                                    <Printer className="h-4 w-4" />
-                                                    Cetak Semua
-                                                </Button>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger
+                                                        asChild
+                                                    >
+                                                        <Button size="sm">
+                                                            <FileText className="h-4 w-4" />
+                                                            Laporan
+                                                            <ChevronDown className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent
+                                                        align="end"
+                                                        className="w-56"
+                                                    >
+                                                        <DropdownMenuLabel>
+                                                            Periode
+                                                        </DropdownMenuLabel>
+                                                        <DropdownMenuItem
+                                                            onSelect={() =>
+                                                                updateActivityPeriod(
+                                                                    'week',
+                                                                    filters?.search,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Clock3 className="h-4 w-4" />
+                                                            Mingguan
+                                                            {activityPeriod ===
+                                                                'week' && (
+                                                                <span className="ml-auto text-xs text-muted-foreground">
+                                                                    Aktif
+                                                                </span>
+                                                            )}
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onSelect={() =>
+                                                                updateActivityPeriod(
+                                                                    'month',
+                                                                    filters?.search,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Clock3 className="h-4 w-4" />
+                                                            Bulanan
+                                                            {activityPeriod ===
+                                                                'month' && (
+                                                                <span className="ml-auto text-xs text-muted-foreground">
+                                                                    Aktif
+                                                                </span>
+                                                            )}
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onSelect={() =>
+                                                                updateActivityPeriod(
+                                                                    'year',
+                                                                    filters?.search,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Clock3 className="h-4 w-4" />
+                                                            Tahunan
+                                                            {activityPeriod ===
+                                                                'year' && (
+                                                                <span className="ml-auto text-xs text-muted-foreground">
+                                                                    Aktif
+                                                                </span>
+                                                            )}
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuSeparator />
+                                                        <DropdownMenuLabel>
+                                                            Export
+                                                        </DropdownMenuLabel>
+                                                        <DropdownMenuItem
+                                                            onSelect={() =>
+                                                                exportAdminActivityReport(
+                                                                    activityPeriod,
+                                                                    liveActivityItems,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Download className="h-4 w-4" />
+                                                            Excel
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                            onSelect={() =>
+                                                                openActivityLogReport(
+                                                                    activityPeriod,
+                                                                    filters?.search,
+                                                                )
+                                                            }
+                                                        >
+                                                            <Printer className="h-4 w-4" />
+                                                            PDF
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
                                             </div>
                                         </div>
                                     </CardHeader>
@@ -1715,6 +2396,74 @@ export default function AdminPage() {
                 isOpen={settingsOpen}
                 onClose={() => setSettingsOpen(false)}
             />
+            {roleDialogOpen && (
+                <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[1.5px]">
+                    <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-xl">
+                        <div className="mb-5">
+                            <h2 className="text-lg font-semibold">
+                                {selectedRole ? 'Edit Role' : 'Tambah Role'}
+                            </h2>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                                Role tampil di daftar role dan pilihan role
+                                pengguna.
+                            </p>
+                        </div>
+
+                        <form onSubmit={handleRoleSubmit} className="space-y-4">
+                            <div className="grid gap-2">
+                                <Label htmlFor="admin-role-name">
+                                    Nama Role
+                                </Label>
+                                <Input
+                                    id="admin-role-name"
+                                    value={roleForm.name}
+                                    onChange={(event) =>
+                                        setRoleForm((form) => ({
+                                            ...form,
+                                            name: event.target.value,
+                                        }))
+                                    }
+                                    required
+                                    placeholder="Contoh: Supervisor"
+                                />
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="admin-role-description">
+                                    Deskripsi
+                                </Label>
+                                <Input
+                                    id="admin-role-description"
+                                    value={roleForm.description}
+                                    onChange={(event) =>
+                                        setRoleForm((form) => ({
+                                            ...form,
+                                            description: event.target.value,
+                                        }))
+                                    }
+                                    placeholder="Keterangan singkat role"
+                                />
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={closeRoleDialog}
+                                >
+                                    Batal
+                                </Button>
+                                <Button type="submit">
+                                    <Plus className="h-4 w-4" />
+                                    {selectedRole
+                                        ? 'Simpan Role'
+                                        : 'Tambah Role'}
+                                </Button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
             {userDialogOpen && (
                 <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[1.5px]">
                     <div className="w-full max-w-lg rounded-lg border bg-background p-6 shadow-xl">
@@ -1729,10 +2478,7 @@ export default function AdminPage() {
                             </p>
                         </div>
 
-                        <form
-                            onSubmit={handleUserSubmit}
-                            className="space-y-4"
-                        >
+                        <form onSubmit={handleUserSubmit} className="space-y-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="admin-user-name">Nama</Label>
                                 <Input
@@ -1778,13 +2524,19 @@ export default function AdminPage() {
                                     onChange={(event) =>
                                         userForm.setData(
                                             'role',
-                                            event.target.value as AdminUserItem['role'],
+                                            event.target.value,
                                         )
                                     }
-                                    className="border-input bg-background ring-offset-background focus-visible:ring-ring h-9 rounded-md border px-3 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+                                    className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs ring-offset-background outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                                 >
-                                    <option value="user">User</option>
-                                    <option value="admin">Admin</option>
+                                    {roleItems.map((role) => (
+                                        <option
+                                            key={role.slug}
+                                            value={role.slug}
+                                        >
+                                            {role.name}
+                                        </option>
+                                    ))}
                                 </select>
                                 <InputError message={userForm.errors.role} />
                             </div>
@@ -1823,9 +2575,7 @@ export default function AdminPage() {
                                 <Input
                                     id="admin-user-password-confirmation"
                                     type="password"
-                                    value={
-                                        userForm.data.password_confirmation
-                                    }
+                                    value={userForm.data.password_confirmation}
                                     onChange={(event) =>
                                         userForm.setData(
                                             'password_confirmation',
@@ -1840,12 +2590,8 @@ export default function AdminPage() {
 
                             <InputError
                                 message={
-                                    (
-                                        userForm.errors as Record<
-                                            string,
-                                            string
-                                        >
-                                    ).user
+                                    (userForm.errors as Record<string, string>)
+                                        .user
                                 }
                             />
 
@@ -1944,195 +2690,147 @@ function reportPeriodLabel(period: ReportPeriod) {
     return labels[period];
 }
 
+function escapeHtml(value: string | number | null | undefined) {
+    return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
+
 function exportAdminActivityReport(
     period: ReportPeriod,
     items: AdminActivityItem[],
 ) {
     const periodLabel = reportPeriodLabel(period);
-    const rows = items.map((item) => [
-        item.admin,
-        item.email,
-        activityCategoryLabel(item.category),
-        item.action,
-        item.target,
-        item.detail,
-        item.ipAddress,
-        item.time,
-    ]);
-    const csv = [
-        [
-            'Admin',
-            'Email',
-            'Kategori',
-            'Aktivitas',
-            'Target',
-            'Detail',
-            'IP',
-            'Waktu',
-        ],
-        ...rows,
-    ]
-        .map((row) =>
-            row
-                .map((cell) => `"${String(cell).replaceAll('"', '""')}"`)
-                .join(','),
-        )
-        .join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const rowCount = Math.max(items.length, 25);
+    const rows = Array.from({ length: rowCount }, (_, index) => {
+        const item = items[index];
+
+        if (!item) {
+            return `
+   <Row ss:Height="22">
+    <Cell ss:StyleID="cellCenter"><Data ss:Type="Number">${index + 1}</Data></Cell>
+    <Cell ss:StyleID="cellCenter"><Data ss:Type="String"></Data></Cell>
+    <Cell ss:StyleID="cellLeft"><Data ss:Type="String"></Data></Cell>
+    <Cell ss:StyleID="cellLeft"><Data ss:Type="String"></Data></Cell>
+   </Row>`;
+        }
+
+        const activityText = `${escapeHtml(item.action)}${item.target ? ` - ${escapeHtml(item.target)}` : ''}`;
+        const commentsText = `${escapeHtml(item.detail)} | ${escapeHtml(activityCategoryLabel(item.category))} | ${escapeHtml(item.admin)} | IP: ${escapeHtml(item.ipAddress)}`;
+
+        return `
+   <Row ss:Height="26">
+    <Cell ss:StyleID="cellCenter"><Data ss:Type="Number">${index + 1}</Data></Cell>
+    <Cell ss:StyleID="cellCenter"><Data ss:Type="String">${escapeHtml(item.time)}</Data></Cell>
+    <Cell ss:StyleID="cellLeft"><Data ss:Type="String">${activityText}</Data></Cell>
+    <Cell ss:StyleID="cellLeft"><Data ss:Type="String">${commentsText}</Data></Cell>
+   </Row>`;
+    }).join('');
+
+    const excel = `<?xml version="1.0" encoding="utf-8"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <DocumentProperties xmlns="urn:schemas-microsoft-com:office:office">
+  <Author>Deka Chatbot</Author>
+  <LastAuthor>Deka Chatbot</LastAuthor>
+  <Created>${new Date().toISOString()}</Created>
+  <Version>16.00</Version>
+ </DocumentProperties>
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Bottom"/>
+   <Borders/>
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>
+   <Interior/>
+   <NumberFormat/>
+   <Protection/>
+  </Style>
+  <Style ss:ID="title">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="16" ss:Bold="1" ss:Color="#2F80ED" ss:Underline="Single"/>
+  </Style>
+  <Style ss:ID="header">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+   </Borders>
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Bold="1" ss:Color="#155FC4"/>
+   <Interior ss:Color="#E8F2FF" ss:Pattern="Solid"/>
+  </Style>
+  <Style ss:ID="cellCenter">
+   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+   </Borders>
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="10" ss:Color="#102033"/>
+  </Style>
+  <Style ss:ID="cellLeft">
+   <Alignment ss:Horizontal="Left" ss:Vertical="Center" ss:WrapText="1"/>
+   <Borders>
+    <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+    <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+    <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+    <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#B2C5DC"/>
+   </Borders>
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="10" ss:Color="#102033"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="Log Aktivitas Admin">
+  <Table ss:ExpandedColumnCount="4" ss:ExpandedRowCount="${rowCount + 3}" x:FullColumns="1"
+   x:FullRows="1" ss:DefaultRowHeight="20">
+   <Column ss:Width="40"/>
+   <Column ss:Width="120"/>
+   <Column ss:Width="380"/>
+   <Column ss:Width="260"/>
+   <Row ss:Height="40">
+    <Cell ss:MergeAcross="3" ss:StyleID="title"><Data ss:Type="String">LOG AKTIVITAS ADMIN</Data></Cell>
+   </Row>
+   <Row ss:Height="15"/>
+   <Row ss:Height="26">
+    <Cell ss:StyleID="header"><Data ss:Type="String">#</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Date</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Activities / Tasks / Items</Data></Cell>
+    <Cell ss:StyleID="header"><Data ss:Type="String">Comments</Data></Cell>
+   </Row>
+   ${rows}
+  </Table>
+  <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+   <PageSetup>
+    <Header x:Margin="0.3"/>
+    <Footer x:Margin="0.3"/>
+    <PageMargins x:Bottom="0.75" x:Left="0.7" x:Right="0.7" x:Top="0.75"/>
+   </PageSetup>
+   <Selected/>
+   <ProtectObjects>False</ProtectObjects>
+   <ProtectScenarios>False</ProtectScenarios>
+  </WorksheetOptions>
+ </Worksheet>
+</Workbook>`;
+    const blob = new Blob([excel], {
+        type: 'application/vnd.ms-excel;charset=utf-8',
+    });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
 
     link.href = url;
-    link.download = `log-aktivitas-admin-${period}.csv`;
+    link.download = `laporan-aktivitas-admin-${period}.xls`;
     link.click();
     URL.revokeObjectURL(url);
 
-    console.info(`Laporan aktivitas admin ${periodLabel} diexport.`);
-}
-
-function printAdminDashboardReport(
-    period: ReportPeriod,
-    metricItems: Metric[],
-    conversationItems: Conversation[],
-    tokenItems: TokenUsageItem[],
-    activityItems: AdminActivityItem[],
-) {
-    const periodLabel = reportPeriodLabel(period);
-    const metricCards = metricItems
-        .map(
-            (metric) => `
-                <div class="summary-card">
-                    <span>${metric.label}</span>
-                    <strong>${metric.value}</strong>
-                    <small>${metric.description}</small>
-                </div>
-            `,
-        )
-        .join('');
-    const feedbackRows = conversationItems
-        .map(
-            (item) => `
-                <tr>
-                    <td>${item.user}</td>
-                    <td>${formatNumber(item.likes)}</td>
-                    <td>${formatNumber(item.dislikes)}</td>
-                    <td>${conversationStatusLabel(item.status)}</td>
-                    <td>${item.time}</td>
-                </tr>
-            `,
-        )
-        .join('');
-    const tokenRows = tokenItems
-        .map(
-            (item) => `
-                <tr>
-                    <td>${item.user}</td>
-                    <td>${item.role}</td>
-                    <td>${formatNumber(item.requests)}</td>
-                    <td>${formatNumber(item.promptTokens)}</td>
-                    <td>${formatNumber(item.completionTokens)}</td>
-                    <td>${formatNumber(item.totalTokens)}</td>
-                </tr>
-            `,
-        )
-        .join('');
-    const printableRows = activityItems
-        .map(
-            (item) => `
-                <tr>
-                    <td>${item.admin}</td>
-                    <td>${activityCategoryLabel(item.category)}</td>
-                    <td>${item.action}</td>
-                    <td>${item.target}</td>
-                    <td>${item.ipAddress}</td>
-                    <td>${item.time}</td>
-                </tr>
-            `,
-        )
-        .join('');
-    const printWindow = window.open('', '_blank', 'width=960,height=720');
-
-    if (!printWindow) {
-        window.print();
-        return;
-    }
-
-    printWindow.document.write(`
-        <html>
-            <head>
-                <title>Laporan Dashboard Admin ${periodLabel}</title>
-                <style>
-                    body { font-family: Arial, sans-serif; color: #0f172a; padding: 24px; }
-                    h1 { margin: 0 0 6px; font-size: 22px; }
-                    h2 { margin: 28px 0 10px; font-size: 16px; }
-                    p { margin: 0 0 18px; color: #526782; }
-                    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0 22px; }
-                    .summary-card { border: 1px solid #d8e4f2; border-radius: 8px; padding: 12px; }
-                    .summary-card span { display: block; color: #526782; font-size: 12px; }
-                    .summary-card strong { display: block; margin: 8px 0; font-size: 24px; }
-                    .summary-card small { color: #526782; line-height: 1.4; }
-                    table { width: 100%; border-collapse: collapse; font-size: 12px; }
-                    th, td { border: 1px solid #d8e4f2; padding: 10px; text-align: left; vertical-align: top; }
-                    th { background: #eef4fb; font-size: 11px; text-transform: uppercase; }
-                    @media print { body { padding: 0; } .summary { grid-template-columns: repeat(2, 1fr); } }
-                </style>
-            </head>
-            <body>
-                <h1>Laporan Dashboard Admin ${periodLabel}</h1>
-                <p>Ringkasan dashboard, feedback, token usage, dan aktivitas admin Deka.</p>
-
-                <h2>Dashboard Ringkasan</h2>
-                <div class="summary">${metricCards}</div>
-
-                <h2>Feedback AI</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>Like</th>
-                            <th>Dislike</th>
-                            <th>Status</th>
-                            <th>Waktu</th>
-                        </tr>
-                    </thead>
-                    <tbody>${feedbackRows}</tbody>
-                </table>
-
-                <h2>Token Usage</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>Role</th>
-                            <th>Request</th>
-                            <th>Prompt</th>
-                            <th>Completion</th>
-                            <th>Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>${tokenRows}</tbody>
-                </table>
-
-                <h2>Log Aktivitas Admin</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Admin</th>
-                            <th>Kategori</th>
-                            <th>Aktivitas</th>
-                            <th>Target</th>
-                            <th>IP</th>
-                            <th>Waktu</th>
-                        </tr>
-                    </thead>
-                    <tbody>${printableRows}</tbody>
-                </table>
-            </body>
-        </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    console.info(`Laporan aktivitas admin ${periodLabel} diexport ke Excel.`);
 }
 
 function knowledgeStatusLabel(status: string) {
@@ -2197,6 +2895,51 @@ function TokenCell({ value }: { value: string }) {
         <p className="text-right text-sm text-muted-foreground tabular-nums">
             {value}
         </p>
+    );
+}
+
+function TokenInsightCard({
+    detail,
+    label,
+    value,
+}: {
+    detail: string;
+    label: string;
+    value: string;
+}) {
+    return (
+        <div className="rounded-md border bg-muted/20 p-3">
+            <p className="text-xs font-medium text-muted-foreground">{label}</p>
+            <p className="mt-2 truncate text-sm font-semibold">{value}</p>
+            <p className="mt-1 truncate text-xs text-muted-foreground">
+                {detail}
+            </p>
+        </div>
+    );
+}
+
+function FeedbackReviewStatusBadge({
+    status,
+}: {
+    status: FeedbackReviewItem['status'];
+}) {
+    const labels: Record<FeedbackReviewItem['status'], string> = {
+        open: 'Open',
+        reviewing: 'Diproses',
+        resolved: 'Selesai',
+    };
+    const classes: Record<FeedbackReviewItem['status'], string> = {
+        open: 'border-transparent bg-[#fff4df] text-[#b45309] dark:bg-[#3b2508] dark:text-[#f7c56b]',
+        reviewing:
+            'border-transparent bg-[#eaf3ff] text-[#2f80ed] dark:bg-[#102b4a] dark:text-[#8fc1ff]',
+        resolved:
+            'border-transparent bg-[#e8f2ff] text-[#155fc4] dark:bg-[#12365f] dark:text-[#b8d9ff]',
+    };
+
+    return (
+        <Badge variant="outline" className={classes[status]}>
+            {labels[status]}
+        </Badge>
     );
 }
 
@@ -2268,4 +3011,12 @@ function QualityBar({ label, value }: { label: string; value: number }) {
 
 function formatNumber(value: number) {
     return new Intl.NumberFormat('id-ID').format(value);
+}
+
+function formatUsd(value: number) {
+    return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        maximumFractionDigits: value >= 1 ? 2 : 4,
+    }).format(value);
 }

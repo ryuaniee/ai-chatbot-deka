@@ -74,14 +74,14 @@ export function AdminTokenUsageChart({
 
     return (
         <Card className={cn('flex h-full flex-col rounded-lg', className)}>
-            <CardHeader className="items-center pb-3 text-center">
+            <CardHeader className="shrink-0 items-center pb-3 text-center">
                 <CardTitle>Distribusi Token</CardTitle>
                 <CardDescription>
                     Porsi pemakaian token antar pengguna aktif.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="grid gap-4 pb-3">
-                <div className="grid grid-cols-3 gap-2 text-center">
+            <CardContent className="flex flex-1 flex-col gap-4 pb-3">
+                <div className="grid shrink-0 grid-cols-3 gap-2 text-center">
                     <div className="rounded-md border bg-muted/30 px-3 py-2">
                         <p className="text-[11px] text-muted-foreground">
                             Total
@@ -112,7 +112,7 @@ export function AdminTokenUsageChart({
                         <ChartContainer
                             config={chartConfig}
                             className={cn(
-                                'mx-auto aspect-square max-h-[360px]',
+                                'mx-auto aspect-square max-h-[360px] w-full flex-1',
                                 chartClassName,
                             )}
                         >
@@ -128,7 +128,7 @@ export function AdminTokenUsageChart({
                                 />
                             </PieChart>
                         </ChartContainer>
-                        <div className="grid gap-2">
+                        <div className="grid shrink-0 gap-2">
                             {topUsers.map((item) => {
                                 const percent = Math.round(
                                     (item.tokens / totalTokens) * 100,
@@ -165,7 +165,7 @@ export function AdminTokenUsageChart({
                         </div>
                     </>
                 ) : (
-                    <div className="flex min-h-[220px] flex-col items-center justify-center rounded-md border border-dashed bg-muted/20 px-6 py-8 text-center">
+                    <div className="flex min-h-[220px] flex-1 flex-col items-center justify-center rounded-md border border-dashed bg-muted/20 px-6 py-8 text-center">
                         <div className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-950 dark:text-blue-100 dark:ring-blue-900">
                             <ChartPie className="h-5 w-5" />
                         </div>
@@ -179,7 +179,7 @@ export function AdminTokenUsageChart({
                     </div>
                 )}
             </CardContent>
-            <CardFooter className="flex-col gap-2 text-sm">
+            <CardFooter className="shrink-0 flex-col gap-2 border-t pt-4 text-sm">
                 <div className="flex items-center gap-2 leading-none font-medium">
                     {hasTokenData
                         ? 'Pemakaian token naik 5.2% bulan ini'
