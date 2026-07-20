@@ -30,6 +30,12 @@ class GoogleAuthController extends Controller
                 ->withErrors(['email' => 'Google account did not provide an email address.']);
         }
 
+        if (data_get($googleUser->user, 'verified_email') !== true) {
+            return redirect()
+                ->route('login')
+                ->withErrors(['email' => 'Google account email is not verified.']);
+        }
+
         /** @var User $user */
         $user = User::query()
             ->where('google_id', $googleUser->getId())

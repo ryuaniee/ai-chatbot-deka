@@ -3,7 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+use App\Notifications\ResetPasswordNotification as ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Fortify\Features;
@@ -36,6 +36,33 @@ class PasswordResetTest extends TestCase
         $this->post(route('password.email'), ['email' => $user->email]);
 
         Notification::assertSentTo($user, ResetPassword::class);
+    }
+
+    public function test_reset_password_link_can_be_requested_with_gmail_alias(): void
+    {
+        Notification::fake();
+
+        $user = User::factory()->create([
+            'email' => 'username@gmail.com',
+        ]);
+
+        $this->post(route('password.email'), [
+            'email' => 'user.name+reset@googlemail.com',
+        ])->assertSessionHas('status');
+
+        Notification::assertSentTo($user, ResetPassword::class);
+    }
+
+    public function test_reset_password_request_does_not_reveal_unknown_email(): void
+    {
+        Notification::fake();
+
+        $this->post(route('password.email'), [
+            'email' => 'missing@example.com',
+        ])->assertSessionHas('status')
+            ->assertSessionHasNoErrors();
+
+        Notification::assertNothingSent();
     }
 
     public function test_reset_password_screen_can_be_rendered()

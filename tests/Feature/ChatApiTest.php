@@ -153,7 +153,7 @@ class ChatApiTest extends TestCase
         $this->assertDatabaseCount('messages', 2);
     }
 
-    public function test_ai_runtime_failure_returns_bad_gateway_and_keeps_user_message(): void
+    public function test_ai_runtime_failure_persists_safe_fallback_without_exposing_provider_error(): void
     {
         $this->fakeAllowedModeration();
         ConversationReplyAgent::fake([
@@ -167,14 +167,20 @@ class ChatApiTest extends TestCase
             ->postJson(route('api.conversations.messages.store', $conversation), [
                 'content' => 'Ping',
             ])
-            ->assertStatus(502)
-            ->assertJsonPath('code', 'AI_RUNTIME_UNAVAILABLE');
+            ->assertCreated()
+            ->assertJsonPath('assistant_message.content', 'Maaf, layanan AI sedang tidak merespons. Coba ulangi beberapa saat lagi.')
+            ->assertJsonMissingPath('assistant_message.metadata.provider_error');
 
-        $this->assertDatabaseCount('messages', 1);
+        $this->assertDatabaseCount('messages', 2);
         $this->assertDatabaseHas('messages', [
             'conversation_id' => $conversation->id,
             'role' => 'user',
             'content' => 'Ping',
+        ]);
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversation->id,
+            'role' => 'assistant',
+            'content' => 'Maaf, layanan AI sedang tidak merespons. Coba ulangi beberapa saat lagi.',
         ]);
     }
 
@@ -465,7 +471,7 @@ class ChatApiTest extends TestCase
             ->assertJsonPath('code', 'IDEMPOTENCY_KEY_REUSED');
     }
 
-    public function test_retryable_failure_is_not_cached_by_idempotency_layer(): void
+    public function test_provider_failure_fallback_is_idempotent_without_duplicate_messages(): void
     {
         $replyAttempts = 0;
 
@@ -494,7 +500,9 @@ class ChatApiTest extends TestCase
             ->postJson(route('api.conversations.messages.store', $conversation), [
                 'content' => 'retry me',
             ])
-            ->assertStatus(502);
+            ->assertCreated()
+            ->assertJsonPath('assistant_message.content', 'Maaf, layanan AI sedang tidak merespons. Coba ulangi beberapa saat lagi.')
+            ->assertJsonMissingPath('assistant_message.metadata.provider_error');
 
         $this->actingAs($user)
             ->withHeaders(['Idempotency-Key' => 'idem-retry'])
@@ -502,8 +510,8 @@ class ChatApiTest extends TestCase
                 'content' => 'retry me',
             ])
             ->assertCreated()
-            ->assertHeaderMissing('X-Idempotent-Replay')
-            ->assertJsonPath('assistant_message.content', 'Recovered.');
+            ->assertHeader('X-Idempotent-Replay', 'true')
+            ->assertJsonPath('assistant_message.content', 'Maaf, layanan AI sedang tidak merespons. Coba ulangi beberapa saat lagi.');
 
         $this->assertDatabaseCount('messages', 2);
         $this->assertDatabaseHas('messages', [
@@ -513,7 +521,7 @@ class ChatApiTest extends TestCase
         ]);
     }
 
-    public function test_retrying_failed_first_message_with_same_idempotency_key_does_not_create_duplicate_conversations_or_messages(): void
+    public function test_first_turn_provider_failure_fallback_does_not_create_duplicate_conversations_or_messages(): void
     {
         $replyAttempts = 0;
 
@@ -541,7 +549,8 @@ class ChatApiTest extends TestCase
             ->postJson(route('api.conversations.store'), [
                 'content' => 'hello first turn',
             ])
-            ->assertStatus(502);
+            ->assertCreated()
+            ->assertJsonPath('assistant_message.content', 'Maaf, layanan AI sedang tidak merespons. Coba ulangi beberapa saat lagi.');
 
         $this->actingAs($user)
             ->withHeaders(['Idempotency-Key' => 'idem-first-retry'])
@@ -549,8 +558,8 @@ class ChatApiTest extends TestCase
                 'content' => 'hello first turn',
             ])
             ->assertCreated()
-            ->assertHeaderMissing('X-Idempotent-Replay')
-            ->assertJsonPath('assistant_message.content', 'Recovered first turn.');
+            ->assertHeader('X-Idempotent-Replay', 'true')
+            ->assertJsonPath('assistant_message.content', 'Maaf, layanan AI sedang tidak merespons. Coba ulangi beberapa saat lagi.');
 
         $this->assertDatabaseCount('conversations', 1);
         $this->assertDatabaseCount('messages', 2);
@@ -633,7 +642,8 @@ class ChatApiTest extends TestCase
             ->postJson(route('api.conversations.store'), [
                 'content' => 'payload awal',
             ])
-            ->assertStatus(502);
+            ->assertCreated()
+            ->assertJsonPath('assistant_message.content', 'Maaf, layanan AI sedang tidak merespons. Coba ulangi beberapa saat lagi.');
 
         $this->actingAs($user)
             ->withHeaders(['Idempotency-Key' => 'idem-first-conflict'])

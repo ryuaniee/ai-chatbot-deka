@@ -1,5 +1,6 @@
 import { Head, useHttp } from '@inertiajs/react';
 import { User, Mail, Lock } from 'lucide-react';
+import { useState } from 'react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -47,9 +48,54 @@ export default function Register({ passwordRules }: Props) {
         password: '',
         password_confirmation: '',
     });
+    const [validationErrors, setValidationErrors] = useState({
+        name: '',
+        email: '',
+        password: '',
+        password_confirmation: '',
+    });
+
+    const validate = () => {
+        const errors = {
+            name: '',
+            email: '',
+            password: '',
+            password_confirmation: '',
+        };
+
+        if (!http.data.name.trim()) {
+            errors.name = 'Nama lengkap wajib diisi.';
+        }
+
+        if (!http.data.email.trim()) {
+            errors.email = 'Email wajib diisi.';
+        }
+
+        if (!http.data.password) {
+            errors.password = 'Kata sandi wajib diisi.';
+        }
+
+        if (!http.data.password_confirmation) {
+            errors.password_confirmation = 'Konfirmasi kata sandi wajib diisi.';
+        }
+
+        setValidationErrors(errors);
+
+        return (
+            !errors.name &&
+            !errors.email &&
+            !errors.password &&
+            !errors.password_confirmation
+        );
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!validate()) {
+            return;
+        }
+
         http.post(apiRegister.url())
             .then((res: any) => {
                 if (res.redirect_to) {
@@ -64,10 +110,14 @@ export default function Register({ passwordRules }: Props) {
     return (
         <>
             <Head title="Daftar" />
-            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-                <div className="grid gap-5">
+            <form
+                onSubmit={handleSubmit}
+                className="flex flex-col gap-4"
+                noValidate
+            >
+                <div className="grid gap-3">
                     {/* Name */}
-                    <div className="grid gap-2">
+                    <div className="grid gap-1.5">
                         <Label
                             htmlFor="name"
                             className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
@@ -88,17 +138,23 @@ export default function Register({ passwordRules }: Props) {
                                 name="name"
                                 placeholder="Nama lengkap Anda"
                                 value={http.data.name}
-                                onChange={(e) =>
-                                    http.setData('name', e.target.value)
-                                }
-                                className="h-12 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
+                                onChange={(e) => {
+                                    http.setData('name', e.target.value);
+                                    setValidationErrors((errors) => ({
+                                        ...errors,
+                                        name: '',
+                                    }));
+                                }}
+                                className="h-11 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
-                        <InputError message={http.errors.name} />
+                        <InputError
+                            message={validationErrors.name || http.errors.name}
+                        />
                     </div>
 
                     {/* Email Address */}
-                    <div className="grid gap-2">
+                    <div className="grid gap-1.5">
                         <Label
                             htmlFor="email"
                             className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
@@ -118,17 +174,25 @@ export default function Register({ passwordRules }: Props) {
                                 name="email"
                                 placeholder="nama@email.com"
                                 value={http.data.email}
-                                onChange={(e) =>
-                                    http.setData('email', e.target.value)
-                                }
-                                className="h-12 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
+                                onChange={(e) => {
+                                    http.setData('email', e.target.value);
+                                    setValidationErrors((errors) => ({
+                                        ...errors,
+                                        email: '',
+                                    }));
+                                }}
+                                className="h-11 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
-                        <InputError message={http.errors.email} />
+                        <InputError
+                            message={
+                                validationErrors.email || http.errors.email
+                            }
+                        />
                     </div>
 
                     {/* Password */}
-                    <div className="grid gap-2">
+                    <div className="grid gap-1.5">
                         <Label
                             htmlFor="password"
                             className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
@@ -148,17 +212,26 @@ export default function Register({ passwordRules }: Props) {
                                 placeholder="Masukkan kata sandi"
                                 passwordrules={passwordRules}
                                 value={http.data.password}
-                                onChange={(e) =>
-                                    http.setData('password', e.target.value)
-                                }
-                                className="h-12 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
+                                onChange={(e) => {
+                                    http.setData('password', e.target.value);
+                                    setValidationErrors((errors) => ({
+                                        ...errors,
+                                        password: '',
+                                    }));
+                                }}
+                                className="h-11 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
-                        <InputError message={http.errors.password} />
+                        <InputError
+                            message={
+                                validationErrors.password ||
+                                http.errors.password
+                            }
+                        />
                     </div>
 
                     {/* Confirm Password */}
-                    <div className="grid gap-2">
+                    <div className="grid gap-1.5">
                         <Label
                             htmlFor="password_confirmation"
                             className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
@@ -178,24 +251,31 @@ export default function Register({ passwordRules }: Props) {
                                 placeholder="Ulangi kata sandi"
                                 passwordrules={passwordRules}
                                 value={http.data.password_confirmation}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                     http.setData(
                                         'password_confirmation',
                                         e.target.value,
-                                    )
-                                }
-                                className="h-12 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
+                                    );
+                                    setValidationErrors((errors) => ({
+                                        ...errors,
+                                        password_confirmation: '',
+                                    }));
+                                }}
+                                className="h-11 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
                         <InputError
-                            message={http.errors.password_confirmation}
+                            message={
+                                validationErrors.password_confirmation ||
+                                http.errors.password_confirmation
+                            }
                         />
                     </div>
 
                     {/* Submit Button */}
                     <Button
                         type="submit"
-                        className="mt-4 flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border-none bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] text-sm font-semibold tracking-wide text-white shadow-md transition-all hover:from-[#1a73e8] hover:to-[#155fc4] hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99]"
+                        className="mt-2 flex h-11 w-full cursor-pointer items-center justify-center rounded-xl border-none bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] text-sm font-semibold tracking-wide text-white shadow-md transition-all hover:from-[#1a73e8] hover:to-[#155fc4] hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99]"
                         tabIndex={5}
                         data-test="register-user-button"
                         disabled={http.processing}
@@ -220,11 +300,11 @@ export default function Register({ passwordRules }: Props) {
                 <button
                     type="button"
                     onClick={() => window.location.assign('/auth/google')}
-                    className="flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white font-semibold text-zinc-700 shadow-sm transition-all hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99]"
+                    className="flex h-11 w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white font-semibold text-zinc-700 shadow-sm transition-all hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99]"
                 >
                     <GoogleIcon />
                     <span className="text-sm font-bold">
-                        Daftar atau masuk dengan Google
+                        Lanjutkan dengan Google
                     </span>
                 </button>
 
@@ -236,7 +316,7 @@ export default function Register({ passwordRules }: Props) {
                         className="font-semibold text-[#2f80ed] hover:underline"
                         tabIndex={6}
                     >
-                        Masuk Sekarang
+                        Masuk
                     </TextLink>
                 </div>
             </form>
@@ -245,7 +325,6 @@ export default function Register({ passwordRules }: Props) {
 }
 
 Register.layout = {
-    title: 'Masuk atau daftar',
-    description:
-        'AI Chatbot cerdas untuk membantu Anda kapan pun dan di mana pun.',
+    title: 'Daftar akun Deka',
+    description: 'Simpan riwayat percakapan Anda.',
 };
