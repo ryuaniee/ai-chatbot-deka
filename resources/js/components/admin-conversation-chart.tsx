@@ -51,10 +51,14 @@ export function AdminConversationChart({
     data: ConversationChartItem[];
 }) {
     const [timeRange, setTimeRange] = React.useState('90d');
+    const referenceDate = data.reduce((latest, item) => {
+        const itemDate = new Date(item.date);
+
+        return itemDate > latest ? itemDate : latest;
+    }, new Date());
 
     const filteredData = data.filter((item) => {
         const date = new Date(item.date);
-        const referenceDate = new Date('2026-07-18');
         let daysToSubtract = 90;
 
         if (timeRange === '30d') {

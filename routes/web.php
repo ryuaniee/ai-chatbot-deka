@@ -1,33 +1,27 @@
 <?php
 
+use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AuthApiController;
 use App\Http\Controllers\ConversationController;
 use App\Http\Controllers\ConversationMessageController;
 use App\Http\Controllers\ConversationStreamController;
 use App\Http\Controllers\GoogleAuthController;
+use App\Http\Controllers\MessageFeedbackController;
 use App\Http\Controllers\PasswordResetLinkController;
 use App\Http\Controllers\PublicEmailVerificationController;
 use App\Http\Controllers\VerificationNotificationController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 Route::inertia('/', 'welcome')->name('home');
 Route::redirect('dashboard', '/chat')->name('dashboard');
-Route::redirect('admin', '/admin/overview')->name('admin');
-Route::get('admin/{section}', function (string $section) {
-    abort_unless(in_array($section, [
-        'overview',
-        'conversations',
-        'token-usage',
-        'users',
-        'activity-log',
-    ], true), 404);
-
-    return Inertia::render('admin', [
-        'section' => $section,
-    ]);
-})
-    ->middleware(['auth', 'verified'])
+Route::redirect('admin', '/admin/overview')
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin');
+Route::get('admin/activity-log/items', [AdminDashboardController::class, 'activityLogItems'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.activity-log.items');
+Route::get('admin/{section}', AdminDashboardController::class)
+    ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.section');
 
 Route::prefix('api/auth')->name('api.auth.')->group(function () {
@@ -94,6 +88,10 @@ Route::middleware(['auth', 'verified', 'regular-user'])->group(function () {
             [ConversationStreamController::class, 'message'],
         )->middleware('throttle:chat')
             ->name('conversations.messages.stream');
+        Route::post(
+            'conversations/{conversation}/messages/{message}/feedback',
+            [MessageFeedbackController::class, 'store'],
+        )->name('conversations.messages.feedback');
     });
 });
 

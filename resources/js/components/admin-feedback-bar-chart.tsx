@@ -16,14 +16,11 @@ import {
 import type { ChartConfig } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 
-const chartData = [
-    { month: 'Januari', dislikes: 12, likes: 80 },
-    { month: 'Februari', dislikes: 18, likes: 200 },
-    { month: 'Maret', dislikes: 15, likes: 120 },
-    { month: 'April', dislikes: 11, likes: 150 },
-    { month: 'Mei', dislikes: 9, likes: 130 },
-    { month: 'Juni', dislikes: 7, likes: 140 },
-];
+type FeedbackChartItem = {
+    month: string;
+    dislikes: number;
+    likes: number;
+};
 
 const chartConfig = {
     likes: {
@@ -39,9 +36,11 @@ const chartConfig = {
 export function AdminFeedbackBarChart({
     chartClassName,
     className,
+    data,
 }: {
     chartClassName?: string;
     className?: string;
+    data: FeedbackChartItem[];
 }) {
     return (
         <Card className={cn('flex h-full flex-col rounded-lg pt-0', className)}>
@@ -59,7 +58,7 @@ export function AdminFeedbackBarChart({
                         chartClassName,
                     )}
                 >
-                    <BarChart accessibilityLayer data={chartData}>
+                    <BarChart accessibilityLayer data={data}>
                         <CartesianGrid vertical={false} />
                         <XAxis
                             dataKey="month"

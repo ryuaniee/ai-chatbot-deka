@@ -19,7 +19,7 @@ import {
     Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AdminConversationChart } from '@/components/admin-conversation-chart';
 import { AdminFeedbackBarChart } from '@/components/admin-feedback-bar-chart';
 import { AdminTokenUsageChart } from '@/components/admin-token-usage-chart';
@@ -53,8 +53,19 @@ type Metric = {
 };
 
 type Conversation = {
+    id?: number;
     dislikes: number;
+    email?: string;
+    lastMessageAt?: string | null;
+    latestMessage?: string;
+    latestRole?: string | null;
     likes: number;
+    messages?: number;
+    messageCount?: number;
+    model?: string | null;
+    needsReview?: boolean;
+    title?: string;
+    tokenTotal?: number;
     user: string;
     status: string;
     time: string;
@@ -88,6 +99,7 @@ type AdminUserItem = {
 };
 
 type AdminActivityItem = {
+    id: number;
     admin: string;
     email: string;
     category: 'auth' | 'conversation' | 'user' | 'report' | 'system';
@@ -95,6 +107,7 @@ type AdminActivityItem = {
     target: string;
     detail: string;
     ipAddress: string;
+    createdAt?: string | null;
     time: string;
 };
 
@@ -108,7 +121,6 @@ type ChatTrendItem = {
 
 type SectionId =
     | 'overview'
-    | 'conversations'
     | 'users'
     | 'activity-log'
     | 'token-usage'
@@ -122,6 +134,46 @@ type SectionId =
 type AdminPageProps = {
     auth: Auth;
     section?: SectionId;
+    metrics?: Metric[];
+    conversations?: Conversation[];
+    tokenUsageItems?: TokenUsageItem[];
+    adminUsers?: AdminUserItem[];
+    adminActivityItems?: AdminActivityItem[];
+    chatTrendItems?: ChatTrendItem[];
+    feedbackChartItems?: {
+        month: string;
+        dislikes: number;
+        likes: number;
+    }[];
+    totals?: {
+        totalTokenUsage: number;
+        totalLikes: number;
+        totalDislikes: number;
+        activeUsers: number;
+        adminUserCount: number;
+        totalUserConversations: number;
+        activityToday: number;
+        conversationActions: number;
+        reportExports: number;
+    };
+    filters?: {
+        period?: ReportPeriod | null;
+        search?: string;
+    };
+};
+
+type ActivityLogTotals = Pick<
+    NonNullable<AdminPageProps['totals']>,
+    'activityToday' | 'conversationActions' | 'reportExports'
+>;
+
+type ActivityLogLivePayload = {
+    adminActivityItems: AdminActivityItem[];
+    filters: {
+        period: ReportPeriod;
+        search: string;
+    };
+    totals: ActivityLogTotals;
 };
 
 const metricIcons = {
@@ -253,6 +305,7 @@ const adminUsers: AdminUserItem[] = [
 
 const adminActivityItems: AdminActivityItem[] = [
     {
+        id: 1,
         admin: 'Admin Deka',
         email: 'admin@deka.dev',
         category: 'auth',
@@ -263,26 +316,29 @@ const adminActivityItems: AdminActivityItem[] = [
         time: 'Baru saja',
     },
     {
+        id: 2,
         admin: 'Admin Deka',
         email: 'admin@deka.dev',
         category: 'conversation',
-        action: 'Membuka percakapan',
-        target: 'Chat Nadia Putri',
-        detail: 'Melihat detail feedback like dan dislike percakapan.',
+        action: 'Meninjau feedback',
+        target: 'Feedback AI',
+        detail: 'Melihat ringkasan like dan dislike tanpa membuka isi chat.',
         ipAddress: '192.168.10.14',
         time: '3 menit lalu',
     },
     {
+        id: 3,
         admin: 'Admin Deka',
         email: 'admin@deka.dev',
         category: 'report',
         action: 'Export laporan',
-        target: 'Kelola Percakapan',
-        detail: 'Mengunduh ringkasan percakapan dan feedback bulan ini.',
+        target: 'Feedback AI',
+        detail: 'Mengunduh ringkasan feedback bulan ini.',
         ipAddress: '192.168.10.14',
         time: '12 menit lalu',
     },
     {
+        id: 4,
         admin: 'Admin Deka',
         email: 'admin@deka.dev',
         category: 'user',
@@ -293,6 +349,7 @@ const adminActivityItems: AdminActivityItem[] = [
         time: '18 menit lalu',
     },
     {
+        id: 5,
         admin: 'Admin Deka',
         email: 'admin@deka.dev',
         category: 'system',
@@ -303,6 +360,7 @@ const adminActivityItems: AdminActivityItem[] = [
         time: '27 menit lalu',
     },
     {
+        id: 6,
         admin: 'Admin Deka',
         email: 'admin@deka.dev',
         category: 'auth',
@@ -424,12 +482,6 @@ const navigation: {
         icon: LayoutDashboard,
     },
     {
-        id: 'conversations',
-        label: 'Kelola Percakapan',
-        description: 'Daftar percakapan pengguna chatbot',
-        icon: MessageSquare,
-    },
-    {
         id: 'token-usage',
         label: 'Token Usage',
         description: 'Pemakaian token AI per pengguna',
@@ -481,10 +533,65 @@ const sectionHref = (sectionId: SectionId) => `/admin/${sectionId}`;
 const isSectionId = (value: unknown): value is SectionId =>
     typeof value === 'string' && navigation.some((item) => item.id === value);
 
+function updateActivityPeriod(period: ReportPeriod, search?: string) {
+    const normalizedSearch = search?.trim();
+
+    router.get(
+        sectionHref('activity-log'),
+        {
+            period,
+            ...(normalizedSearch ? { search: normalizedSearch } : {}),
+        },
+        { preserveState: false },
+    );
+}
+
 export default function AdminPage() {
-    const { auth, section } = usePage<AdminPageProps>().props;
+    const {
+        auth,
+        section,
+        metrics = [],
+        conversations = [],
+        tokenUsageItems = [],
+        adminUsers = [],
+        adminActivityItems = [],
+        chatTrendItems = [],
+        feedbackChartItems = [],
+        totals,
+        filters,
+    } = usePage<AdminPageProps>().props;
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [liveActivityItems, setLiveActivityItems] =
+        useState(adminActivityItems);
+    const [liveActivityTotals, setLiveActivityTotals] =
+        useState<ActivityLogTotals | null>(null);
+    const [activityLiveStatus, setActivityLiveStatus] = useState<
+        'live' | 'updating' | 'error'
+    >('live');
     const activeSection = isSectionId(section) ? section : 'overview';
+    const totalTokenUsage =
+        totals?.totalTokenUsage ??
+        tokenUsageItems.reduce((total, item) => total + item.totalTokens, 0);
+    const activeUsers =
+        totals?.activeUsers ??
+        adminUsers.filter((item) => item.status === 'active').length;
+    const adminUserCount =
+        totals?.adminUserCount ??
+        adminUsers.filter((item) => item.role === 'admin').length;
+    const totalUserConversations =
+        totals?.totalUserConversations ??
+        adminUsers.reduce((total, item) => total + item.conversations, 0);
+    const activityPeriod = filters?.period ?? 'month';
+    const activityStats = {
+        activityToday:
+            liveActivityTotals?.activityToday ?? totals?.activityToday ?? 0,
+        conversationActions:
+            liveActivityTotals?.conversationActions ??
+            totals?.conversationActions ??
+            0,
+        reportExports:
+            liveActivityTotals?.reportExports ?? totals?.reportExports ?? 0,
+    };
     const profileInitials = auth.user.name
         .split(' ')
         .map((name) => name[0])
@@ -495,6 +602,72 @@ export default function AdminPage() {
     const activeNavigation = navigation.find(
         (item) => item.id === activeSection,
     );
+
+    useEffect(() => {
+        setLiveActivityItems(adminActivityItems);
+        setLiveActivityTotals(null);
+    }, [adminActivityItems]);
+
+    useEffect(() => {
+        if (activeSection !== 'activity-log') {
+            return;
+        }
+
+        const controller = new AbortController();
+
+        const refreshActivityLog = async () => {
+            const url = new URL(
+                '/admin/activity-log/items',
+                window.location.origin,
+            );
+            const normalizedSearch = filters?.search?.trim();
+
+            url.searchParams.set('period', activityPeriod);
+
+            if (normalizedSearch) {
+                url.searchParams.set('search', normalizedSearch);
+            }
+
+            try {
+                setActivityLiveStatus('updating');
+
+                const response = await fetch(url, {
+                    credentials: 'same-origin',
+                    headers: {
+                        Accept: 'application/json',
+                    },
+                    signal: controller.signal,
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Activity log refresh failed`);
+                }
+
+                const payload =
+                    (await response.json()) as ActivityLogLivePayload;
+
+                setLiveActivityItems(payload.adminActivityItems);
+                setLiveActivityTotals(payload.totals);
+                setActivityLiveStatus('live');
+            } catch (error) {
+                if (controller.signal.aborted) {
+                    return;
+                }
+
+                console.error(error);
+                setActivityLiveStatus('error');
+            }
+        };
+
+        void refreshActivityLog();
+
+        const interval = window.setInterval(refreshActivityLog, 10_000);
+
+        return () => {
+            controller.abort();
+            window.clearInterval(interval);
+        };
+    }, [activeSection, activityPeriod, filters?.search]);
 
     return (
         <>
@@ -626,7 +799,32 @@ export default function AdminPage() {
                                 <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                                 <Input
                                     className="h-9 pl-9"
-                                    placeholder="Cari percakapan"
+                                    defaultValue={filters?.search ?? ''}
+                                    onKeyDown={(event) => {
+                                        if (event.key !== 'Enter') {
+                                            return;
+                                        }
+
+                                        const value =
+                                            event.currentTarget.value.trim();
+
+                                        router.get(
+                                            sectionHref(activeSection),
+                                            {
+                                                ...(value === ''
+                                                    ? {}
+                                                    : { search: value }),
+                                                ...(activeSection ===
+                                                'activity-log'
+                                                    ? {
+                                                          period: activityPeriod,
+                                                      }
+                                                    : {}),
+                                            },
+                                            { preserveState: false },
+                                        );
+                                    }}
+                                    placeholder="Cari data dashboard"
                                 />
                             </div>
                         </div>
@@ -672,6 +870,7 @@ export default function AdminPage() {
                                         chartClassName="h-full min-h-[240px]"
                                     />
                                     <AdminFeedbackBarChart
+                                        data={feedbackChartItems}
                                         className="flex min-h-0 flex-col"
                                         chartClassName="h-full min-h-[240px]"
                                     />
@@ -685,9 +884,9 @@ export default function AdminPage() {
                         )}
 
                         {activeSection === 'token-usage' && (
-                            <section className="grid min-h-0 flex-1 gap-6 xl:grid-cols-2">
-                                <Card className="flex min-h-0 flex-col rounded-lg">
-                                    <CardHeader className="gap-3">
+                            <section className="grid min-h-0 items-start gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
+                                <Card className="rounded-lg">
+                                    <CardHeader className="gap-3 pb-4">
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                                             <div>
                                                 <CardTitle>
@@ -695,7 +894,10 @@ export default function AdminPage() {
                                                 </CardTitle>
                                                 <CardDescription>
                                                     Ringkasan token AI yang
-                                                    dipakai tiap pengguna.
+                                                    dipakai tiap pengguna. Input
+                                                    adalah token dari pertanyaan
+                                                    dan konteks, output adalah
+                                                    token jawaban AI.
                                                 </CardDescription>
                                             </div>
                                             <Badge
@@ -707,87 +909,102 @@ export default function AdminPage() {
                                             </Badge>
                                         </div>
                                     </CardHeader>
-                                    <CardContent className="min-h-0 flex-1">
-                                        <div className="h-full overflow-hidden rounded-md border">
-                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(220px,1fr)_110px_130px_130px_130px]">
-                                                <span>User</span>
-                                                <span className="hidden md:block">
-                                                    Request
-                                                </span>
-                                                <span className="hidden md:block">
-                                                    Prompt
-                                                </span>
-                                                <span className="hidden md:block">
-                                                    Completion
-                                                </span>
-                                                <span>Total</span>
-                                            </div>
-                                            {tokenUsageItems.length > 0 ? (
-                                                tokenUsageItems.map((item) => (
-                                                    <div
-                                                        key={item.email}
-                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(220px,1fr)_110px_130px_130px_130px]"
-                                                    >
-                                                        <div className="min-w-0">
-                                                            <div className="flex items-center gap-2">
-                                                                <p className="truncate text-sm font-medium">
-                                                                    {item.user}
-                                                                </p>
-                                                                <Badge
-                                                                    variant="outline"
-                                                                    className="hidden text-[10px] capitalize sm:inline-flex"
-                                                                >
-                                                                    {item.role}
-                                                                </Badge>
+                                    <CardContent>
+                                        <div className="overflow-hidden rounded-md border">
+                                            <div className="min-w-0">
+                                                <div className="grid grid-cols-[minmax(140px,1fr)_70px_96px_96px_106px] items-center gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                    <span>User</span>
+                                                    <span className="text-right">
+                                                        Req
+                                                    </span>
+                                                    <span className="text-right">
+                                                        Input
+                                                    </span>
+                                                    <span className="text-right">
+                                                        Output
+                                                    </span>
+                                                    <span className="text-right">
+                                                        Total
+                                                    </span>
+                                                </div>
+                                                {tokenUsageItems.length > 0 ? (
+                                                    tokenUsageItems.map(
+                                                        (item) => (
+                                                            <div
+                                                                key={item.email}
+                                                                className="grid grid-cols-[minmax(140px,1fr)_70px_96px_96px_106px] items-center gap-3 border-b px-4 py-3 last:border-b-0"
+                                                            >
+                                                                <div className="min-w-0">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <p className="truncate text-sm leading-5 font-medium">
+                                                                            {
+                                                                                item.user
+                                                                            }
+                                                                        </p>
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className="hidden text-[10px] capitalize sm:inline-flex"
+                                                                        >
+                                                                            {
+                                                                                item.role
+                                                                            }
+                                                                        </Badge>
+                                                                    </div>
+                                                                    <p className="truncate text-xs text-muted-foreground">
+                                                                        {
+                                                                            item.email
+                                                                        }
+                                                                    </p>
+                                                                </div>
+                                                                <TokenCell
+                                                                    value={formatNumber(
+                                                                        item.requests,
+                                                                    )}
+                                                                />
+                                                                <TokenCell
+                                                                    value={formatNumber(
+                                                                        item.promptTokens,
+                                                                    )}
+                                                                />
+                                                                <TokenCell
+                                                                    value={formatNumber(
+                                                                        item.completionTokens,
+                                                                    )}
+                                                                />
+                                                                <div className="text-right">
+                                                                    <p className="text-sm leading-5 font-semibold tabular-nums">
+                                                                        {formatNumber(
+                                                                            item.totalTokens,
+                                                                        )}
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground tabular-nums">
+                                                                        {formatNumber(
+                                                                            Math.round(
+                                                                                item.totalTokens /
+                                                                                    Math.max(
+                                                                                        item.requests,
+                                                                                        1,
+                                                                                    ),
+                                                                            ),
+                                                                        )}
+                                                                        /req
+                                                                    </p>
+                                                                </div>
                                                             </div>
-                                                            <p className="mt-1 truncate text-xs text-muted-foreground">
-                                                                {item.email}
-                                                            </p>
-                                                        </div>
-                                                        <TokenCell
-                                                            value={formatNumber(
-                                                                item.requests,
-                                                            )}
-                                                        />
-                                                        <TokenCell
-                                                            value={formatNumber(
-                                                                item.promptTokens,
-                                                            )}
-                                                        />
-                                                        <TokenCell
-                                                            value={formatNumber(
-                                                                item.completionTokens,
-                                                            )}
-                                                        />
-                                                        <div className="text-right md:text-left">
-                                                            <p className="text-sm font-semibold">
-                                                                {formatNumber(
-                                                                    item.totalTokens,
-                                                                )}
-                                                            </p>
-                                                            <p className="mt-1 text-xs text-muted-foreground">
-                                                                {formatNumber(
-                                                                    Math.round(
-                                                                        item.totalTokens /
-                                                                            item.requests,
-                                                                    ),
-                                                                )}
-                                                                /req
-                                                            </p>
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <EmptyTableRow text="Belum ada pemakaian token dari chat AI." />
-                                            )}
+                                                        ),
+                                                    )
+                                                ) : (
+                                                    <EmptyTableRow text="Belum ada pemakaian token dari chat AI." />
+                                                )}
+                                            </div>
                                         </div>
                                     </CardContent>
                                 </Card>
 
                                 <AdminTokenUsageChart
                                     data={tokenUsageItems}
-                                    className="flex min-h-0 flex-col"
-                                    chartClassName="h-full min-h-[420px] max-h-[460px]"
+                                    className="flex flex-col"
+                                    chartClassName="h-[240px] max-h-[240px] max-w-[260px]"
                                 />
                             </section>
                         )}
@@ -795,108 +1012,6 @@ export default function AdminPage() {
                         {activeSection === 'chat-trend' && (
                             <section className="min-h-0">
                                 <AdminConversationChart data={chatTrendItems} />
-                            </section>
-                        )}
-
-                        {activeSection === 'conversations' && (
-                            <section className="grid min-h-0 flex-1 gap-6">
-                                <Card className="flex min-h-0 flex-col rounded-lg">
-                                    <CardHeader className="gap-3">
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                            <div>
-                                                <CardTitle>
-                                                    Kelola Percakapan
-                                                </CardTitle>
-                                                <CardDescription>
-                                                    Percakapan pengguna yang
-                                                    masuk ke chatbot Deka.
-                                                </CardDescription>
-                                            </div>
-                                            <Button variant="outline" size="sm">
-                                                <BarChart3 className="h-4 w-4" />
-                                                Laporan
-                                            </Button>
-                                        </div>
-                                    </CardHeader>
-                                    <CardContent className="min-h-0 flex-1">
-                                        <div className="h-full overflow-hidden rounded-md border">
-                                            <div className="grid grid-cols-[1fr_auto_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_140px_140px_160px_160px]">
-                                                <span>User</span>
-                                                <span className="hidden md:block">
-                                                    Like
-                                                </span>
-                                                <span className="hidden md:block">
-                                                    Dislike
-                                                </span>
-                                                <span className="hidden md:block">
-                                                    Status
-                                                </span>
-                                                <span>Waktu</span>
-                                            </div>
-                                            {conversations.length > 0 ? (
-                                                conversations.map(
-                                                    (conversation) => (
-                                                        <div
-                                                            key={`${conversation.user}-${conversation.time}`}
-                                                            className="grid grid-cols-[1fr_auto_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_140px_140px_160px_160px]"
-                                                        >
-                                                            <div className="min-w-0">
-                                                                <p className="truncate text-sm font-medium">
-                                                                    {
-                                                                        conversation.user
-                                                                    }
-                                                                </p>
-                                                                <p className="mt-1 text-xs text-muted-foreground md:hidden">
-                                                                    {
-                                                                        conversation.likes
-                                                                    }{' '}
-                                                                    like ·{' '}
-                                                                    {
-                                                                        conversation.dislikes
-                                                                    }{' '}
-                                                                    dislike
-                                                                </p>
-                                                            </div>
-                                                            <FeedbackCell
-                                                                icon={ThumbsUp}
-                                                                value={
-                                                                    conversation.likes
-                                                                }
-                                                            />
-                                                            <FeedbackCell
-                                                                icon={
-                                                                    ThumbsDown
-                                                                }
-                                                                value={
-                                                                    conversation.dislikes
-                                                                }
-                                                            />
-                                                            <div className="hidden md:block">
-                                                                <Badge
-                                                                    variant="outline"
-                                                                    className={statusClass(
-                                                                        conversation.status,
-                                                                    )}
-                                                                >
-                                                                    {conversationStatusLabel(
-                                                                        conversation.status,
-                                                                    )}
-                                                                </Badge>
-                                                            </div>
-                                                            <p className="text-sm whitespace-nowrap text-muted-foreground">
-                                                                {
-                                                                    conversation.time
-                                                                }
-                                                            </p>
-                                                        </div>
-                                                    ),
-                                                )
-                                            ) : (
-                                                <EmptyTableRow text="Belum ada percakapan yang tersimpan." />
-                                            )}
-                                        </div>
-                                    </CardContent>
-                                </Card>
                             </section>
                         )}
 
@@ -1128,8 +1243,7 @@ export default function AdminPage() {
                                     <CardHeader>
                                         <CardTitle>Daftar Pengguna</CardTitle>
                                         <CardDescription>
-                                            Data dummy user yang terdaftar di
-                                            chatbot Deka.
+                                            User yang terdaftar di chatbot Deka.
                                         </CardDescription>
                                     </CardHeader>
                                     <CardContent className="min-h-0 flex-1">
@@ -1148,57 +1262,61 @@ export default function AdminPage() {
                                                 <span>Aktif</span>
                                             </div>
 
-                                            {adminUsers.map((item) => (
-                                                <div
-                                                    key={item.email}
-                                                    className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_140px_140px_140px_160px]"
-                                                >
-                                                    <div className="min-w-0">
-                                                        <div className="flex items-center gap-2">
-                                                            <p className="truncate text-sm font-medium">
-                                                                {item.name}
+                                            {adminUsers.length > 0 ? (
+                                                adminUsers.map((item) => (
+                                                    <div
+                                                        key={item.email}
+                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_140px_140px_140px_160px]"
+                                                    >
+                                                        <div className="min-w-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <p className="truncate text-sm font-medium">
+                                                                    {item.name}
+                                                                </p>
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className="text-[10px] capitalize md:hidden"
+                                                                >
+                                                                    {item.role}
+                                                                </Badge>
+                                                            </div>
+                                                            <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                                {item.email}
                                                             </p>
+                                                        </div>
+                                                        <div className="hidden md:block">
                                                             <Badge
                                                                 variant="outline"
-                                                                className="text-[10px] capitalize md:hidden"
+                                                                className="capitalize"
                                                             >
                                                                 {item.role}
                                                             </Badge>
                                                         </div>
-                                                        <p className="mt-1 truncate text-xs text-muted-foreground">
-                                                            {item.email}
+                                                        <div className="hidden md:block">
+                                                            <Badge
+                                                                variant="outline"
+                                                                className={statusClass(
+                                                                    item.status,
+                                                                )}
+                                                            >
+                                                                {userStatusLabel(
+                                                                    item.status,
+                                                                )}
+                                                            </Badge>
+                                                        </div>
+                                                        <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
+                                                            {formatNumber(
+                                                                item.conversations,
+                                                            )}
+                                                        </p>
+                                                        <p className="text-sm whitespace-nowrap text-muted-foreground">
+                                                            {item.lastSeen}
                                                         </p>
                                                     </div>
-                                                    <div className="hidden md:block">
-                                                        <Badge
-                                                            variant="outline"
-                                                            className="capitalize"
-                                                        >
-                                                            {item.role}
-                                                        </Badge>
-                                                    </div>
-                                                    <div className="hidden md:block">
-                                                        <Badge
-                                                            variant="outline"
-                                                            className={statusClass(
-                                                                item.status,
-                                                            )}
-                                                        >
-                                                            {userStatusLabel(
-                                                                item.status,
-                                                            )}
-                                                        </Badge>
-                                                    </div>
-                                                    <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
-                                                        {formatNumber(
-                                                            item.conversations,
-                                                        )}
-                                                    </p>
-                                                    <p className="text-sm whitespace-nowrap text-muted-foreground">
-                                                        {item.lastSeen}
-                                                    </p>
-                                                </div>
-                                            ))}
+                                                ))
+                                            ) : (
+                                                <EmptyTableRow text="Belum ada pengguna yang cocok." />
+                                            )}
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -1212,7 +1330,9 @@ export default function AdminPage() {
                                         icon={Clock3}
                                         label="Aktivitas hari ini"
                                         tone="blue"
-                                        value={formatNumber(5)}
+                                        value={formatNumber(
+                                            activityStats.activityToday,
+                                        )}
                                     />
                                     <UserMetricCard
                                         icon={ShieldCheck}
@@ -1222,14 +1342,10 @@ export default function AdminPage() {
                                     />
                                     <UserMetricCard
                                         icon={MessageSquare}
-                                        label="Aksi percakapan"
+                                        label="Aksi feedback"
                                         tone="green"
                                         value={formatNumber(
-                                            adminActivityItems.filter(
-                                                (item) =>
-                                                    item.category ===
-                                                    'conversation',
-                                            ).length,
+                                            activityStats.conversationActions,
                                         )}
                                     />
                                     <UserMetricCard
@@ -1237,10 +1353,7 @@ export default function AdminPage() {
                                         label="Export laporan"
                                         tone="amber"
                                         value={formatNumber(
-                                            adminActivityItems.filter(
-                                                (item) =>
-                                                    item.category === 'report',
-                                            ).length,
+                                            activityStats.reportExports,
                                         )}
                                     />
                                 </div>
@@ -1253,52 +1366,106 @@ export default function AdminPage() {
                                                     Log Aktivitas Admin
                                                 </CardTitle>
                                                 <CardDescription>
-                                                    Riwayat dummy admin dan aksi
-                                                    yang dilakukan di dashboard.
+                                                    Baca dari kiri: admin,
+                                                    kategori, aktivitas, IP, dan
+                                                    waktu. Update otomatis tiap
+                                                    10 detik.
                                                 </CardDescription>
                                             </div>
                                             <div className="flex flex-wrap gap-2">
-                                                <Button
+                                                <Badge
                                                     variant="outline"
+                                                    className={
+                                                        activityLiveStatus ===
+                                                        'error'
+                                                            ? 'border-transparent bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-200'
+                                                            : 'border-transparent bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-200'
+                                                    }
+                                                >
+                                                    {activityLiveStatus ===
+                                                    'error'
+                                                        ? 'Realtime tertunda'
+                                                        : activityLiveStatus ===
+                                                            'updating'
+                                                          ? 'Memuat realtime'
+                                                          : 'Live realtime'}
+                                                </Badge>
+                                                <Button
+                                                    variant={
+                                                        activityPeriod ===
+                                                        'week'
+                                                            ? 'default'
+                                                            : 'outline'
+                                                    }
                                                     size="sm"
                                                     onClick={() =>
-                                                        exportAdminActivityReport(
+                                                        updateActivityPeriod(
                                                             'week',
+                                                            filters?.search,
                                                         )
                                                     }
                                                 >
-                                                    <Download className="h-4 w-4" />
+                                                    <Clock3 className="h-4 w-4" />
                                                     Mingguan
                                                 </Button>
                                                 <Button
-                                                    variant="outline"
+                                                    variant={
+                                                        activityPeriod ===
+                                                        'month'
+                                                            ? 'default'
+                                                            : 'outline'
+                                                    }
                                                     size="sm"
                                                     onClick={() =>
-                                                        exportAdminActivityReport(
+                                                        updateActivityPeriod(
                                                             'month',
+                                                            filters?.search,
                                                         )
                                                     }
                                                 >
-                                                    <Download className="h-4 w-4" />
+                                                    <Clock3 className="h-4 w-4" />
                                                     Bulanan
+                                                </Button>
+                                                <Button
+                                                    variant={
+                                                        activityPeriod ===
+                                                        'year'
+                                                            ? 'default'
+                                                            : 'outline'
+                                                    }
+                                                    size="sm"
+                                                    onClick={() =>
+                                                        updateActivityPeriod(
+                                                            'year',
+                                                            filters?.search,
+                                                        )
+                                                    }
+                                                >
+                                                    <Clock3 className="h-4 w-4" />
+                                                    Tahunan
                                                 </Button>
                                                 <Button
                                                     variant="outline"
                                                     size="sm"
                                                     onClick={() =>
                                                         exportAdminActivityReport(
-                                                            'year',
+                                                            activityPeriod,
+                                                            liveActivityItems,
                                                         )
                                                     }
                                                 >
                                                     <Download className="h-4 w-4" />
-                                                    Tahunan
+                                                    CSV
                                                 </Button>
                                                 <Button
                                                     size="sm"
                                                     onClick={() =>
                                                         printAdminDashboardReport(
                                                             'month',
+                                                            metrics,
+                                                            conversations,
+                                                            tokenUsageItems,
+                                                            liveActivityItems,
                                                         )
                                                     }
                                                 >
@@ -1309,76 +1476,79 @@ export default function AdminPage() {
                                         </div>
                                     </CardHeader>
                                     <CardContent className="min-h-0 flex-1">
-                                        <div className="h-full overflow-hidden rounded-md border">
-                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(220px,1fr)_150px_minmax(220px,1.1fr)_150px_150px]">
-                                                <span>Admin</span>
-                                                <span className="hidden md:block">
-                                                    Kategori
-                                                </span>
-                                                <span className="hidden md:block">
-                                                    Aktivitas
-                                                </span>
-                                                <span className="hidden md:block">
-                                                    IP
-                                                </span>
-                                                <span>Waktu</span>
-                                            </div>
+                                        <div className="h-full overflow-x-auto overflow-y-auto rounded-md border">
+                                            <div className="min-w-[880px]">
+                                                <div className="grid grid-cols-[minmax(220px,1fr)_140px_minmax(260px,1.2fr)_150px_150px] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                    <span>Admin</span>
+                                                    <span>Kategori</span>
+                                                    <span>Aktivitas</span>
+                                                    <span>IP</span>
+                                                    <span>Waktu</span>
+                                                </div>
 
-                                            {adminActivityItems.length > 0 ? (
-                                                adminActivityItems.map(
-                                                    (item) => (
-                                                        <div
-                                                            key={`${item.action}-${item.time}`}
-                                                            className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(220px,1fr)_150px_minmax(220px,1.1fr)_150px_150px]"
-                                                        >
-                                                            <div className="min-w-0">
-                                                                <p className="truncate text-sm font-medium">
-                                                                    {item.admin}
-                                                                </p>
-                                                                <p className="mt-1 truncate text-xs text-muted-foreground">
-                                                                    {item.email}
-                                                                </p>
-                                                            </div>
-                                                            <div className="hidden md:block">
-                                                                <Badge
-                                                                    variant="outline"
-                                                                    className={activityCategoryClass(
-                                                                        item.category,
-                                                                    )}
-                                                                >
-                                                                    {activityCategoryLabel(
-                                                                        item.category,
-                                                                    )}
-                                                                </Badge>
-                                                            </div>
-                                                            <div className="hidden min-w-0 md:block">
-                                                                <p className="truncate text-sm font-medium">
+                                                {liveActivityItems.length >
+                                                0 ? (
+                                                    liveActivityItems.map(
+                                                        (item) => (
+                                                            <div
+                                                                key={item.id}
+                                                                className="grid grid-cols-[minmax(220px,1fr)_140px_minmax(260px,1.2fr)_150px_150px] gap-3 border-b px-4 py-4 last:border-b-0"
+                                                            >
+                                                                <div className="min-w-0">
+                                                                    <p className="truncate text-sm font-medium">
+                                                                        {
+                                                                            item.admin
+                                                                        }
+                                                                    </p>
+                                                                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                                        {
+                                                                            item.email
+                                                                        }
+                                                                    </p>
+                                                                </div>
+                                                                <div>
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className={activityCategoryClass(
+                                                                            item.category,
+                                                                        )}
+                                                                    >
+                                                                        {activityCategoryLabel(
+                                                                            item.category,
+                                                                        )}
+                                                                    </Badge>
+                                                                </div>
+                                                                <div className="min-w-0">
+                                                                    <p className="truncate text-sm font-medium">
+                                                                        {
+                                                                            item.action
+                                                                        }
+                                                                    </p>
+                                                                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                                        {
+                                                                            item.target
+                                                                        }{' '}
+                                                                        ·{' '}
+                                                                        {
+                                                                            item.detail
+                                                                        }
+                                                                    </p>
+                                                                </div>
+                                                                <p className="font-mono text-sm text-muted-foreground">
                                                                     {
-                                                                        item.action
+                                                                        item.ipAddress
                                                                     }
                                                                 </p>
-                                                                <p className="mt-1 truncate text-xs text-muted-foreground">
-                                                                    {
-                                                                        item.target
-                                                                    }{' '}
-                                                                    ·{' '}
-                                                                    {
-                                                                        item.detail
-                                                                    }
+                                                                <p className="text-sm whitespace-nowrap text-muted-foreground">
+                                                                    {item.time}
                                                                 </p>
                                                             </div>
-                                                            <p className="hidden font-mono text-sm text-muted-foreground md:block">
-                                                                {item.ipAddress}
-                                                            </p>
-                                                            <p className="text-sm whitespace-nowrap text-muted-foreground">
-                                                                {item.time}
-                                                            </p>
-                                                        </div>
-                                                    ),
-                                                )
-                                            ) : (
-                                                <EmptyTableRow text="Belum ada aktivitas admin yang tercatat." />
-                                            )}
+                                                        ),
+                                                    )
+                                                ) : (
+                                                    <EmptyTableRow text="Belum ada aktivitas admin yang tercatat." />
+                                                )}
+                                            </div>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -1438,7 +1608,7 @@ function userStatusLabel(status: AdminUserItem['status']) {
 }
 
 function activityCategoryClass(category: AdminActivityItem['category']) {
-    return activityCategoryClasses[category];
+    return activityCategoryClasses[category] ?? activityCategoryClasses.system;
 }
 
 function activityCategoryLabel(category: AdminActivityItem['category']) {
@@ -1450,7 +1620,7 @@ function activityCategoryLabel(category: AdminActivityItem['category']) {
         system: 'Sistem',
     };
 
-    return labels[category];
+    return labels[category] ?? labels.system;
 }
 
 function reportPeriodLabel(period: ReportPeriod) {
@@ -1463,9 +1633,12 @@ function reportPeriodLabel(period: ReportPeriod) {
     return labels[period];
 }
 
-function exportAdminActivityReport(period: ReportPeriod) {
+function exportAdminActivityReport(
+    period: ReportPeriod,
+    items: AdminActivityItem[],
+) {
     const periodLabel = reportPeriodLabel(period);
-    const rows = adminActivityItems.map((item) => [
+    const rows = items.map((item) => [
         item.admin,
         item.email,
         activityCategoryLabel(item.category),
@@ -1506,9 +1679,15 @@ function exportAdminActivityReport(period: ReportPeriod) {
     console.info(`Laporan aktivitas admin ${periodLabel} diexport.`);
 }
 
-function printAdminDashboardReport(period: ReportPeriod) {
+function printAdminDashboardReport(
+    period: ReportPeriod,
+    metricItems: Metric[],
+    conversationItems: Conversation[],
+    tokenItems: TokenUsageItem[],
+    activityItems: AdminActivityItem[],
+) {
     const periodLabel = reportPeriodLabel(period);
-    const metricCards = metrics
+    const metricCards = metricItems
         .map(
             (metric) => `
                 <div class="summary-card">
@@ -1519,7 +1698,7 @@ function printAdminDashboardReport(period: ReportPeriod) {
             `,
         )
         .join('');
-    const feedbackRows = conversations
+    const feedbackRows = conversationItems
         .map(
             (item) => `
                 <tr>
@@ -1532,7 +1711,7 @@ function printAdminDashboardReport(period: ReportPeriod) {
             `,
         )
         .join('');
-    const tokenRows = tokenUsageItems
+    const tokenRows = tokenItems
         .map(
             (item) => `
                 <tr>
@@ -1546,7 +1725,7 @@ function printAdminDashboardReport(period: ReportPeriod) {
             `,
         )
         .join('');
-    const printableRows = adminActivityItems
+    const printableRows = activityItems
         .map(
             (item) => `
                 <tr>
@@ -1594,7 +1773,7 @@ function printAdminDashboardReport(period: ReportPeriod) {
                 <h2>Dashboard Ringkasan</h2>
                 <div class="summary">${metricCards}</div>
 
-                <h2>Feedback Percakapan</h2>
+                <h2>Feedback AI</h2>
                 <table>
                     <thead>
                         <tr>
@@ -1704,7 +1883,7 @@ function GuardrailItem({
 
 function TokenCell({ value }: { value: string }) {
     return (
-        <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
+        <p className="text-right text-sm text-muted-foreground tabular-nums">
             {value}
         </p>
     );

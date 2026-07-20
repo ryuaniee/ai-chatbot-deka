@@ -98,6 +98,8 @@ OPENAI_URL=https://codex.deka.dev/v1
 
 AI_CHAT_PROVIDER=openai
 AI_CHAT_MODEL=gpt-5.4-mini
+AI_CHAT_MODERATION_ENABLED=true
+AI_CHAT_MODERATION_FAIL_CLOSED=true
 
 ADMIN_NAME="Admin Deka"
 ADMIN_EMAIL=admin@deka.dev

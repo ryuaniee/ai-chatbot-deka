@@ -5,6 +5,7 @@ import {
     History,
     Info,
     MessageSquare,
+    Mic,
     Phone,
     Plus,
     SendHorizontal,
@@ -16,8 +17,8 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import DekaLogo from '@/components/deka-logo';
-import LogoutConfirmModal from '@/components/logout-confirm-modal';
 import SettingsModal from '@/components/settings-modal';
+import LogoutConfirmModal from '@/components/logout-confirm-modal';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -163,22 +164,55 @@ export default function ChatPage() {
         }
     });
 
+    const persistFeedback = async (
+        messageId: string | number,
+        type: 'like' | 'dislike' | null,
+    ) => {
+        const message = messages.find((item) => item.id === messageId);
+        const csrfToken = document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute('content');
+
+        if (!message || !csrfToken) {
+            return;
+        }
+
+        await fetch(
+            `/api/conversations/${message.conversation_id}/messages/${message.id}/feedback`,
+            {
+                method: 'POST',
+                headers: {
+                    Accept: 'application/json',
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                },
+                body: JSON.stringify({ type }),
+            },
+        );
+    };
+
     const handleToggleFeedback = (
         messageId: string | number,
         type: 'like' | 'dislike',
     ) => {
+        const nextType = msgFeedback[messageId] === type ? null : type;
+
         setMsgFeedback((prev) => {
             const next = { ...prev };
 
-            if (next[messageId] === type) {
+            if (nextType === null) {
                 delete next[messageId];
             } else {
-                next[messageId] = type;
+                next[messageId] = nextType;
             }
 
             localStorage.setItem('deka_chat_feedback', JSON.stringify(next));
 
             return next;
+        });
+
+        void persistFeedback(messageId, nextType).catch((error) => {
+            console.error('Failed to persist feedback:', error);
         });
     };
 
@@ -408,6 +442,44 @@ export default function ChatPage() {
         const tempAssistantId = nextTempId();
         let buffer = '';
         let streamCompleted = false;
+        let receivedAssistantContent = false;
+
+        const fallbackAssistantMessage = (): MessageItem => ({
+            id: tempAssistantId,
+            conversation_id: activeConversationId ?? conversationId ?? 0,
+            reply_to_message_id: null,
+            role: 'assistant',
+            content:
+                'Maaf, layanan AI sedang lambat. Coba ulangi beberapa saat lagi.',
+            sequence: messages.length + 2,
+            created_at: new Date().toISOString(),
+        });
+
+        const ensureFallbackAssistantMessage = () => {
+            setMessages((prev) => {
+                const hasContent = prev.some(
+                    (message) =>
+                        message.role === 'assistant' &&
+                        message.content.trim() !== '' &&
+                        (message.id === tempAssistantId ||
+                            message.reply_to_message_id !== null ||
+                            message.id > 0),
+                );
+
+                if (hasContent) {
+                    return prev.filter(
+                        (message) =>
+                            message.id !== tempAssistantId ||
+                            message.content.trim() !== '',
+                    );
+                }
+
+                return [
+                    ...prev.filter((message) => message.id !== tempAssistantId),
+                    fallbackAssistantMessage(),
+                ];
+            });
+        };
 
         const drainBufferedEvents = (source: string): string => {
             const normalized = source.replace(/\r\n/g, '\n');
@@ -430,10 +502,18 @@ export default function ChatPage() {
                     fetchConversations();
                     streamCompleted = true;
 
+                    if (!receivedAssistantContent) {
+                        ensureFallbackAssistantMessage();
+                    }
+
                     return '';
                 }
 
-                applyEvent(JSON.parse(payload) as StreamEventPayload);
+                try {
+                    applyEvent(JSON.parse(payload) as StreamEventPayload);
+                } catch (error) {
+                    console.error('Failed to parse stream event:', error);
+                }
             }
 
             return remainder;
@@ -461,6 +541,11 @@ export default function ChatPage() {
                 case 'text_delta':
                     setMessages((prev) => {
                         const delta = event.delta ?? '';
+
+                        if (delta.trim() !== '') {
+                            receivedAssistantContent = true;
+                        }
+
                         const assistantIndex = prev.findIndex(
                             (message) => message.id === tempAssistantId,
                         );
@@ -497,6 +582,10 @@ export default function ChatPage() {
 
                 case 'message_complete':
                     if (event.assistant_message) {
+                        if (event.assistant_message.content.trim() !== '') {
+                            receivedAssistantContent = true;
+                        }
+
                         setMessages((prev) => {
                             const withoutTemp = prev.filter(
                                 (message) => message.id !== tempAssistantId,
@@ -506,6 +595,12 @@ export default function ChatPage() {
                                 ...withoutTemp,
                                 {
                                     ...event.assistant_message!,
+                                    content:
+                                        event.assistant_message!.content.trim() !==
+                                        ''
+                                            ? event.assistant_message!.content
+                                            : fallbackAssistantMessage()
+                                                  .content,
                                     response_time_ms:
                                         event.stream_metrics
                                             ?.stream_duration_ms ?? null,
@@ -566,6 +661,10 @@ export default function ChatPage() {
 
             if (buffer.trim() !== '') {
                 drainBufferedEvents(buffer);
+            }
+
+            if (!receivedAssistantContent) {
+                ensureFallbackAssistantMessage();
             }
         } finally {
             if (streamAbortRef.current === controller) {
@@ -895,7 +994,7 @@ export default function ChatPage() {
                                 </div>
                             </div>
                         ) : (
-                            <div className="space-y-6 px-3 pt-6 pb-6 lg:pt-[130px] md:px-4">
+                            <div className="space-y-6 px-3 pt-6 pb-6 md:px-4 lg:pt-[130px]">
                                 {messages.map((message, index) => {
                                     const isLastMessage =
                                         index === messages.length - 1;
@@ -1070,7 +1169,7 @@ export default function ChatPage() {
                                                     <DekaLogo className="h-6 w-6 object-contain" />
                                                 </div>
                                                 <div className="border-slate-150/70 w-fit rounded-2xl rounded-tl-none border bg-white px-5 py-3.5 shadow-sm">
-                                                    <div className="flex items-center gap-2.5 text-slate-500 font-medium text-[15px]">
+                                                    <div className="flex items-center gap-2.5 text-[15px] font-medium text-slate-500">
                                                         <Loader2 className="h-4.5 w-4.5 animate-spin text-slate-400" />
                                                         <span>Thinking...</span>
                                                     </div>
@@ -1096,7 +1195,7 @@ export default function ChatPage() {
                                     onKeyDown={handleKeyDown}
                                     placeholder="Tulis pertanyaan tentang Deka di sini..."
                                     rows={1}
-                                    className="max-h-24 min-h-[40px] flex-1 resize-none scrollbar-none bg-transparent pl-4 pr-2 py-2.5 text-sm text-slate-800 outline-none md:text-base"
+                                    className="max-h-24 min-h-[40px] flex-1 resize-none scrollbar-none bg-transparent py-2.5 pr-2 pl-4 text-sm text-slate-800 outline-none md:text-base"
                                 />
 
                                 {/* Right action buttons: Send button */}
@@ -1106,7 +1205,7 @@ export default function ChatPage() {
                                         disabled={
                                             !inputValue.trim() || isGenerating
                                         }
-                                        className="disabled:bg-blue-600/40 disabled:text-white/60 inline-flex h-9.5 w-9.5 cursor-pointer items-center justify-center rounded-full bg-blue-600 text-white shadow-md transition-all duration-200 hover:bg-blue-500 hover:shadow-blue-500/25 active:scale-95 disabled:shadow-none disabled:cursor-not-allowed"
+                                        className="inline-flex h-9.5 w-9.5 cursor-pointer items-center justify-center rounded-full bg-blue-600 text-white shadow-md transition-all duration-200 hover:bg-blue-500 hover:shadow-blue-500/25 active:scale-95 disabled:cursor-not-allowed disabled:bg-blue-600/40 disabled:text-white/60 disabled:shadow-none"
                                     >
                                         <SendHorizontal className="h-4.5 w-4.5" />
                                     </button>

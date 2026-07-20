@@ -15,7 +15,14 @@ use Laravel\Ai\Exceptions\InsufficientCreditsException;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Exceptions\RateLimitedException;
 use Laravel\Ai\Responses\AgentResponse;
+use Laravel\Ai\Responses\Data\Meta;
+use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\StreamableAgentResponse;
+use Laravel\Ai\Streaming\Events\StreamEnd;
+use Laravel\Ai\Streaming\Events\StreamStart;
+use Laravel\Ai\Streaming\Events\TextDelta;
+use Laravel\Ai\Streaming\Events\TextEnd;
+use Laravel\Ai\Streaming\Events\TextStart;
 use LogicException;
 use RuntimeException;
 use Throwable;
@@ -53,6 +60,10 @@ class AiRuntimeClient
     public function stream(int $conversationId, int $userId, array $messages): StreamableAgentResponse
     {
         [$history, $prompt] = $this->splitConversationContext($messages);
+
+        if ((bool) config('services.ai_chat.curl_streaming_enabled', false)) {
+            return $this->streamWithCurl([...$history, ['role' => 'user', 'content' => $prompt]]);
+        }
 
         try {
             return ConversationReplyAgent::make(messages: $history)->stream(
@@ -248,6 +259,190 @@ class AiRuntimeClient
             ->take((int) config('services.deka_knowledge.query_rewrite_limit', 5))
             ->values()
             ->all();
+    }
+
+    /**
+     * The Laravel HTTP/Guzzle streaming path can hang against the local
+     * codex.deka.dev proxy, while native cURL receives SSE events correctly.
+     *
+     * @param  array<int, array{role: string, content: string}>  $messages
+     */
+    private function streamWithCurl(array $messages): StreamableAgentResponse
+    {
+        $invocationId = (string) Str::uuid();
+        $model = $this->nullableString(config('services.ai_chat.model')) ?? 'gpt-4o-mini';
+
+        return new StreamableAgentResponse(
+            $invocationId,
+            function () use ($invocationId, $messages, $model) {
+                yield from $this->curlResponseStreamEvents($invocationId, $messages, $model);
+            },
+            new Meta('openai', $model),
+        );
+    }
+
+    /**
+     * @param  array<int, array{role: string, content: string}>  $messages
+     */
+    private function curlResponseStreamEvents(string $invocationId, array $messages, string $model): \Generator
+    {
+        $url = rtrim((string) config('ai.providers.openai.url'), '/').'/responses';
+        $apiKey = (string) config('ai.providers.openai.key');
+        $messageId = (string) Str::uuid();
+        $textStarted = false;
+        $streamStarted = false;
+        $sseBuffer = '';
+        $eventQueue = [];
+        $usage = new Usage;
+
+        $body = json_encode([
+            'model' => $model,
+            'instructions' => (string) ConversationReplyAgent::make()->instructions(),
+            'input' => array_map(
+                static fn (array $message): array => [
+                    'role' => $message['role'],
+                    'content' => $message['content'],
+                ],
+                $messages,
+            ),
+            'max_output_tokens' => ConversationReplyAgent::make()->maxTokens(),
+            'stream' => true,
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        $pushData = function (array $data) use (&$eventQueue, &$usage, &$textStarted, &$streamStarted, $invocationId, $model, $messageId): void {
+            $type = (string) ($data['type'] ?? '');
+
+            if ($type === 'response.created' && ! $streamStarted) {
+                $streamStarted = true;
+                $eventQueue[] = (new StreamStart(
+                    (string) Str::uuid(),
+                    'openai',
+                    (string) data_get($data, 'response.model', $model),
+                    time(),
+                ))->withInvocationId($invocationId);
+
+                return;
+            }
+
+            if ($type === 'response.output_text.delta') {
+                $delta = (string) ($data['delta'] ?? '');
+
+                if ($delta === '') {
+                    return;
+                }
+
+                if (! $textStarted) {
+                    $textStarted = true;
+                    $eventQueue[] = (new TextStart((string) Str::uuid(), $messageId, time()))
+                        ->withInvocationId($invocationId);
+                }
+
+                $eventQueue[] = (new TextDelta((string) Str::uuid(), $messageId, $delta, time()))
+                    ->withInvocationId($invocationId);
+
+                return;
+            }
+
+            if ($type === 'response.output_text.done' && $textStarted) {
+                $eventQueue[] = (new TextEnd((string) Str::uuid(), $messageId, time()))
+                    ->withInvocationId($invocationId);
+
+                return;
+            }
+
+            if ($type === 'response.completed') {
+                $usageData = (array) data_get($data, 'response.usage', []);
+                $usage = new Usage(
+                    promptTokens: (int) ($usageData['input_tokens'] ?? 0),
+                    completionTokens: (int) ($usageData['output_tokens'] ?? 0),
+                    reasoningTokens: (int) data_get($usageData, 'output_tokens_details.reasoning_tokens', 0),
+                );
+                $eventQueue[] = (new StreamEnd((string) Str::uuid(), 'stop', $usage, time()))
+                    ->withInvocationId($invocationId);
+            }
+        };
+
+        $parseSse = function (string $chunk) use (&$sseBuffer, $pushData): void {
+            $sseBuffer .= $chunk;
+            $sseBuffer = str_replace("\r\n", "\n", $sseBuffer);
+
+            while (($pos = strpos($sseBuffer, "\n\n")) !== false) {
+                $rawEvent = substr($sseBuffer, 0, $pos);
+                $sseBuffer = substr($sseBuffer, $pos + 2);
+                $dataLines = [];
+
+                foreach (explode("\n", $rawEvent) as $line) {
+                    if (str_starts_with($line, 'data:')) {
+                        $dataLines[] = ltrim(substr($line, 5));
+                    }
+                }
+
+                $payload = trim(implode("\n", $dataLines));
+
+                if ($payload === '' || $payload === '[DONE]') {
+                    continue;
+                }
+
+                $decoded = json_decode($payload, true);
+
+                if (is_array($decoded)) {
+                    $pushData($decoded);
+                }
+            }
+        };
+
+        $handle = curl_init($url);
+        curl_setopt_array($handle, [
+            CURLOPT_POST => true,
+            CURLOPT_HTTPHEADER => [
+                'Authorization: Bearer '.$apiKey,
+                'Content-Type: application/json',
+                'Accept: text/event-stream',
+            ],
+            CURLOPT_POSTFIELDS => $body,
+            CURLOPT_TIMEOUT => $this->timeout(),
+            CURLOPT_WRITEFUNCTION => function ($handle, string $chunk) use ($parseSse): int {
+                $parseSse($chunk);
+
+                return strlen($chunk);
+            },
+        ]);
+
+        $multi = curl_multi_init();
+        curl_multi_add_handle($multi, $handle);
+
+        try {
+            do {
+                do {
+                    $status = curl_multi_exec($multi, $running);
+                } while ($status === CURLM_CALL_MULTI_PERFORM);
+
+                while ($eventQueue !== []) {
+                    yield array_shift($eventQueue);
+                }
+
+                if ($running) {
+                    curl_multi_select($multi, 0.2);
+                }
+            } while ($running && $status === CURLM_OK);
+
+            while ($eventQueue !== []) {
+                yield array_shift($eventQueue);
+            }
+
+            $error = curl_error($handle);
+            $statusCode = curl_getinfo($handle, CURLINFO_RESPONSE_CODE);
+
+            if ($error !== '' || $statusCode >= 400) {
+                throw AiRuntimeException::unavailable(
+                    $error !== '' ? $error : "Streaming request failed with HTTP {$statusCode}.",
+                );
+            }
+        } finally {
+            curl_multi_remove_handle($multi, $handle);
+            curl_multi_close($multi);
+            curl_close($handle);
+        }
     }
 
     private function mapException(Throwable $exception): AiRuntimeException|AiRuntimeConfigurationException

@@ -390,6 +390,27 @@ class ChatApiTest extends TestCase
         $this->assertDatabaseCount('messages', 0);
     }
 
+    public function test_moderation_runtime_failure_blocks_message_when_fail_closed(): void
+    {
+        config()->set('services.ai_chat.moderation_fail_closed', true);
+
+        MessageModerationAgent::fake([
+            fn () => throw new AiException('moderation upstream down'),
+        ]);
+
+        $user = User::factory()->create();
+        $conversation = Conversation::factory()->for($user)->create();
+
+        $this->actingAs($user)
+            ->postJson(route('api.conversations.messages.store', $conversation), [
+                'content' => 'Halo',
+            ])
+            ->assertStatus(422)
+            ->assertJsonPath('code', 'MODERATION_UNAVAILABLE');
+
+        $this->assertDatabaseCount('messages', 0);
+    }
+
     public function test_same_idempotency_key_replays_the_original_response_without_duplicate_messages(): void
     {
         $this->fakeAllowedModeration();

@@ -24,10 +24,18 @@ class MessageModerationService
         try {
             $result = $this->aiRuntimeClient->moderate($content);
         } catch (AiRuntimeException $exception) {
-            Log::warning('Message moderation skipped because AI provider is unavailable.', [
+            Log::warning('Message moderation failed because AI provider is unavailable.', [
                 'exception' => $exception::class,
                 'message' => $exception->getMessage(),
+                'fail_closed' => (bool) config('services.ai_chat.moderation_fail_closed', true),
             ]);
+
+            if ((bool) config('services.ai_chat.moderation_fail_closed', true)) {
+                throw new ModerationException(
+                    reasonCode: 'MODERATION_UNAVAILABLE',
+                    message: 'Message could not be checked by the safety policy. Please try again shortly.',
+                );
+            }
 
             return;
         }

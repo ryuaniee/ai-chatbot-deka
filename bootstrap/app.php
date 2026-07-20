@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\AssignRequestId;
+use App\Http\Middleware\EnsureAdminUser;
 use App\Http\Middleware\EnsureRegularUser;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleIdempotency;
@@ -20,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
         $middleware->alias([
+            'admin-user' => EnsureAdminUser::class,
             'regular-user' => EnsureRegularUser::class,
         ]);
 
