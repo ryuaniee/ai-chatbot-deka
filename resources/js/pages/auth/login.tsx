@@ -1,5 +1,6 @@
 import { Head, useHttp } from '@inertiajs/react';
 import { Mail, Lock } from 'lucide-react';
+import { useState } from 'react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
 import TextLink from '@/components/text-link';
@@ -49,9 +50,37 @@ export default function Login({ status, canResetPassword }: Props) {
         password: '',
         remember: false,
     });
+    const [validationErrors, setValidationErrors] = useState({
+        email: '',
+        password: '',
+    });
+
+    const validate = () => {
+        const errors = {
+            email: '',
+            password: '',
+        };
+
+        if (!http.data.email.trim()) {
+            errors.email = 'Email wajib diisi.';
+        }
+
+        if (!http.data.password) {
+            errors.password = 'Kata sandi wajib diisi.';
+        }
+
+        setValidationErrors(errors);
+
+        return !errors.email && !errors.password;
+    };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!validate()) {
+            return;
+        }
+
         http.post(apiLogin.url())
             .then((res: any) => {
                 if (res.redirect_to) {
@@ -67,7 +96,11 @@ export default function Login({ status, canResetPassword }: Props) {
         <>
             <Head title="Masuk" />
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-6">
+            <form
+                onSubmit={handleSubmit}
+                className="flex flex-col gap-6"
+                noValidate
+            >
                 <div className="grid gap-5">
                     {/* Email Address */}
                     <div className="grid gap-2">
@@ -91,13 +124,21 @@ export default function Login({ status, canResetPassword }: Props) {
                                 autoComplete="email"
                                 placeholder="nama@email.com"
                                 value={http.data.email}
-                                onChange={(e) =>
-                                    http.setData('email', e.target.value)
-                                }
+                                onChange={(e) => {
+                                    http.setData('email', e.target.value);
+                                    setValidationErrors((errors) => ({
+                                        ...errors,
+                                        email: '',
+                                    }));
+                                }}
                                 className="h-12 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
-                        <InputError message={http.errors.email} />
+                        <InputError
+                            message={
+                                validationErrors.email || http.errors.email
+                            }
+                        />
                     </div>
 
                     {/* Password */}
@@ -120,13 +161,22 @@ export default function Login({ status, canResetPassword }: Props) {
                                 autoComplete="current-password"
                                 placeholder="Masukkan kata sandi"
                                 value={http.data.password}
-                                onChange={(e) =>
-                                    http.setData('password', e.target.value)
-                                }
+                                onChange={(e) => {
+                                    http.setData('password', e.target.value);
+                                    setValidationErrors((errors) => ({
+                                        ...errors,
+                                        password: '',
+                                    }));
+                                }}
                                 className="h-12 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
-                        <InputError message={http.errors.password} />
+                        <InputError
+                            message={
+                                validationErrors.password ||
+                                http.errors.password
+                            }
+                        />
                     </div>
 
                     {/* Remember Me & Forgot Password */}
@@ -146,7 +196,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                 htmlFor="remember"
                                 className="cursor-pointer text-sm font-semibold text-zinc-700 select-none"
                             >
-                                Ingatkan Saya
+                                Ingat saya
                             </Label>
                         </div>
                         {canResetPassword && (
@@ -155,7 +205,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                 className="text-sm font-semibold text-zinc-600 hover:text-zinc-900 hover:underline"
                                 tabIndex={5}
                             >
-                                Lupa Password?
+                                Lupa password?
                             </TextLink>
                         )}
                     </div>
@@ -174,6 +224,10 @@ export default function Login({ status, canResetPassword }: Props) {
                     </Button>
                 </div>
 
+                <p className="-mt-2 text-center text-xs leading-5 text-zinc-500">
+                    Akun digunakan untuk menyimpan riwayat percakapan Anda.
+                </p>
+
                 {/* Divider */}
                 <div className="relative flex items-center py-2">
                     <div className="flex-grow border-t border-zinc-200"></div>
@@ -191,7 +245,7 @@ export default function Login({ status, canResetPassword }: Props) {
                 >
                     <GoogleIcon />
                     <span className="text-sm font-bold">
-                        Masuk atau daftar dengan Google
+                        Lanjutkan dengan Google
                     </span>
                 </button>
 
@@ -203,7 +257,7 @@ export default function Login({ status, canResetPassword }: Props) {
                         className="font-semibold text-[#2f80ed] hover:underline"
                         tabIndex={6}
                     >
-                        Daftar Sekarang
+                        Daftar
                     </TextLink>
                 </div>
             </form>
@@ -218,7 +272,6 @@ export default function Login({ status, canResetPassword }: Props) {
 }
 
 Login.layout = {
-    title: 'Masuk atau daftar',
-    description:
-        'AI Chatbot cerdas untuk membantu Anda kapan pun dan di mana pun.',
+    title: 'Masuk ke Deka',
+    description: 'Lanjutkan percakapan dan kelola akun Anda.',
 };

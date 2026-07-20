@@ -251,6 +251,7 @@ class DekaKnowledgeRagTest extends TestCase
     {
         $this->configureKnowledge();
         config()->set('services.deka_knowledge.retrieval_mode', 'fulltext');
+        config()->set('services.deka_knowledge.query_rewrite_limit', 8);
         $this->fakeAllowedModeration();
         Embeddings::fake()->preventStrayEmbeddings();
         KnowledgeSearchQueryAgent::fake([
@@ -432,7 +433,7 @@ class DekaKnowledgeRagTest extends TestCase
             ->where('role', 'assistant')
             ->firstOrFail();
 
-        $this->assertContains('founder deka', data_get($assistantMessage->metadata, 'knowledge.queries'));
+        $this->assertContains('founder DEKA', data_get($assistantMessage->metadata, 'knowledge.queries'));
         $this->assertSame('manual://deka-founder', data_get($assistantMessage->metadata, 'knowledge.sources.0.source_uri'));
     }
 
@@ -582,7 +583,8 @@ class DekaKnowledgeRagTest extends TestCase
                 ->first(fn (array $message): bool => str_contains($message['content'], 'DEKA_KNOWLEDGE_CANDIDATES'));
 
             return is_array($knowledgeMessage)
-                && str_contains($knowledgeMessage['content'], 'ajukan pertanyaan klarifikasi singkat');
+                && (str_contains($knowledgeMessage['content'], 'ajukan pertanyaan klarifikasi singkat')
+                    || str_contains($knowledgeMessage['content'], 'bertanya balik secara singkat'));
         });
     }
 

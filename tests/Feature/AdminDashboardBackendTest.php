@@ -77,31 +77,36 @@ class AdminDashboardBackendTest extends TestCase
 
     public function test_admin_activity_log_can_be_searched_and_period_filtered(): void
     {
-        Carbon::setTestNow('2026-07-20 10:00:00');
+        $now = Carbon::parse('2026-07-20 10:00:00');
+        Carbon::setTestNow($now);
 
         $admin = User::factory()->admin()->create(['name' => 'Admin Deka']);
 
-        AdminActivityLog::query()->create([
+        $recentLog = AdminActivityLog::query()->create([
             'admin_user_id' => $admin->id,
             'category' => 'report',
             'action' => 'Export laporan bulanan',
             'target' => 'Feedback AI',
             'description' => 'Audit Mingguan khusus',
             'ip_address' => '127.0.0.1',
-            'created_at' => now()->subDays(3),
-            'updated_at' => now()->subDays(3),
         ]);
+        $recentLog->forceFill([
+            'created_at' => $now->copy()->subDays(3),
+            'updated_at' => $now->copy()->subDays(3),
+        ])->save();
 
-        AdminActivityLog::query()->create([
+        $oldLog = AdminActivityLog::query()->create([
             'admin_user_id' => $admin->id,
             'category' => 'report',
             'action' => 'Export laporan lama',
             'target' => 'Feedback AI',
             'description' => 'Audit Mingguan lama',
             'ip_address' => '127.0.0.2',
-            'created_at' => now()->subDays(20),
-            'updated_at' => now()->subDays(20),
         ]);
+        $oldLog->forceFill([
+            'created_at' => $now->copy()->subDays(20),
+            'updated_at' => $now->copy()->subDays(20),
+        ])->save();
 
         try {
             $this->actingAs($admin)
@@ -205,6 +210,30 @@ class AdminDashboardBackendTest extends TestCase
         $this->assertDatabaseMissing('message_feedback', [
             'message_id' => $assistantMessage->id,
             'user_id' => $user->id,
+        ]);
+    }
+
+    public function test_user_cannot_submit_feedback_for_another_users_message(): void
+    {
+        $owner = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $conversation = Conversation::factory()->for($owner)->create();
+        $assistantMessage = Message::query()->create([
+            'conversation_id' => $conversation->id,
+            'role' => 'assistant',
+            'sequence' => 1,
+            'content' => 'Jawaban Deka.',
+        ]);
+
+        $this->actingAs($otherUser)
+            ->postJson(route('api.conversations.messages.feedback', [$conversation, $assistantMessage]), [
+                'type' => MessageFeedback::TYPE_LIKE,
+            ])
+            ->assertNotFound();
+
+        $this->assertDatabaseMissing('message_feedback', [
+            'message_id' => $assistantMessage->id,
+            'user_id' => $otherUser->id,
         ]);
     }
 }

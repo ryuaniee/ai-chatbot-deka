@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
+use App\Support\EmailAddress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,8 +15,9 @@ class PasswordResetLinkController extends Controller
 {
     public function store(Request $request): JsonResponse|RedirectResponse
     {
-        $email = strtolower(trim((string) $request->input(Fortify::username(), '')));
-        $key = sprintf('password-reset-link:%s:%s', sha1($email), $request->ip());
+        $email = EmailAddress::normalize((string) $request->input(Fortify::username(), ''));
+        $canonicalEmail = EmailAddress::canonical($email);
+        $key = sprintf('password-reset-link:%s:%s', sha1($canonicalEmail), $request->ip());
 
         if (RateLimiter::tooManyAttempts($key, 3)) {
             $seconds = RateLimiter::availableIn($key);
@@ -44,7 +47,17 @@ class PasswordResetLinkController extends Controller
 
         RateLimiter::hit($key, 600);
 
-        $status = Password::sendResetLink($request->only(Fortify::username()));
+        $user = User::query()
+            ->where('canonical_email', $canonicalEmail)
+            ->first();
+
+        if (! $user instanceof User) {
+            return back()->with('status', __(Password::RESET_LINK_SENT));
+        }
+
+        $status = Password::sendResetLink([
+            Fortify::username() => $user->email,
+        ]);
 
         if ($status !== Password::RESET_LINK_SENT) {
             return back()->withErrors([

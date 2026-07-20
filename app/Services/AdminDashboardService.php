@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\AdminActivityLog;
 use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\MessageFeedback;
 use App\Models\User;
 use Carbon\CarbonInterface;
@@ -31,6 +32,7 @@ class AdminDashboardService
             'feedbackReviewItems' => $this->feedbackReviewItems(),
             'chatTrendItems' => $this->chatTrendItems(),
             'feedbackChartItems' => $this->feedbackChartItems(),
+            'tokenUsageTrend' => $this->tokenUsageTrend(),
             'totals' => [
                 'totalTokenUsage' => array_sum(array_column($tokenUsageItems, 'totalTokens')),
                 'totalLikes' => MessageFeedback::query()->where('type', MessageFeedback::TYPE_LIKE)->count(),
@@ -153,6 +155,51 @@ class AdminDashboardService
     }
 
     /**
+     * @return array{currentTokens: int, previousTokens: int, changePercent: float|null, direction: string}
+     */
+    private function tokenUsageTrend(): array
+    {
+        $now = now();
+        $currentStart = $now->copy()->startOfMonth();
+        $previousStart = $now->copy()->subMonthNoOverflow()->startOfMonth();
+        $previousEnd = $currentStart->copy()->subSecond();
+
+        $currentTokens = $this->tokenUsageTotalBetween($currentStart, $now);
+        $previousTokens = $this->tokenUsageTotalBetween($previousStart, $previousEnd);
+        $changePercent = $previousTokens > 0
+            ? round((($currentTokens - $previousTokens) / $previousTokens) * 100, 1)
+            : null;
+
+        return [
+            'currentTokens' => $currentTokens,
+            'previousTokens' => $previousTokens,
+            'changePercent' => $changePercent,
+            'direction' => match (true) {
+                $changePercent === null => 'neutral',
+                $changePercent > 0 => 'up',
+                $changePercent < 0 => 'down',
+                default => 'flat',
+            },
+        ];
+    }
+
+    private function tokenUsageTotalBetween(CarbonInterface $start, CarbonInterface $end): int
+    {
+        return Message::query()
+            ->where('role', 'assistant')
+            ->whereBetween('created_at', [$start, $end])
+            ->get(['metadata'])
+            ->sum(function (Message $message): int {
+                $usage = is_array($message->metadata['usage'] ?? null)
+                    ? $message->metadata['usage']
+                    : [];
+
+                return (int) ($usage['total_tokens']
+                    ?? ((int) ($usage['prompt_tokens'] ?? 0) + (int) ($usage['completion_tokens'] ?? 0)));
+            });
+    }
+
+    /**
      * @return array<int, array<string, mixed>>
      */
     private function adminUsers(Request $request): array
@@ -234,12 +281,22 @@ class AdminDashboardService
                     'action' => $action,
                     'target' => $target,
                     'detail' => $detail,
+                    'ipLabel' => $this->ipLabel($item->ip_address),
                     'ipAddress' => $item->ip_address ?? '-',
                     'createdAt' => $item->created_at?->toIso8601String(),
                     'time' => $this->relativeTime($item->created_at),
                 ];
             })
             ->all();
+    }
+
+    private function ipLabel(?string $ipAddress): string
+    {
+        return match ($ipAddress) {
+            null, '' => '-',
+            '::1', '127.0.0.1' => 'localhost',
+            default => $ipAddress,
+        };
     }
 
     /**

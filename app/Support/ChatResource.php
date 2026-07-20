@@ -44,8 +44,28 @@ class ChatResource
             'role' => $message->role,
             'content' => $message->content,
             'sequence' => $message->sequence,
-            'metadata' => $message->metadata,
+            'metadata' => self::publicMetadata($message),
             'created_at' => $message->created_at?->toISOString(),
         ];
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function publicMetadata(Message $message): ?array
+    {
+        $metadata = $message->metadata;
+
+        if (! is_array($metadata)) {
+            return null;
+        }
+
+        unset(
+            $metadata['idempotency_key'],
+            $metadata['knowledge'],
+            $metadata['provider_error'],
+        );
+
+        return $metadata !== [] ? $metadata : null;
     }
 }

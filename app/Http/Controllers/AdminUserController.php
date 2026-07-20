@@ -8,6 +8,7 @@ use App\Support\EmailAddress;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
 
 class AdminUserController extends Controller
@@ -96,7 +97,7 @@ class AdminUserController extends Controller
                 Rule::unique('users', 'canonical_email')->ignore($user),
             ],
             'role' => ['required', Rule::in([User::ROLE_ADMIN, User::ROLE_USER])],
-            'password' => [$creating ? 'required' : 'nullable', 'string', 'min:8', 'confirmed'],
+            'password' => [$creating ? 'required' : 'nullable', 'string', Password::default(), 'confirmed'],
         ];
 
         return validator($input, $rules)->validate();
