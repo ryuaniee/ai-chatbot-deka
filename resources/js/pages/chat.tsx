@@ -1139,7 +1139,7 @@ export default function ChatPage() {
                                         >
                                             {message.role === 'user' ? (
                                                 <div className="flex w-full justify-end">
-                                                    <div className="max-w-[85%] rounded-3xl border border-slate-200/50 bg-slate-100 px-5 py-2.5 text-base whitespace-pre-wrap text-slate-800 md:text-[18px]">
+                                                    <div className="text-wrap-anywhere max-w-[85%] rounded-3xl border border-slate-200/50 bg-slate-100 px-5 py-2.5 text-base whitespace-pre-wrap text-slate-800 md:text-[18px]">
                                                         {message.content}
                                                     </div>
                                                 </div>
@@ -1149,9 +1149,9 @@ export default function ChatPage() {
                                                     <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-100 bg-white shadow-sm">
                                                         <DekaLogo className="h-6 w-6 object-contain" />
                                                     </div>
-                                                    <div className="flex-1 text-base leading-relaxed whitespace-pre-wrap text-slate-800 md:text-[18px]">
+                                                    <div className="text-wrap-anywhere min-w-0 flex-1 text-base leading-relaxed whitespace-pre-wrap text-slate-800 md:text-[18px]">
                                                         {/* Text content sits directly on the page, no card container */}
-                                                        <div className="prose prose-slate max-w-none text-base leading-relaxed md:text-[18px]">
+                                                        <div className="prose prose-slate text-wrap-anywhere max-w-none text-base leading-relaxed md:text-[18px]">
                                                             <MarkdownRenderer
                                                                 content={
                                                                     message.content
@@ -1343,7 +1343,7 @@ export default function ChatPage() {
                                     onKeyDown={handleKeyDown}
                                     placeholder="Tulis pertanyaan tentang Deka di sini..."
                                     rows={1}
-                                    className="max-h-24 min-h-[40px] flex-1 resize-none scrollbar-none bg-transparent py-2.5 pr-2 pl-4 text-sm text-slate-800 outline-none md:text-base"
+                                    className="text-wrap-anywhere max-h-24 min-h-[40px] flex-1 resize-none scrollbar-none bg-transparent py-2.5 pr-2 pl-4 text-sm text-slate-800 outline-none md:text-base"
                                 />
 
                                 {/* Right action buttons: Send button */}
@@ -1521,7 +1521,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <ul
                     key={`ul-${key}`}
-                    className="my-3 ml-4 list-inside list-disc space-y-1.5 text-base text-slate-800 md:text-[18px]"
+                    className="text-wrap-anywhere my-3 ml-4 list-inside list-disc space-y-1.5 text-base text-slate-800 md:text-[18px]"
                 >
                     {currentList.items}
                 </ul>,
@@ -1530,7 +1530,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <ol
                     key={`ol-${key}`}
-                    className="my-3 ml-4 list-inside list-decimal space-y-1.5 text-base text-slate-800 md:text-[18px]"
+                    className="text-wrap-anywhere my-3 ml-4 list-inside list-decimal space-y-1.5 text-base text-slate-800 md:text-[18px]"
                 >
                     {currentList.items}
                 </ol>,
@@ -1561,7 +1561,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <h1
                     key={idx}
-                    className="mt-4 mb-2 text-2xl font-black text-slate-900"
+                    className="text-wrap-anywhere mt-4 mb-2 text-2xl font-black text-slate-900"
                 >
                     {parseInline(trimmed.slice(2))}
                 </h1>,
@@ -1575,7 +1575,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <h2
                     key={idx}
-                    className="mt-4.5 mb-2 text-xl font-bold text-slate-900"
+                    className="text-wrap-anywhere mt-4.5 mb-2 text-xl font-bold text-slate-900"
                 >
                     {parseInline(trimmed.slice(3))}
                 </h2>,
@@ -1589,7 +1589,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <h3
                     key={idx}
-                    className="mt-4 mb-1.5 text-lg font-bold text-slate-900"
+                    className="text-wrap-anywhere mt-4 mb-1.5 text-lg font-bold text-slate-900"
                 >
                     {parseInline(trimmed.slice(4))}
                 </h3>,
@@ -1649,7 +1649,10 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             }
 
             currentList.items.push(
-                <li key={`li-${idx}`} className="leading-relaxed">
+                <li
+                    key={`li-${idx}`}
+                    className="text-wrap-anywhere leading-relaxed"
+                >
                     {parseInline(cleanText)}
                 </li>,
             );
@@ -1671,7 +1674,10 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
 
             const cleanText = orderedMatch[2];
             currentList.items.push(
-                <li key={`li-${idx}`} className="leading-relaxed">
+                <li
+                    key={`li-${idx}`}
+                    className="text-wrap-anywhere leading-relaxed"
+                >
                     {parseInline(cleanText)}
                 </li>,
             );
@@ -1692,7 +1698,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
                       )
                     : <p
                           key={idx}
-                          className="text-base leading-relaxed text-slate-800 md:text-[18px]"
+                          className="text-wrap-anywhere text-base leading-relaxed text-slate-800 md:text-[18px]"
                       >
                           {parseInline(line)}
                       </p>,
@@ -1715,7 +1721,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
         elements.push(
             <p
                 key={idx}
-                className="text-base leading-relaxed text-slate-800 md:text-[18px]"
+                className="text-wrap-anywhere text-base leading-relaxed text-slate-800 md:text-[18px]"
             >
                 {parseInline(line)}
             </p>,
@@ -1725,5 +1731,5 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
     // Flush any remaining list
     flushList(lines.length);
 
-    return <div className="space-y-1.5">{elements}</div>;
+    return <div className="text-wrap-anywhere space-y-1.5">{elements}</div>;
 };

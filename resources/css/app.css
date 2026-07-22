@@ -125,6 +125,11 @@
     .scrollbar-none::-webkit-scrollbar {
         display: none;
     }
+
+    .text-wrap-anywhere {
+        overflow-wrap: anywhere;
+        word-break: break-word;
+    }
 }
 
 @keyframes float-blob-1 {
