@@ -65,7 +65,7 @@ return;
 
         const COLORS = [
             'rgba(37, 99, 235, ',   // Blue
-            'rgba(180, 83, 9, ',    // Dark Coffee Amber
+            'rgba(180, 83, 9, ',    // Coffee Amber
             'rgba(217, 119, 6, ',   // Rich Gold
         ];
 

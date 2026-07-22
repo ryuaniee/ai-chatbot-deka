@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\AdminRoleController;
 use App\Http\Controllers\AdminUserController;
 use App\Http\Controllers\AuthApiController;
 use App\Http\Controllers\ConversationController;
@@ -27,6 +28,12 @@ Route::get('admin/activity-log/report', [AdminDashboardController::class, 'activ
 Route::patch('admin/feedback-review/{feedback}/status', [AdminDashboardController::class, 'updateFeedbackReviewStatus'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.feedback-review.status');
+Route::post('admin/feedback-review/{feedback}/solve', [AdminDashboardController::class, 'solveFeedbackReview'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.feedback-review.solve');
+Route::post('admin/feedback-review/{feedback}/ignore', [AdminDashboardController::class, 'ignoreFeedbackReview'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.feedback-review.ignore');
 Route::post('admin/users', [AdminUserController::class, 'store'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.users.store');
@@ -36,6 +43,15 @@ Route::put('admin/users/{user}', [AdminUserController::class, 'update'])
 Route::delete('admin/users/{user}', [AdminUserController::class, 'destroy'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.users.destroy');
+Route::post('admin/roles', [AdminRoleController::class, 'store'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.roles.store');
+Route::put('admin/roles/{role}', [AdminRoleController::class, 'update'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.roles.update');
+Route::delete('admin/roles/{role}', [AdminRoleController::class, 'destroy'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.roles.destroy');
 Route::get('admin/{section}', AdminDashboardController::class)
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.section');

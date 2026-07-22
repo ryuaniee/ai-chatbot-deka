@@ -4,8 +4,10 @@ namespace App\Services;
 
 use App\Models\AdminActivityLog;
 use App\Models\Conversation;
+use App\Models\KnowledgeDocument;
 use App\Models\Message;
 use App\Models\MessageFeedback;
+use App\Models\Role;
 use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
@@ -27,11 +29,15 @@ class AdminDashboardService
             'section' => $section,
             'metrics' => $this->metrics($adminUsers),
             'tokenUsageItems' => $tokenUsageItems,
+            'roleItems' => $this->roleItems(),
             'adminUsers' => $adminUsers,
             'adminActivityItems' => $adminActivityItems,
             'feedbackReviewItems' => $this->feedbackReviewItems(),
+            'knowledgeItems' => $this->knowledgeItems(),
+            'knowledgeStats' => $this->knowledgeStats(),
             'chatTrendItems' => $this->chatTrendItems(),
             'feedbackChartItems' => $this->feedbackChartItems(),
+            'tokenTrendItems' => $this->tokenTrendItems(),
             'tokenUsageTrend' => $this->tokenUsageTrend(),
             'totals' => [
                 'totalTokenUsage' => array_sum(array_column($tokenUsageItems, 'totalTokens')),
@@ -100,6 +106,32 @@ class AdminDashboardService
                 'icon' => 'users',
             ],
         ];
+    }
+
+    /**
+     * @return array<int, array{id: int, slug: string, name: string, description: string, permissions: array<int, string>, usersCount: int, system: bool}>
+     */
+    private function roleItems(): array
+    {
+        $userCounts = User::query()
+            ->selectRaw('role, count(*) as total')
+            ->groupBy('role')
+            ->pluck('total', 'role');
+
+        return Role::query()
+            ->orderBy('sort_order')
+            ->orderBy('name')
+            ->get()
+            ->map(static fn (Role $role): array => [
+                'id' => $role->id,
+                'slug' => $role->slug,
+                'name' => $role->name,
+                'description' => $role->description ?? '-',
+                'permissions' => $role->permissions ?? [],
+                'usersCount' => (int) ($userCounts[$role->slug] ?? 0),
+                'system' => $role->system,
+            ])
+            ->all();
     }
 
     /**
@@ -183,6 +215,57 @@ class AdminDashboardService
         ];
     }
 
+    /**
+     * @return array<int, array{date: string, promptTokens: int, completionTokens: int, totalTokens: int, requests: int}>
+     */
+    private function tokenTrendItems(): array
+    {
+        $end = now()->startOfDay();
+        $start = $end->copy()->subDays(29);
+        $items = [];
+
+        foreach (range(0, 29) as $offset) {
+            $date = $start->copy()->addDays($offset);
+
+            $items[$date->toDateString()] = [
+                'date' => $date->toDateString(),
+                'promptTokens' => 0,
+                'completionTokens' => 0,
+                'totalTokens' => 0,
+                'requests' => 0,
+            ];
+        }
+
+        Message::query()
+            ->where('role', 'assistant')
+            ->whereBetween('created_at', [$start, $end->copy()->endOfDay()])
+            ->get(['created_at', 'metadata'])
+            ->each(function (Message $message) use (&$items): void {
+                $date = $message->created_at?->toDateString();
+
+                if (! $date || ! isset($items[$date])) {
+                    return;
+                }
+
+                $usage = is_array($message->metadata['usage'] ?? null)
+                    ? $message->metadata['usage']
+                    : [];
+                $prompt = (int) ($usage['prompt_tokens'] ?? 0);
+                $completion = (int) ($usage['completion_tokens'] ?? 0);
+                $total = (int) ($usage['total_tokens'] ?? ($prompt + $completion));
+
+                if ($prompt > 0 || $completion > 0 || $total > 0) {
+                    $items[$date]['requests']++;
+                }
+
+                $items[$date]['promptTokens'] += $prompt;
+                $items[$date]['completionTokens'] += $completion;
+                $items[$date]['totalTokens'] += $total;
+            });
+
+        return array_values($items);
+    }
+
     private function tokenUsageTotalBetween(CarbonInterface $start, CarbonInterface $end): int
     {
         return Message::query()
@@ -229,6 +312,8 @@ class AdminDashboardService
                     'email' => $user->email,
                     'role' => $user->role,
                     'status' => $lastSeen && $lastSeen->gte($activeSince) ? 'active' : 'inactive',
+                    'emailVerified' => $user->email_verified_at !== null,
+                    'emailVerifiedAt' => $user->email_verified_at?->locale('id')->translatedFormat('j M Y'),
                     'joinedAt' => $user->created_at?->locale('id')->translatedFormat('j M Y') ?? '-',
                     'lastSeen' => $this->relativeTime($lastSeen),
                     'conversations' => (int) $user->conversations_count,
@@ -307,7 +392,8 @@ class AdminDashboardService
         return MessageFeedback::query()
             ->with([
                 'user:id,name,email',
-                'message:id,conversation_id,content',
+                'message:id,conversation_id,reply_to_message_id,content',
+                'message.replyToMessage:id,content',
                 'message.conversation:id,title',
             ])
             ->where('type', MessageFeedback::TYPE_DISLIKE)
@@ -322,13 +408,78 @@ class AdminDashboardService
                     'user' => $feedback->user?->name ?? 'User',
                     'email' => $feedback->user?->email ?? '-',
                     'conversation' => $message?->conversation?->title ?: 'Percakapan tanpa judul',
+                    'question' => str($message?->replyToMessage?->content ?? '-')->limit(220)->toString(),
                     'answer' => str($message?->content ?? '-')->limit(180)->toString(),
                     'reason' => $feedback->reason ?: 'Tidak ada alasan tertulis',
                     'status' => $this->normalizedFeedbackReviewStatus($feedback->review_status),
+                    'adminDecision' => $feedback->admin_decision,
+                    'adminNote' => $feedback->admin_note,
+                    'aiImprovement' => $feedback->ai_improvement,
                     'createdAt' => $this->relativeTime($feedback->created_at),
                 ];
             })
             ->all();
+    }
+
+    /**
+     * @return array<int, array{title: string, source: string, chunks: int, status: string}>
+     */
+    private function knowledgeItems(): array
+    {
+        return KnowledgeDocument::query()
+            ->withCount('chunks')
+            ->latest('last_ingested_at')
+            ->latest('updated_at')
+            ->limit(50)
+            ->get()
+            ->map(fn (KnowledgeDocument $document): array => [
+                'title' => $document->title ?: basename(parse_url($document->source_uri, PHP_URL_PATH) ?: $document->source_uri),
+                'source' => $this->knowledgeSourceLabel($document),
+                'chunks' => (int) $document->chunks_count,
+                'status' => $document->status,
+            ])
+            ->all();
+    }
+
+    /**
+     * @return array{answerGrounding: int, retrievalReady: int, sourceTraceability: int}
+     */
+    private function knowledgeStats(): array
+    {
+        $documentCount = KnowledgeDocument::query()->count();
+        $activeDocumentCount = KnowledgeDocument::query()->where('status', 'active')->count();
+        $activeChunkCount = KnowledgeDocument::query()
+            ->where('status', 'active')
+            ->withCount('chunks')
+            ->get()
+            ->sum('chunks_count');
+
+        $assistantMessages = Message::query()->where('role', 'assistant')->count();
+        $groundedMessages = Message::query()
+            ->where('role', 'assistant')
+            ->get(['metadata'])
+            ->filter(fn (Message $message): bool => filled($message->metadata['knowledge'] ?? null))
+            ->count();
+
+        return [
+            'answerGrounding' => $assistantMessages > 0
+                ? min(100, (int) round(($groundedMessages / $assistantMessages) * 100))
+                : 0,
+            'retrievalReady' => min(100, (int) round(($activeDocumentCount * 30) + ($activeChunkCount > 0 ? 40 : 0))),
+            'sourceTraceability' => $documentCount > 0
+                ? min(100, (int) round(($activeDocumentCount / $documentCount) * 100))
+                : 0,
+        ];
+    }
+
+    private function knowledgeSourceLabel(KnowledgeDocument $document): string
+    {
+        return match ($document->source_type) {
+            'url', 'website', 'crawl' => 'Website',
+            'file' => 'File',
+            'text' => 'Teks manual',
+            default => str($document->source_type)->replace('_', ' ')->headline()->toString(),
+        };
     }
 
     /**
@@ -344,14 +495,14 @@ class AdminDashboardService
     }
 
     /**
-     * @return array<int, array{date: string, conversations: int, resolved: int}>
+     * @return array<int, array{date: string, conversations: int}>
      */
     private function chatTrendItems(): array
     {
         $start = now()->subDays(89)->startOfDay();
         $rows = Conversation::query()
             ->where('created_at', '>=', $start)
-            ->get(['status', 'created_at', 'last_message_at'])
+            ->get(['created_at', 'last_message_at'])
             ->groupBy(fn (Conversation $conversation): string => ($conversation->last_message_at ?? $conversation->created_at)->toDateString());
 
         return collect(range(0, 89))
@@ -362,7 +513,6 @@ class AdminDashboardService
                 return [
                     'date' => $date,
                     'conversations' => $dayRows->count(),
-                    'resolved' => $dayRows->where('status', '!=', 'active')->count(),
                 ];
             })
             ->all();
@@ -464,6 +614,7 @@ class AdminDashboardService
             MessageFeedback::REVIEW_STATUS_OPEN,
             MessageFeedback::REVIEW_STATUS_REVIEWING,
             MessageFeedback::REVIEW_STATUS_RESOLVED,
+            MessageFeedback::REVIEW_STATUS_IGNORED,
         ], true) ? $status : MessageFeedback::REVIEW_STATUS_OPEN;
     }
 

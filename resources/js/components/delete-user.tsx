@@ -21,21 +21,23 @@ export default function DeleteUser() {
     return (
         <div className="space-y-3">
             <div>
-                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                <h4 className="text-sm font-bold text-slate-900 ">
                     Danger zone
                 </h4>
-                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    Permanently delete your account and all of its resources.
+                <p className="mt-1 text-xs text-slate-500 ">
+                    Deactivate your account. Your data will be retained for
+                    admin recovery.
                 </p>
             </div>
 
-            <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50/60 p-4 dark:border-red-950/60 dark:bg-red-950/20">
-                <div className="min-w-0 space-y-0.5 text-slate-700 dark:text-slate-300">
-                    <p className="text-sm font-semibold text-red-950 dark:text-red-100">
-                        Delete account
+            <div className="flex items-center justify-between gap-4 rounded-xl border border-red-200 bg-red-50/60 p-4  ">
+                <div className="min-w-0 space-y-0.5 text-slate-700 ">
+                    <p className="text-sm font-semibold text-red-950 ">
+                        Deactivate account
                     </p>
-                    <p className="text-xs leading-relaxed text-red-800/75 dark:text-red-200/75">
-                        This action cannot be undone.
+                    <p className="text-xs leading-relaxed text-red-800/75 ">
+                        You will be signed out and the account will no longer be
+                        active.
                     </p>
                 </div>
 
@@ -45,18 +47,18 @@ export default function DeleteUser() {
                             className="shrink-0 cursor-pointer rounded-lg border border-red-600 bg-red-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 active:scale-95"
                             data-test="delete-user-button"
                         >
-                            Delete account
+                            Deactivate account
                         </button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogTitle>
-                            Are you sure you want to delete your account?
+                            Are you sure you want to deactivate your account?
                         </DialogTitle>
                         <DialogDescription>
-                            Once your account is deleted, all of its resources
-                            and data will also be permanently deleted. Please
-                            enter your password to confirm you would like to
-                            permanently delete your account.
+                            Your account will be deactivated and you will be
+                            signed out. Your data is retained and can be
+                            recovered by an admin. Please enter your password to
+                            confirm this action.
                         </DialogDescription>
 
                         <Form
@@ -107,7 +109,7 @@ export default function DeleteUser() {
                                             className="cursor-pointer rounded-xl border border-red-600 bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 active:scale-95 disabled:border-slate-200 disabled:bg-slate-200 disabled:text-slate-400"
                                             data-test="confirm-delete-user-button"
                                         >
-                                            Delete account
+                                            Deactivate account
                                         </button>
                                     </DialogFooter>
                                 </>

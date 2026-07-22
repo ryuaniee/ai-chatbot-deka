@@ -9,8 +9,6 @@ import {
 } from '@/components/ui/card';
 import {
     ChartContainer,
-    ChartLegend,
-    ChartLegendContent,
     ChartTooltip,
     ChartTooltipContent,
 } from '@/components/ui/chart';
@@ -29,16 +27,11 @@ const chartConfig = {
         label: 'Masuk',
         color: 'var(--primary)',
     },
-    resolved: {
-        label: 'Selesai',
-        color: 'color-mix(in oklab, var(--primary) 52%, white)',
-    },
 } satisfies ChartConfig;
 
 type ConversationChartItem = {
     date: string;
     conversations: number;
-    resolved: number;
 };
 
 export function AdminConversationChart({
@@ -79,8 +72,7 @@ export function AdminConversationChart({
                 <div className="grid flex-1 gap-1">
                     <CardTitle>Tren percakapan</CardTitle>
                     <CardDescription>
-                        Perbandingan chat masuk dan chat selesai dalam periode
-                        terpilih.
+                        Jumlah percakapan masuk dalam periode terpilih.
                     </CardDescription>
                 </div>
                 <Select value={timeRange} onValueChange={setTimeRange}>
@@ -134,24 +126,6 @@ export function AdminConversationChart({
                                     stopOpacity={0.1}
                                 />
                             </linearGradient>
-                            <linearGradient
-                                id="fillResolved"
-                                x1="0"
-                                y1="0"
-                                x2="0"
-                                y2="1"
-                            >
-                                <stop
-                                    offset="5%"
-                                    stopColor="var(--color-resolved)"
-                                    stopOpacity={0.7}
-                                />
-                                <stop
-                                    offset="95%"
-                                    stopColor="var(--color-resolved)"
-                                    stopOpacity={0.1}
-                                />
-                            </linearGradient>
                         </defs>
                         <CartesianGrid vertical={false} />
                         <XAxis
@@ -192,20 +166,11 @@ export function AdminConversationChart({
                             }
                         />
                         <Area
-                            dataKey="resolved"
-                            type="monotone"
-                            fill="url(#fillResolved)"
-                            stroke="var(--color-resolved)"
-                            stackId="a"
-                        />
-                        <Area
                             dataKey="conversations"
                             type="monotone"
                             fill="url(#fillConversations)"
                             stroke="var(--color-conversations)"
-                            stackId="a"
                         />
-                        <ChartLegend content={<ChartLegendContent />} />
                     </AreaChart>
                 </ChartContainer>
             </CardContent>

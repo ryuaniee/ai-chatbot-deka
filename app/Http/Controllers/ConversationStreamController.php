@@ -170,6 +170,19 @@ class ConversationStreamController extends Controller
                 'user_message' => ChatResource::message($userMessage->fresh()),
             ]);
 
+            if (($result['pending_stream'] ?? false) === true && $stream === null && $assistantMessage === null) {
+                $user = $result['user'] ?? $conversation->user;
+                $opened = app(ConversationChatService::class)->openPendingAssistantStream(
+                    $conversation,
+                    $user,
+                    $userMessage,
+                    $state,
+                );
+                $stream = $opened['stream'];
+                $assistantMessage = $opened['assistant_message'];
+                $state = $opened['state'];
+            }
+
             if ($stream !== null) {
                 try {
                     foreach ($stream as $event) {
@@ -202,13 +215,45 @@ class ConversationStreamController extends Controller
                         'message' => $exception->getMessage(),
                     ]);
 
-                    $assistantMessage = app(ConversationChatService::class)
-                        ->persistProviderFailureFallback(
-                            $conversation,
-                            $userMessage,
-                            $exception,
-                        )
-                        ->fresh();
+                    $chatService = app(ConversationChatService::class);
+
+                    if ($deltaCount === 0) {
+                        $user = $conversation->user;
+
+                        $assistantMessage = $user === null
+                            ? $chatService
+                                ->persistProviderFailureFallback(
+                                    $conversation,
+                                    $userMessage,
+                                    $exception,
+                                )
+                                ->fresh()
+                            : $chatService
+                                ->recoverAssistantReplyAfterStreamFailure(
+                                    $conversation,
+                                    $user,
+                                    $userMessage,
+                                    $exception,
+                                )
+                                ->fresh();
+
+                        $content = (string) $assistantMessage->content;
+                        if ($content !== '' && $assistantMessage->model !== 'deka-provider-fallback') {
+                            $this->emitEvent([
+                                'type' => 'text_delta',
+                                'delta' => $content,
+                            ]);
+                            $deltaCount = 1;
+                        }
+                    } else {
+                        $assistantMessage = $chatService
+                            ->persistProviderFailureFallback(
+                                $conversation,
+                                $userMessage,
+                                $exception,
+                            )
+                            ->fresh();
+                    }
 
                     $this->emitEvent([
                         'type' => 'message_complete',

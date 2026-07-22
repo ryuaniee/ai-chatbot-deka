@@ -11,6 +11,9 @@ Backend utama sudah bisa dipakai untuk alur chat dan sudah mulai masuk tahap kno
 - assistant reply dibuat lewat runtime AI Laravel
 - chat berjalan lewat response JSON dan streaming SSE
 - moderation, throttle, idempotency, ownership check, dan error mapping sudah aktif
+- manajemen role backend sudah memakai tabel `roles` tersendiri dan tidak lagi hanya bergantung pada default string role di `users`
+- CRUD role admin sudah tersedia untuk tambah, ubah, dan hapus role melalui route admin terproteksi
+- assignment role pada CRUD pengguna sekarang tervalidasi ke tabel `roles`
 - knowledge base Deka versi lama sudah dihapus
 - knowledge base versi baru sudah punya schema, model, service ingestion, service retrieval, dan test RAG
 - PostgreSQL lokal sudah disiapkan memakai image `pgvector/pgvector:pg17`
@@ -25,6 +28,7 @@ Progress backend dikerjakan bertahap dari fondasi aplikasi sampai persiapan know
 | --- | --- |
 | Fondasi | Setup aplikasi Laravel, koneksi PostgreSQL, dan Docker Compose lokal |
 | Auth | Session auth API untuk register, login, logout, cek user, dan Google OAuth |
+| Role | Tabel `roles`, seed role bawaan, CRUD role admin, dan validasi assignment role pada user |
 | Chat | Tabel conversation/message, endpoint chat JSON, endpoint streaming SSE, dan idempotency |
 | Runtime AI | Integrasi Laravel AI SDK untuk reply, moderation, title agent, provider config, dan error mapping |
 | Knowledge RAG | Reset knowledge lama, persiapan pgvector, ingestion file/website, retrieval pgvector/full-text, dan test RAG |
@@ -83,6 +87,33 @@ Perilaku utama:
 - response auth menyertakan `redirect_to`
 - user biasa diarahkan ke `/chat`
 - update profile sekarang redirect kembali ke halaman asal, bukan selalu ke halaman profile
+
+### Role Management Admin
+
+Route backend role yang sudah aktif:
+
+- `POST /admin/roles`
+- `PUT /admin/roles/{role}`
+- `DELETE /admin/roles/{role}`
+
+Implementasi utama:
+
+- data role disimpan pada tabel `roles` dengan kolom `slug`, `name`, `description`, `permissions`, `system`, dan `sort_order`
+- migration role menambahkan dua role bawaan, yaitu `admin` dan `user`
+- `AdminRoleController` melakukan normalisasi slug dengan `Str::slug`
+- validasi backend memastikan slug unik, nama wajib diisi, deskripsi opsional, dan permissions dibatasi maksimal `12` item
+- permissions dibersihkan di backend dengan trim, filter nilai kosong, dan deduplikasi case-insensitive sebelum disimpan
+- role bawaan (`system=true`) tidak dapat dihapus
+- role yang masih dipakai user tidak dapat dihapus
+- setiap aksi tambah, ubah, dan hapus role dicatat ke `admin_activity_logs`
+- daftar role untuk dashboard admin diambil lewat `AdminDashboardService` dan dilengkapi jumlah user per role
+- CRUD pengguna kini memakai validasi `exists('roles', 'slug')` sehingga assignment role selalu mengacu ke data role yang tersedia
+
+Catatan kondisi saat ini:
+
+- field `permissions` sudah tersedia di model, migration, dan controller backend
+- namun repo saat ini belum menunjukkan middleware atau policy granular berbasis permissions tersebut pada route admin
+- artinya progress role backend sudah mencakup manajemen data role dan assignment user, tetapi belum menjadi sistem otorisasi per-permission yang penuh
 
 ### Chat API
 
@@ -186,6 +217,7 @@ Konfigurasi utama:
 Tabel utama backend chat:
 
 - `users`
+- `roles`
 - `conversations`
 - `messages`
 - `cache`
@@ -207,6 +239,7 @@ Migration penting:
 - [add_reply_to_message_id_to_messages_table](/home/panzek/project-pkl-deka/database/migrations/2026_07_13_120000_add_reply_to_message_id_to_messages_table.php:1)
 - [add_role_to_users_table](/home/panzek/project-pkl-deka/database/migrations/2026_07_13_200000_add_role_to_users_table.php:1)
 - [add_google_id_to_users_table](/home/panzek/project-pkl-deka/database/migrations/2026_07_14_160000_add_google_id_to_users_table.php:1)
+- [create_roles_table](/home/panzek/project-pkl-deka/database/migrations/2026_07_21_010000_create_roles_table.php:1)
 - [create_deka_knowledge_tables](/home/panzek/project-pkl-deka/database/migrations/2026_07_17_000000_create_deka_knowledge_tables.php:1)
 
 Perubahan database terbaru:

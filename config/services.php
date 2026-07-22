@@ -74,6 +74,7 @@ return [
         'candidate_limit' => env('DEKA_KNOWLEDGE_CANDIDATE_LIMIT', 20),
         'query_rewrite_enabled' => env('DEKA_KNOWLEDGE_QUERY_REWRITE_ENABLED', true),
         'query_rewrite_limit' => env('DEKA_KNOWLEDGE_QUERY_REWRITE_LIMIT', 5),
+        'rerank_enabled' => env('DEKA_KNOWLEDGE_RERANK_ENABLED', true),
         'min_similarity' => env('DEKA_KNOWLEDGE_MIN_SIMILARITY', 0.72),
         'min_fulltext_score' => env('DEKA_KNOWLEDGE_MIN_FULLTEXT_SCORE', 0.01),
         'max_context_characters' => env('DEKA_KNOWLEDGE_MAX_CONTEXT_CHARACTERS', 12000),

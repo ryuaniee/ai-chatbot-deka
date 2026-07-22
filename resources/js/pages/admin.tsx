@@ -22,9 +22,12 @@ import {
     Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { type FormEvent, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { FormEvent } from 'react';
 import { AdminConversationChart } from '@/components/admin-conversation-chart';
 import { AdminFeedbackBarChart } from '@/components/admin-feedback-bar-chart';
+import { AdminTokenTrendChart } from '@/components/admin-token-trend-chart';
+import type { TokenTrendItem } from '@/components/admin-token-trend-chart';
 import { AdminTokenUsageChart } from '@/components/admin-token-usage-chart';
 import DekaLogo from '@/components/deka-logo';
 import InputError from '@/components/input-error';
@@ -38,6 +41,14 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -61,30 +72,17 @@ type Metric = {
     icon: keyof typeof metricIcons;
 };
 
-type Conversation = {
-    id?: number;
-    dislikes: number;
-    email?: string;
-    lastMessageAt?: string | null;
-    latestMessage?: string;
-    latestRole?: string | null;
-    likes: number;
-    messages?: number;
-    messageCount?: number;
-    model?: string | null;
-    needsReview?: boolean;
-    title?: string;
-    tokenTotal?: number;
-    user: string;
-    status: string;
-    time: string;
-};
-
 type KnowledgeItem = {
     title: string;
     source: string;
     chunks: number;
     status: string;
+};
+
+type KnowledgeStats = {
+    answerGrounding: number;
+    retrievalReady: number;
+    sourceTraceability: number;
 };
 
 type TokenUsageItem = {
@@ -97,12 +95,21 @@ type TokenUsageItem = {
     totalTokens: number;
 };
 
+type TokenUsageTrend = {
+    currentTokens: number;
+    previousTokens: number;
+    changePercent: number | null;
+    direction: 'up' | 'down' | 'flat' | 'neutral';
+};
+
 type AdminUserItem = {
     id: number;
     name: string;
     email: string;
     role: string;
     status: 'active' | 'inactive';
+    emailVerified: boolean;
+    emailVerifiedAt?: string | null;
     joinedAt: string;
     lastSeen: string;
     conversations: number;
@@ -126,9 +133,13 @@ type FeedbackReviewItem = {
     user: string;
     email: string;
     conversation: string;
+    question: string;
     answer: string;
     reason: string;
-    status: 'open' | 'reviewing' | 'resolved';
+    status: 'open' | 'reviewing' | 'resolved' | 'ignored';
+    adminDecision?: 'solve' | 'ignore' | null;
+    adminNote?: string | null;
+    aiImprovement?: string | null;
     createdAt: string;
 };
 
@@ -147,7 +158,6 @@ type ReportPeriod = 'week' | 'month' | 'year';
 type ChatTrendItem = {
     date: string;
     conversations: number;
-    resolved: number;
 };
 
 type SectionId =
@@ -168,11 +178,15 @@ type AdminPageProps = {
     auth: Auth;
     section?: SectionId;
     metrics?: Metric[];
-    conversations?: Conversation[];
     tokenUsageItems?: TokenUsageItem[];
+    tokenUsageTrend?: TokenUsageTrend;
+    tokenTrendItems?: TokenTrendItem[];
+    roleItems?: RoleItem[];
     adminUsers?: AdminUserItem[];
     adminActivityItems?: AdminActivityItem[];
     feedbackReviewItems?: FeedbackReviewItem[];
+    knowledgeItems?: KnowledgeItem[];
+    knowledgeStats?: KnowledgeStats;
     chatTrendItems?: ChatTrendItem[];
     feedbackChartItems?: {
         month: string;
@@ -214,53 +228,33 @@ type AdminUserFormData = {
     name: string;
     email: string;
     role: string;
+    email_verified: boolean;
     password: string;
     password_confirmation: string;
 };
 
-type AdminRoleFormData = {
+type RoleFormData = {
+    slug: string;
     name: string;
     description: string;
+    permissions: string[];
 };
 
 const emptyAdminUserForm: AdminUserFormData = {
     name: '',
     email: '',
     role: 'user',
+    email_verified: true,
     password: '',
     password_confirmation: '',
 };
 
-const emptyAdminRoleForm: AdminRoleFormData = {
+const emptyRoleForm: RoleFormData = {
+    slug: '',
     name: '',
     description: '',
+    permissions: [],
 };
-
-const defaultRoleItems: RoleItem[] = [
-    {
-        id: 1,
-        slug: 'admin',
-        name: 'Admin',
-        description: 'Akses penuh untuk mengatur dasbor dan pengguna.',
-        permissions: [
-            'Dashboard',
-            'Analytic',
-            'Kelola pengguna',
-            'Log aktivitas',
-        ],
-        usersCount: 0,
-        system: true,
-    },
-    {
-        id: 2,
-        slug: 'user',
-        name: 'Pengguna',
-        description: 'Akses percakapan chatbot dan riwayat milik akun sendiri.',
-        permissions: ['Chatbot', 'Riwayat chat', 'Profil akun'],
-        usersCount: 0,
-        system: true,
-    },
-];
 
 const metricIcons = {
     message: MessageSquare,
@@ -271,296 +265,8 @@ const metricIcons = {
     book: BookOpen,
 } satisfies Record<string, LucideIcon>;
 
-const tokenUsageItems: TokenUsageItem[] = [
-    {
-        user: 'Nadia Putri',
-        email: 'nadia@example.com',
-        role: 'user',
-        requests: 42,
-        promptTokens: 18420,
-        completionTokens: 26380,
-        totalTokens: 44800,
-    },
-    {
-        user: 'Raka Firmansyah',
-        email: 'raka@example.com',
-        role: 'user',
-        requests: 36,
-        promptTokens: 15360,
-        completionTokens: 21490,
-        totalTokens: 36850,
-    },
-    {
-        user: 'Ayu Lestari',
-        email: 'ayu@example.com',
-        role: 'user',
-        requests: 28,
-        promptTokens: 12610,
-        completionTokens: 17230,
-        totalTokens: 29840,
-    },
-    {
-        user: 'Admin Deka',
-        email: 'admin@deka.dev',
-        role: 'admin',
-        requests: 11,
-        promptTokens: 4910,
-        completionTokens: 6320,
-        totalTokens: 11230,
-    },
-];
-
-const conversations: Conversation[] = [
-    {
-        dislikes: 1,
-        likes: 24,
-        user: 'Nadia Putri',
-        status: 'Selesai',
-        time: '2 menit lalu',
-    },
-    {
-        dislikes: 0,
-        likes: 18,
-        user: 'Raka Firmansyah',
-        status: 'Berjalan',
-        time: '8 menit lalu',
-    },
-    {
-        dislikes: 4,
-        likes: 9,
-        user: 'Ayu Lestari',
-        status: 'Selesai',
-        time: '21 menit lalu',
-    },
-    {
-        dislikes: 2,
-        likes: 21,
-        user: 'Bagus Pratama',
-        status: 'Selesai',
-        time: '35 menit lalu',
-    },
-];
-
-const adminUsers: AdminUserItem[] = [
-    {
-        id: 1,
-        name: 'Admin Deka',
-        email: 'admin@deka.dev',
-        role: 'admin',
-        status: 'active',
-        joinedAt: '13 Jul 2026',
-        lastSeen: 'Baru saja',
-        conversations: 11,
-    },
-    {
-        id: 2,
-        name: 'Nadia Putri',
-        email: 'nadia@example.com',
-        role: 'user',
-        status: 'active',
-        joinedAt: '14 Jul 2026',
-        lastSeen: '2 menit lalu',
-        conversations: 42,
-    },
-    {
-        id: 3,
-        name: 'Raka Firmansyah',
-        email: 'raka@example.com',
-        role: 'user',
-        status: 'active',
-        joinedAt: '15 Jul 2026',
-        lastSeen: '8 menit lalu',
-        conversations: 36,
-    },
-    {
-        id: 4,
-        name: 'Ayu Lestari',
-        email: 'ayu@example.com',
-        role: 'user',
-        status: 'active',
-        joinedAt: '16 Jul 2026',
-        lastSeen: '21 menit lalu',
-        conversations: 28,
-    },
-    {
-        id: 5,
-        name: 'Bagus Pratama',
-        email: 'bagus@example.com',
-        role: 'user',
-        status: 'inactive',
-        joinedAt: '17 Jul 2026',
-        lastSeen: 'Kemarin',
-        conversations: 9,
-    },
-];
-
-const adminActivityItems: AdminActivityItem[] = [
-    {
-        id: 1,
-        admin: 'Admin Deka',
-        email: 'admin@deka.dev',
-        category: 'auth',
-        action: 'Login dashboard',
-        target: 'Admin panel',
-        detail: 'Masuk ke halaman Dashboard Ringkasan.',
-        ipAddress: '192.168.10.14',
-        time: 'Baru saja',
-    },
-    {
-        id: 2,
-        admin: 'Admin Deka',
-        email: 'admin@deka.dev',
-        category: 'conversation',
-        action: 'Meninjau feedback',
-        target: 'Feedback AI',
-        detail: 'Melihat ringkasan like dan dislike tanpa membuka isi chat.',
-        ipAddress: '192.168.10.14',
-        time: '3 menit lalu',
-    },
-    {
-        id: 3,
-        admin: 'Admin Deka',
-        email: 'admin@deka.dev',
-        category: 'report',
-        action: 'Export laporan',
-        target: 'Feedback AI',
-        detail: 'Mengunduh ringkasan feedback bulan ini.',
-        ipAddress: '192.168.10.14',
-        time: '12 menit lalu',
-    },
-    {
-        id: 4,
-        admin: 'Admin Deka',
-        email: 'admin@deka.dev',
-        category: 'user',
-        action: 'Cek data pengguna',
-        target: 'Raka Firmansyah',
-        detail: 'Membuka data user aktif dan jumlah chat pengguna.',
-        ipAddress: '192.168.10.14',
-        time: '18 menit lalu',
-    },
-    {
-        id: 5,
-        admin: 'Admin Deka',
-        email: 'admin@deka.dev',
-        category: 'system',
-        action: 'Melihat pemakaian token',
-        target: 'Token AI',
-        detail: 'Memantau pemakaian token berdasarkan pengguna aktif.',
-        ipAddress: '192.168.10.14',
-        time: '27 menit lalu',
-    },
-    {
-        id: 6,
-        admin: 'Admin Deka',
-        email: 'admin@deka.dev',
-        category: 'auth',
-        action: 'Logout dashboard',
-        target: 'Admin panel',
-        detail: 'Keluar dari session admin sebelumnya.',
-        ipAddress: '192.168.10.14',
-        time: 'Kemarin',
-    },
-];
-
-const knowledgeItems: KnowledgeItem[] = [
-    {
-        title: 'Deka Knowledge Base Draft Rekap',
-        source: 'PDF internal',
-        chunks: 312,
-        status: 'active',
-    },
-    {
-        title: 'deka.dev crawl',
-        source: 'Website',
-        chunks: 418,
-        status: 'active',
-    },
-    {
-        title: 'Catatan layanan terbaru',
-        source: 'Teks manual',
-        chunks: 112,
-        status: 'review',
-    },
-];
-
-const chatTrendItems: ChatTrendItem[] = Array.from(
-    { length: 90 },
-    (_, index) => {
-        const date = new Date(Date.UTC(2026, 3, 20));
-        date.setUTCDate(date.getUTCDate() + index);
-
-        const weeklyPattern = [46, 32, 58, 49, 72, 66, 39][index % 7];
-        const monthlyLift = Math.floor(index / 12) * 5;
-        const campaignSpike = index % 19 === 0 ? 38 : 0;
-        const conversations = 118 + weeklyPattern + monthlyLift + campaignSpike;
-        const resolved = Math.round(
-            conversations * (0.74 + (index % 5) * 0.03),
-        );
-
-        return {
-            date: date.toISOString().slice(0, 10),
-            conversations,
-            resolved,
-        };
-    },
-);
-
-const totalTokenUsage = tokenUsageItems.reduce(
-    (total, item) => total + item.totalTokens,
-    0,
-);
-const tokenInputPricePerMillion = 0.15;
-const tokenOutputPricePerMillion = 0.6;
-const totalLikes = conversations.reduce(
-    (total, conversation) => total + conversation.likes,
-    0,
-);
-const totalDislikes = conversations.reduce(
-    (total, conversation) => total + conversation.dislikes,
-    0,
-);
-const activeUsers = adminUsers.filter(
-    (item) => item.status === 'active',
-).length;
-const adminUserCount = adminUsers.filter(
-    (item) => item.role === 'admin',
-).length;
-const totalUserConversations = adminUsers.reduce(
-    (total, item) => total + item.conversations,
-    0,
-);
-
-const metrics: Metric[] = [
-    {
-        label: 'Total Percakapan',
-        value: formatNumber(conversations.length),
-        description: 'Seluruh percakapan yang masuk di dashboard.',
-        tone: 'blue',
-        icon: 'message',
-    },
-    {
-        label: 'Total Like',
-        value: formatNumber(totalLikes),
-        description: 'Feedback positif dari jawaban chatbot.',
-        tone: 'green',
-        icon: 'thumbsUp',
-    },
-    {
-        label: 'Total Dislike',
-        value: formatNumber(totalDislikes),
-        description: 'Feedback negatif yang perlu dipantau.',
-        tone: 'amber',
-        icon: 'thumbsDown',
-    },
-    {
-        label: 'User Aktif',
-        value: formatNumber(activeUsers),
-        description: 'Pengguna aktif dari data contoh saat ini.',
-        tone: 'neutral',
-        icon: 'users',
-    },
-];
+const tokenInputPricePerMillion = 5;
+const tokenOutputPricePerMillion = 30;
 
 const navigation: {
     id: SectionId;
@@ -595,7 +301,7 @@ const navigation: {
     {
         id: 'roles',
         label: 'Kelola Roles',
-        description: 'Tambah role tampilan admin',
+        description: 'Role sistem dan jumlah akun terkait',
         icon: ShieldCheck,
     },
     {
@@ -607,30 +313,30 @@ const navigation: {
 ];
 
 const toneClasses: Record<Metric['tone'], string> = {
-    green: 'bg-[#e8f2ff] text-[#155fc4] ring-[#b9d8ff] dark:bg-[#12365f] dark:text-[#b8d9ff] dark:ring-[#245a96]',
-    blue: 'bg-[#eaf3ff] text-[#2f80ed] ring-[#b9d8ff] dark:bg-[#102b4a] dark:text-[#8fc1ff] dark:ring-[#245a96]',
-    amber: 'bg-[#fff4df] text-[#b45309] ring-[#f5d08b] dark:bg-[#3b2508] dark:text-[#f7c56b] dark:ring-[#7c4a08]',
+    green: 'bg-[#e8f2ff] text-[#155fc4] ring-[#b9d8ff]   ',
+    blue: 'bg-[#eaf3ff] text-[#2f80ed] ring-[#b9d8ff]   ',
+    amber: 'bg-[#fff4df] text-[#b45309] ring-[#f5d08b]   ',
     neutral:
-        'bg-[#eef4fb] text-[#40566f] ring-[#d9e4f2] dark:bg-[#10233a] dark:text-[#b7c7d9] dark:ring-[#1d3652]',
+        'bg-[#eef4fb] text-[#40566f] ring-[#d9e4f2]   ',
 };
 
 const statusClasses: Record<string, string> = {
-    active: 'border-transparent bg-[#e8f2ff] text-[#155fc4] dark:bg-[#12365f] dark:text-[#b8d9ff]',
+    active: 'border-transparent bg-[#e8f2ff] text-[#155fc4]  ',
     inactive:
-        'border-transparent bg-[#eef4fb] text-[#40566f] dark:bg-[#10233a] dark:text-[#b7c7d9]',
+        'border-transparent bg-[#eef4fb] text-[#40566f]  ',
     Selesai:
-        'border-transparent bg-[#e8f2ff] text-[#155fc4] dark:bg-[#12365f] dark:text-[#b8d9ff]',
+        'border-transparent bg-[#e8f2ff] text-[#155fc4]  ',
     Berjalan:
-        'border-transparent bg-[#eaf8ff] text-[#0369a1] dark:bg-[#082f49] dark:text-[#7dd3fc]',
+        'border-transparent bg-[#eaf8ff] text-[#0369a1]  ',
 };
 
 const activityCategoryClasses: Record<AdminActivityItem['category'], string> = {
-    auth: 'border-transparent bg-[#e8f2ff] text-[#155fc4] dark:bg-[#12365f] dark:text-[#b8d9ff]',
+    auth: 'border-transparent bg-[#eef2ff] text-[#4338ca]  ',
     conversation:
-        'border-transparent bg-[#eaf3ff] text-[#2f80ed] dark:bg-[#102b4a] dark:text-[#8fc1ff]',
-    user: 'border-transparent bg-[#eef4fb] text-[#40566f] dark:bg-[#10233a] dark:text-[#b7c7d9]',
-    report: 'border-transparent bg-[#e8f2ff] text-[#155fc4] dark:bg-[#12365f] dark:text-[#b8d9ff]',
-    system: 'border-transparent bg-[#eef4fb] text-[#40566f] dark:bg-[#10233a] dark:text-[#b7c7d9]',
+        'border-transparent bg-[#e0f2fe] text-[#0369a1]  ',
+    user: 'border-transparent bg-[#eff6ff] text-[#1d4ed8]  ',
+    report: 'border-transparent bg-[#fff7ed] text-[#c2410c]  ',
+    system: 'border-transparent bg-[#ecfdf5] text-[#047857]  ',
 };
 
 const sectionHref = (sectionId: SectionId) => `/admin/${sectionId}`;
@@ -667,11 +373,19 @@ export default function AdminPage() {
         auth,
         section,
         metrics = [],
-        conversations = [],
         tokenUsageItems = [],
+        tokenUsageTrend,
+        tokenTrendItems = [],
+        roleItems = [],
         adminUsers = [],
         adminActivityItems = [],
         feedbackReviewItems = [],
+        knowledgeItems = [],
+        knowledgeStats = {
+            answerGrounding: 0,
+            retrievalReady: 0,
+            sourceTraceability: 0,
+        },
         chatTrendItems = [],
         feedbackChartItems = [],
         totals,
@@ -684,18 +398,21 @@ export default function AdminPage() {
         useState<ActivityLogTotals | null>(null);
     const [localFeedbackReviewItems, setLocalFeedbackReviewItems] =
         useState(feedbackReviewItems);
+    const [pendingFeedbackAction, setPendingFeedbackAction] = useState<
+        string | null
+    >(null);
+    const [selectedFeedbackReviewId, setSelectedFeedbackReviewId] = useState<
+        number | null
+    >(null);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [userDialogOpen, setUserDialogOpen] = useState(false);
-    const [roleDialogOpen, setRoleDialogOpen] = useState(false);
-    const [selectedRole, setSelectedRole] = useState<RoleItem | null>(null);
     const [selectedUser, setSelectedUser] = useState<AdminUserItem | null>(
         null,
     );
+    const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+    const [selectedRole, setSelectedRole] = useState<RoleItem | null>(null);
     const userForm = useForm<AdminUserFormData>(emptyAdminUserForm);
-    const [roleForm, setRoleForm] =
-        useState<AdminRoleFormData>(emptyAdminRoleForm);
-    const [localRoleItems, setLocalRoleItems] =
-        useState<RoleItem[]>(defaultRoleItems);
+    const roleForm = useForm<RoleFormData>(emptyRoleForm);
     const [activityLiveStatus, setActivityLiveStatus] = useState<
         'live' | 'updating' | 'error'
     >('live');
@@ -720,6 +437,8 @@ export default function AdminPage() {
     const estimatedOutputCost =
         (totalCompletionTokens / 1_000_000) * tokenOutputPricePerMillion;
     const estimatedTokenCost = estimatedInputCost + estimatedOutputCost;
+    const estimatedCostPerRequest =
+        estimatedTokenCost / Math.max(totalAiRequests, 1);
     const averageTokensPerRequest = Math.round(
         totalTokenUsage / Math.max(totalAiRequests, 1),
     );
@@ -737,6 +456,7 @@ export default function AdminPage() {
     const completionTokenShare = Math.round(
         (totalCompletionTokens / Math.max(totalTokenUsage, 1)) * 100,
     );
+    const tokenUsageTrendLabel = getTokenUsageTrendLabel(tokenUsageTrend);
     const activeUsers =
         totals?.activeUsers ??
         adminUsers.filter((item) => item.status === 'active').length;
@@ -746,10 +466,6 @@ export default function AdminPage() {
     const totalUserConversations =
         totals?.totalUserConversations ??
         adminUsers.reduce((total, item) => total + item.conversations, 0);
-    const roleItems = localRoleItems.map((role) => ({
-        ...role,
-        usersCount: adminUsers.filter((user) => user.role === role.slug).length,
-    }));
     const defaultUserRole =
         roleItems.find((item) => item.slug === 'user')?.slug ??
         roleItems[0]?.slug ??
@@ -769,11 +485,30 @@ export default function AdminPage() {
         (item) => item.status === 'open',
     ).length;
     const activeFeedbackReviews = localFeedbackReviewItems.filter(
-        (item) => item.status !== 'resolved',
+        (item) => !['resolved', 'ignored'].includes(item.status),
     ).length;
     const resolvedFeedbackReviews = localFeedbackReviewItems.filter(
         (item) => item.status === 'resolved',
     ).length;
+    const ignoredFeedbackReviews = localFeedbackReviewItems.filter(
+        (item) => item.status === 'ignored',
+    ).length;
+    const feedbackReviewDisplayItems = [...localFeedbackReviewItems].sort(
+        (first, second) => {
+            const statusOrder: Record<FeedbackReviewItem['status'], number> = {
+                open: 0,
+                reviewing: 1,
+                resolved: 2,
+                ignored: 3,
+            };
+
+            return statusOrder[first.status] - statusOrder[second.status];
+        },
+    );
+    const selectedFeedbackReview =
+        localFeedbackReviewItems.find(
+            (item) => item.id === selectedFeedbackReviewId,
+        ) ?? null;
     const profileInitials = auth.user.name
         .split(' ')
         .map((name) => name[0])
@@ -784,6 +519,22 @@ export default function AdminPage() {
     const activeNavigation = navigation.find(
         (item) => item.id === activeSection,
     );
+    const sidebarNavigationGroups = [
+        {
+            label: 'Menu',
+            items: navigation.filter((item) =>
+                ['overview', 'token-usage', 'feedback-review'].includes(
+                    item.id,
+                ),
+            ),
+        },
+        {
+            label: 'Admin',
+            items: navigation.filter((item) =>
+                ['users', 'roles', 'activity-log'].includes(item.id),
+            ),
+        },
+    ];
 
     useEffect(() => {
         setLiveActivityItems(adminActivityItems);
@@ -855,6 +606,63 @@ export default function AdminPage() {
         };
     }, [activeSection, activityPeriod, filters?.search]);
 
+    const openCreateRoleDialog = () => {
+        setSelectedRole(null);
+        roleForm.clearErrors();
+        roleForm.setData(emptyRoleForm);
+        setRoleDialogOpen(true);
+    };
+
+    const openEditRoleDialog = (role: RoleItem) => {
+        setSelectedRole(role);
+        roleForm.clearErrors();
+        roleForm.setData({
+            slug: role.slug,
+            name: role.name,
+            description: role.description === '-' ? '' : role.description,
+            permissions: role.permissions,
+        });
+        setRoleDialogOpen(true);
+    };
+
+    const closeRoleDialog = () => {
+        setRoleDialogOpen(false);
+        setSelectedRole(null);
+        roleForm.clearErrors();
+        roleForm.setData(emptyRoleForm);
+    };
+
+    const handleRoleSubmit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+
+        const options = {
+            preserveScroll: true,
+            onSuccess: closeRoleDialog,
+        };
+
+        if (selectedRole) {
+            roleForm.put(`/admin/roles/${selectedRole.id}`, options);
+
+            return;
+        }
+
+        roleForm.post('/admin/roles', options);
+    };
+
+    const handleDeleteRole = (role: RoleItem) => {
+        if (role.system || role.usersCount > 0) {
+            return;
+        }
+
+        if (!window.confirm(`Hapus role ${role.name}?`)) {
+            return;
+        }
+
+        router.delete(`/admin/roles/${role.id}`, {
+            preserveScroll: true,
+        });
+    };
+
     const openCreateUserDialog = () => {
         setSelectedUser(null);
         userForm.clearErrors();
@@ -869,6 +677,7 @@ export default function AdminPage() {
             name: user.name,
             email: user.email,
             role: user.role,
+            email_verified: user.emailVerified,
             password: '',
             password_confirmation: '',
         });
@@ -916,94 +725,6 @@ export default function AdminPage() {
         });
     };
 
-    const handleRoleSubmit = (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-
-        const name = roleForm.name.trim();
-
-        if (!name) {
-            return;
-        }
-
-        const slug = name
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-|-$/g, '');
-
-        if (
-            !slug ||
-            localRoleItems.some(
-                (role) => role.slug === slug && role.id !== selectedRole?.id,
-            )
-        ) {
-            return;
-        }
-
-        if (selectedRole) {
-            setLocalRoleItems((items) =>
-                items.map((role) =>
-                    role.id === selectedRole.id
-                        ? {
-                              ...role,
-                              slug: role.system ? role.slug : slug,
-                              name,
-                              description:
-                                  roleForm.description.trim() ||
-                                  'Role pengguna kustom.',
-                          }
-                        : role,
-                ),
-            );
-        } else {
-            setLocalRoleItems((items) => [
-                ...items,
-                {
-                    id: Date.now(),
-                    slug,
-                    name,
-                    description:
-                        roleForm.description.trim() || 'Role pengguna kustom.',
-                    permissions: ['Chatbot'],
-                    usersCount: 0,
-                    system: false,
-                },
-            ]);
-        }
-
-        setRoleForm(emptyAdminRoleForm);
-        setSelectedRole(null);
-        setRoleDialogOpen(false);
-    };
-
-    const handleDeleteRole = (role: RoleItem) => {
-        if (role.system || role.usersCount > 0) {
-            return;
-        }
-
-        if (!window.confirm(`Hapus role ${role.name}?`)) {
-            return;
-        }
-
-        setLocalRoleItems((items) =>
-            items.filter((item) => item.id !== role.id),
-        );
-    };
-
-    const openEditRoleDialog = (role: RoleItem) => {
-        setSelectedRole(role);
-        setRoleForm({
-            name: role.name,
-            description: role.description,
-        });
-        setRoleDialogOpen(true);
-    };
-
-    const closeRoleDialog = () => {
-        setRoleDialogOpen(false);
-        setSelectedRole(null);
-        setRoleForm(emptyAdminRoleForm);
-    };
-
     const updateFeedbackReviewStatus = (
         id: number,
         status: FeedbackReviewItem['status'],
@@ -1033,6 +754,55 @@ export default function AdminPage() {
         });
     };
 
+    const completeFeedbackReview = (
+        id: number,
+        action: 'solve' | 'ignore',
+    ) => {
+        const csrfToken = document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute('content');
+
+        if (!csrfToken) {
+            return;
+        }
+
+        const actionKey = `${action}:${id}`;
+        setPendingFeedbackAction(actionKey);
+
+        void fetch(`/admin/feedback-review/${id}/${action}`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            body: JSON.stringify({}),
+        })
+            .then(async (response) => {
+                if (!response.ok) {
+                    throw new Error('Failed to complete feedback review.');
+                }
+
+                const payload = (await response.json()) as {
+                    data: Partial<FeedbackReviewItem> & { id: number };
+                };
+
+                setLocalFeedbackReviewItems((items) =>
+                    items.map((item) =>
+                        item.id === id ? { ...item, ...payload.data } : item,
+                    ),
+                );
+            })
+            .catch((error) => {
+                console.error('Failed to complete feedback review:', error);
+            })
+            .finally(() => {
+                setPendingFeedbackAction((current) =>
+                    current === actionKey ? null : current,
+                );
+            });
+    };
+
     return (
         <>
             <Head title="Admin Dashboard" />
@@ -1055,46 +825,59 @@ export default function AdminPage() {
                                     ? 'Buka sidebar'
                                     : 'Tutup sidebar'
                             }
-                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-accent"
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted/50 text-primary ring-1 ring-border transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                             onClick={() =>
                                 setSidebarCollapsed((value) => !value)
                             }
                         >
-                            <DekaLogo className="h-6 w-auto" />
+                            <DekaLogo className="h-7 w-7 scale-125 object-contain" />
                         </button>
                         <div
-                            className={`min-w-0 ${sidebarCollapsed ? 'hidden' : ''}`}
+                            className={`min-w-0 leading-none ${sidebarCollapsed ? 'hidden' : ''}`}
                         >
-                            <p className="truncate text-sm font-semibold">
+                            <p className="truncate text-[15px] leading-5 font-semibold text-foreground">
                                 Deka Admin
                             </p>
-                            <p className="truncate text-xs text-muted-foreground">
+                            <p className="mt-0.5 truncate text-xs leading-4 text-muted-foreground">
                                 Chatbot operations
                             </p>
                         </div>
                     </div>
 
-                    <nav className="flex-1 space-y-1.5 px-3 py-4">
-                        {navigation.map((item) => (
-                            <Link
-                                key={item.label}
-                                href={sectionHref(item.id)}
-                                title={
-                                    sidebarCollapsed ? item.label : undefined
-                                }
-                                className={`flex h-11 w-full items-center rounded-md text-sm font-medium transition-colors ${
-                                    activeSection === item.id
-                                        ? 'bg-primary text-primary-foreground shadow-sm'
-                                        : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-                                } ${sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3'}`}
-                            >
-                                <item.icon className="h-4 w-4" />
-                                <span
-                                    className={`truncate ${sidebarCollapsed ? 'hidden' : ''}`}
+                    <nav className="flex-1 space-y-3 px-3 py-3">
+                        {sidebarNavigationGroups.map((group) => (
+                            <div key={group.label} className="space-y-1">
+                                <p
+                                    className={`px-3 pb-0.5 text-[11px] leading-4 font-semibold tracking-wide text-muted-foreground/70 uppercase ${
+                                        sidebarCollapsed ? 'hidden' : ''
+                                    }`}
                                 >
-                                    {item.label}
-                                </span>
-                            </Link>
+                                    {group.label}
+                                </p>
+                                {group.items.map((item) => (
+                                    <Link
+                                        key={item.label}
+                                        href={sectionHref(item.id)}
+                                        title={
+                                            sidebarCollapsed
+                                                ? item.label
+                                                : undefined
+                                        }
+                                        className={`flex h-10 w-full items-center rounded-md text-sm font-medium transition-colors ${
+                                            activeSection === item.id
+                                                ? 'bg-primary/90 text-primary-foreground'
+                                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                                        } ${sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3'}`}
+                                    >
+                                        <item.icon className="h-4 w-4 shrink-0" />
+                                        <span
+                                            className={`truncate ${sidebarCollapsed ? 'hidden' : ''}`}
+                                        >
+                                            {item.label}
+                                        </span>
+                                    </Link>
+                                ))}
+                            </div>
                         ))}
                     </nav>
 
@@ -1105,14 +888,14 @@ export default function AdminPage() {
                                     <button
                                         type="button"
                                         title={auth.user.name}
-                                        className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-sm font-semibold text-blue-700 ring-1 ring-blue-100 transition-colors hover:bg-blue-100 focus-visible:ring-2 focus-visible:ring-blue-200 focus-visible:outline-none dark:bg-blue-950 dark:text-blue-100 dark:ring-blue-900 dark:hover:bg-blue-900"
+                                        className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-primary ring-1 ring-border transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                     >
                                         {profileInitials}
                                     </button>
                                 ) : (
                                     <button
                                         type="button"
-                                        className="flex w-full items-center gap-3 rounded-md border bg-muted/40 p-3 text-left transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                        className="flex w-full items-center gap-3 rounded-md border bg-muted/30 p-3 text-left transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                     >
                                         <UserInfo user={auth.user} showEmail />
                                         <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
@@ -1159,7 +942,7 @@ export default function AdminPage() {
                         </div>
                     </header>
 
-                    <main className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-hidden px-4 py-6 md:px-6">
+                    <main className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 md:px-6">
                         <div className="flex shrink-0 gap-2 overflow-x-auto pb-1 lg:hidden">
                             {navigation.map((item) => (
                                 <Button
@@ -1205,6 +988,7 @@ export default function AdminPage() {
                                     />
                                     <AdminTokenUsageChart
                                         data={tokenUsageItems}
+                                        trend={tokenUsageTrend}
                                         className="flex min-h-0 flex-col"
                                         chartClassName="h-full min-h-[240px]"
                                     />
@@ -1243,166 +1027,203 @@ export default function AdminPage() {
                                     />
                                 </div>
 
-                                <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-                                    <div className="grid gap-6">
-                                        <Card className="rounded-lg">
-                                            <CardHeader className="gap-3 pb-4">
-                                                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                                    <div>
-                                                        <CardTitle>
-                                                            Usage token per user
-                                                        </CardTitle>
-                                                        <CardDescription>
-                                                            Ringkasan token AI
-                                                            yang dipakai tiap
-                                                            pengguna. Input
-                                                            adalah token dari
-                                                            pertanyaan dan
-                                                            konteks, output
-                                                            adalah token jawaban
-                                                            AI.
-                                                        </CardDescription>
-                                                    </div>
-                                                    <Badge
-                                                        variant="secondary"
-                                                        className="w-fit"
-                                                    >
-                                                        {formatNumber(
-                                                            totalTokenUsage,
-                                                        )}{' '}
-                                                        total token
-                                                    </Badge>
+                                <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
+                                    <AdminTokenTrendChart
+                                        data={tokenTrendItems}
+                                        className="flex min-h-[430px] flex-col"
+                                        chartClassName="h-full min-h-[300px]"
+                                    />
+
+                                    <Card className="rounded-lg">
+                                        <CardHeader className="pb-4">
+                                            <CardTitle>
+                                                Ringkasan Statistik
+                                            </CardTitle>
+                                            <CardDescription>
+                                                Efisiensi dan komposisi
+                                                pemakaian token saat ini.
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                                            <TokenInsightCard
+                                                label="Pengguna tertinggi"
+                                                value={
+                                                    topTokenUser
+                                                        ? topTokenUser.user
+                                                        : '-'
+                                                }
+                                                detail={
+                                                    topTokenUser
+                                                        ? `${formatNumber(topTokenUser.totalTokens)} token`
+                                                        : 'Belum ada data'
+                                                }
+                                            />
+                                            <TokenInsightCard
+                                                label="Trend bulan ini"
+                                                value={
+                                                    tokenUsageTrendLabel.value
+                                                }
+                                                detail={
+                                                    tokenUsageTrendLabel.detail
+                                                }
+                                            />
+                                            <TokenInsightCard
+                                                label="Biaya / request"
+                                                value={formatUsd(
+                                                    estimatedCostPerRequest,
+                                                )}
+                                                detail="Estimasi rata-rata biaya"
+                                            />
+                                            <TokenInsightCard
+                                                label="Input : Output"
+                                                value={`${promptTokenShare}:${completionTokenShare}`}
+                                                detail="Rasio komposisi token"
+                                            />
+                                        </CardContent>
+                                    </Card>
+                                </div>
+
+                                <Card className="rounded-lg">
+                                    <CardHeader className="gap-3 pb-4">
+                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div>
+                                                <CardTitle>
+                                                    Usage token per user
+                                                </CardTitle>
+                                                <CardDescription>
+                                                    Ringkasan token AI yang
+                                                    dipakai tiap pengguna. Input
+                                                    adalah token dari pertanyaan
+                                                    dan konteks, output adalah
+                                                    token jawaban AI.
+                                                </CardDescription>
+                                            </div>
+                                            <Badge
+                                                variant="secondary"
+                                                className="w-fit"
+                                            >
+                                                {formatNumber(totalTokenUsage)}{' '}
+                                                total token
+                                            </Badge>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="flex flex-1 flex-col gap-4">
+                                        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                            <TokenInsightCard
+                                                label="Porsi input"
+                                                value={`${promptTokenShare}%`}
+                                                detail={`${formatNumber(totalPromptTokens)} token pertanyaan`}
+                                            />
+                                            <TokenInsightCard
+                                                label="Porsi output"
+                                                value={`${completionTokenShare}%`}
+                                                detail={`${formatNumber(totalCompletionTokens)} token jawaban`}
+                                            />
+                                            <TokenInsightCard
+                                                label="Total request"
+                                                value={formatNumber(
+                                                    totalAiRequests,
+                                                )}
+                                                detail={`${formatNumber(averageTokensPerRequest)} token per request`}
+                                            />
+                                            <TokenInsightCard
+                                                label="Total biaya"
+                                                value={formatUsd(
+                                                    estimatedTokenCost,
+                                                )}
+                                                detail="Estimasi input dan output"
+                                            />
+                                        </div>
+                                        <div className="overflow-hidden rounded-md border">
+                                            <div className="min-w-0">
+                                                <div className="grid grid-cols-[minmax(220px,1fr)_90px_130px_130px_150px] items-center gap-4 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                    <span>Pengguna</span>
+                                                    <span className="text-right">
+                                                        Req
+                                                    </span>
+                                                    <span className="text-right">
+                                                        Input
+                                                    </span>
+                                                    <span className="text-right">
+                                                        Output
+                                                    </span>
+                                                    <span className="text-right">
+                                                        Total
+                                                    </span>
                                                 </div>
-                                            </CardHeader>
-                                            <CardContent className="flex flex-1 flex-col gap-4">
-                                                <div className="grid gap-3 sm:grid-cols-3">
-                                                    <TokenInsightCard
-                                                        label="Pengguna tertinggi"
-                                                        value={
-                                                            topTokenUser
-                                                                ? topTokenUser.user
-                                                                : '-'
-                                                        }
-                                                        detail={
-                                                            topTokenUser
-                                                                ? `${formatNumber(topTokenUser.totalTokens)} token`
-                                                                : 'Belum ada data'
-                                                        }
-                                                    />
-                                                    <TokenInsightCard
-                                                        label="Porsi input"
-                                                        value={`${promptTokenShare}%`}
-                                                        detail={`${formatNumber(totalPromptTokens)} token pertanyaan`}
-                                                    />
-                                                    <TokenInsightCard
-                                                        label="Porsi output"
-                                                        value={`${completionTokenShare}%`}
-                                                        detail={`${formatNumber(totalCompletionTokens)} token jawaban`}
-                                                    />
-                                                </div>
-                                                <div className="overflow-hidden rounded-md border">
-                                                    <div className="min-w-0">
-                                                        <div className="grid grid-cols-[minmax(140px,1fr)_70px_96px_96px_106px] items-center gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                                                            <span>
-                                                                Pengguna
-                                                            </span>
-                                                            <span className="text-right">
-                                                                Req
-                                                            </span>
-                                                            <span className="text-right">
-                                                                Input
-                                                            </span>
-                                                            <span className="text-right">
-                                                                Output
-                                                            </span>
-                                                            <span className="text-right">
-                                                                Total
-                                                            </span>
-                                                        </div>
-                                                        {tokenUsageItems.length >
-                                                        0 ? (
-                                                            tokenUsageItems.map(
-                                                                (item) => (
-                                                                    <div
-                                                                        key={
+                                                {tokenUsageItems.length > 0 ? (
+                                                    tokenUsageItems.map(
+                                                        (item) => (
+                                                            <div
+                                                                key={item.email}
+                                                                className="grid grid-cols-[minmax(220px,1fr)_90px_130px_130px_150px] items-center gap-4 border-b px-4 py-3 last:border-b-0"
+                                                            >
+                                                                <div className="min-w-0">
+                                                                    <div className="flex items-center gap-2">
+                                                                        <p className="truncate text-sm leading-5 font-medium">
+                                                                            {
+                                                                                item.user
+                                                                            }
+                                                                        </p>
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className="hidden text-[10px] capitalize sm:inline-flex"
+                                                                        >
+                                                                            {
+                                                                                item.role
+                                                                            }
+                                                                        </Badge>
+                                                                    </div>
+                                                                    <p className="truncate text-xs text-muted-foreground">
+                                                                        {
                                                                             item.email
                                                                         }
-                                                                        className="grid grid-cols-[minmax(140px,1fr)_70px_96px_96px_106px] items-center gap-3 border-b px-4 py-3 last:border-b-0"
-                                                                    >
-                                                                        <div className="min-w-0">
-                                                                            <div className="flex items-center gap-2">
-                                                                                <p className="truncate text-sm leading-5 font-medium">
-                                                                                    {
-                                                                                        item.user
-                                                                                    }
-                                                                                </p>
-                                                                                <Badge
-                                                                                    variant="outline"
-                                                                                    className="hidden text-[10px] capitalize sm:inline-flex"
-                                                                                >
-                                                                                    {
-                                                                                        item.role
-                                                                                    }
-                                                                                </Badge>
-                                                                            </div>
-                                                                            <p className="truncate text-xs text-muted-foreground">
-                                                                                {
-                                                                                    item.email
-                                                                                }
-                                                                            </p>
-                                                                        </div>
-                                                                        <TokenCell
-                                                                            value={formatNumber(
-                                                                                item.requests,
-                                                                            )}
-                                                                        />
-                                                                        <TokenCell
-                                                                            value={formatNumber(
-                                                                                item.promptTokens,
-                                                                            )}
-                                                                        />
-                                                                        <TokenCell
-                                                                            value={formatNumber(
-                                                                                item.completionTokens,
-                                                                            )}
-                                                                        />
-                                                                        <div className="text-right">
-                                                                            <p className="text-sm leading-5 font-semibold tabular-nums">
-                                                                                {formatNumber(
-                                                                                    item.totalTokens,
-                                                                                )}
-                                                                            </p>
-                                                                            <p className="text-xs text-muted-foreground tabular-nums">
-                                                                                {formatNumber(
-                                                                                    Math.round(
-                                                                                        item.totalTokens /
-                                                                                            Math.max(
-                                                                                                item.requests,
-                                                                                                1,
-                                                                                            ),
+                                                                    </p>
+                                                                </div>
+                                                                <TokenCell
+                                                                    value={formatNumber(
+                                                                        item.requests,
+                                                                    )}
+                                                                />
+                                                                <TokenCell
+                                                                    value={formatNumber(
+                                                                        item.promptTokens,
+                                                                    )}
+                                                                />
+                                                                <TokenCell
+                                                                    value={formatNumber(
+                                                                        item.completionTokens,
+                                                                    )}
+                                                                />
+                                                                <div className="text-right">
+                                                                    <p className="text-sm leading-5 font-semibold tabular-nums">
+                                                                        {formatNumber(
+                                                                            item.totalTokens,
+                                                                        )}
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground tabular-nums">
+                                                                        {formatNumber(
+                                                                            Math.round(
+                                                                                item.totalTokens /
+                                                                                    Math.max(
+                                                                                        item.requests,
+                                                                                        1,
                                                                                     ),
-                                                                                )}
-                                                                                /req
-                                                                            </p>
-                                                                        </div>
-                                                                    </div>
-                                                                ),
-                                                            )
-                                                        ) : (
-                                                            <EmptyTableRow text="Belum ada pemakaian token dari chat AI." />
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </CardContent>
-                                        </Card>
-                                    </div>
-
-                                    <AdminTokenUsageChart
-                                        data={tokenUsageItems}
-                                        className="flex min-h-[520px] flex-col"
-                                        chartClassName="h-full min-h-[260px] max-h-[320px] max-w-[320px]"
-                                    />
-                                </div>
+                                                                            ),
+                                                                        )}
+                                                                        /req
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        ),
+                                                    )
+                                                ) : (
+                                                    <EmptyTableRow text="Belum ada pemakaian token dari chat AI." />
+                                                )}
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
                             </section>
                         )}
 
@@ -1427,7 +1248,7 @@ export default function AdminPage() {
                                     />
                                     <UserMetricCard
                                         icon={ShieldCheck}
-                                        label="Selesai"
+                                        label="Solved"
                                         tone="green"
                                         value={formatNumber(
                                             resolvedFeedbackReviews,
@@ -1435,11 +1256,10 @@ export default function AdminPage() {
                                     />
                                     <UserMetricCard
                                         icon={MessageSquare}
-                                        label="Total dislike"
+                                        label="Ignored"
                                         tone="neutral"
                                         value={formatNumber(
-                                            totals?.totalDislikes ??
-                                                totalDislikes,
+                                            ignoredFeedbackReviews,
                                         )}
                                     />
                                 </div>
@@ -1449,12 +1269,12 @@ export default function AdminPage() {
                                         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                                             <div>
                                                 <CardTitle>
-                                                    Review alasan dislike
+                                                    Issue review dislike
                                                 </CardTitle>
                                                 <CardDescription>
-                                                    Daftar jawaban AI yang
-                                                    mendapat dislike beserta
-                                                    alasan dari user.
+                                                    Admin menentukan feedback
+                                                    mana yang valid untuk
+                                                    diperbaiki AI ke depannya.
                                                 </CardDescription>
                                             </div>
                                             <Badge
@@ -1471,12 +1291,10 @@ export default function AdminPage() {
                                     <CardContent className="min-h-0 flex-1">
                                         <div className="h-full overflow-x-auto rounded-md border">
                                             <div className="min-w-[920px]">
-                                                <div className="grid grid-cols-[minmax(190px,0.9fr)_minmax(230px,1fr)_minmax(260px,1.2fr)_140px_120px_170px] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                <div className="grid grid-cols-[minmax(170px,0.75fr)_minmax(250px,1fr)_minmax(360px,1.45fr)_150px_120px_170px] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                     <span>User</span>
                                                     <span>Alasan</span>
-                                                    <span>
-                                                        Ringkasan jawaban
-                                                    </span>
+                                                    <span>Issue</span>
                                                     <span>Status</span>
                                                     <span>Waktu</span>
                                                     <span className="text-right">
@@ -1484,13 +1302,41 @@ export default function AdminPage() {
                                                     </span>
                                                 </div>
 
-                                                {localFeedbackReviewItems.length >
+                                                {feedbackReviewDisplayItems.length >
                                                 0 ? (
-                                                    localFeedbackReviewItems.map(
+                                                    feedbackReviewDisplayItems.map(
                                                         (item) => (
                                                             <div
                                                                 key={item.id}
-                                                                className="grid grid-cols-[minmax(190px,0.9fr)_minmax(230px,1fr)_minmax(260px,1.2fr)_140px_120px_170px] gap-3 border-b px-4 py-4 last:border-b-0"
+                                                                role="button"
+                                                                tabIndex={0}
+                                                                onClick={() =>
+                                                                    setSelectedFeedbackReviewId(
+                                                                        item.id,
+                                                                    )
+                                                                }
+                                                                onKeyDown={(
+                                                                    event,
+                                                                ) => {
+                                                                    if (
+                                                                        event.key ===
+                                                                            'Enter' ||
+                                                                        event.key ===
+                                                                            ' '
+                                                                    ) {
+                                                                        event.preventDefault();
+                                                                        setSelectedFeedbackReviewId(
+                                                                            item.id,
+                                                                        );
+                                                                    }
+                                                                }}
+                                                                className={`grid grid-cols-[minmax(170px,0.75fr)_minmax(250px,1fr)_minmax(360px,1.45fr)_150px_120px_170px] gap-3 border-b px-4 last:border-b-0 ${
+                                                                    ['resolved', 'ignored'].includes(
+                                                                        item.status,
+                                                                    )
+                                                                        ? 'bg-slate-50/70 py-3 text-muted-foreground'
+                                                                        : 'cursor-pointer py-4 transition-colors hover:bg-muted/30'
+                                                                }`}
                                                             >
                                                                 <div className="min-w-0">
                                                                     <p className="truncate text-sm font-medium">
@@ -1516,57 +1362,155 @@ export default function AdminPage() {
                                                                         }
                                                                     </p>
                                                                 </div>
-                                                                <p className="line-clamp-2 text-sm leading-5 text-muted-foreground">
-                                                                    {
-                                                                        item.answer
-                                                                    }
-                                                                </p>
-                                                                <div>
+                                                                <div className="min-w-0 space-y-2">
+                                                                    <div>
+                                                                        <p className="line-clamp-1 text-sm font-medium">
+                                                                            {
+                                                                                item.question
+                                                                            }
+                                                                        </p>
+                                                                        <p className="line-clamp-2 text-xs leading-5 text-muted-foreground">
+                                                                            Jawaban
+                                                                            lama:{' '}
+                                                                            {
+                                                                                item.answer
+                                                                            }
+                                                                        </p>
+                                                                    </div>
+                                                                    {item.aiImprovement ? (
+                                                                        <Badge
+                                                                            variant="outline"
+                                                                            className="w-fit border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                                        >
+                                                                            Improvement
+                                                                            tersimpan
+                                                                        </Badge>
+                                                                    ) : item.status ===
+                                                                      'ignored' ? (
+                                                                        <div className="text-xs leading-5 text-muted-foreground">
+                                                                            Tidak
+                                                                            masuk
+                                                                            learning
+                                                                            AI.
+                                                                        </div>
+                                                                    ) : null}
+                                                                </div>
+                                                                <div className="space-y-1.5">
                                                                     <FeedbackReviewStatusBadge
                                                                         status={
                                                                             item.status
                                                                         }
                                                                     />
+                                                                    {item.status ===
+                                                                    'resolved' ? (
+                                                                        <p className="text-xs leading-4 text-emerald-700">
+                                                                            Improvement
+                                                                            aktif
+                                                                        </p>
+                                                                    ) : item.status ===
+                                                                      'ignored' ? (
+                                                                        <p className="text-xs leading-4 text-muted-foreground">
+                                                                            Ditutup
+                                                                            manual
+                                                                        </p>
+                                                                    ) : null}
                                                                 </div>
                                                                 <p className="text-sm whitespace-nowrap text-muted-foreground">
                                                                     {
                                                                         item.createdAt
                                                                     }
                                                                 </p>
-                                                                <div className="flex justify-end gap-2">
-                                                                    <Button
-                                                                        type="button"
-                                                                        size="sm"
-                                                                        variant="outline"
-                                                                        disabled={
-                                                                            item.status ===
-                                                                            'reviewing'
-                                                                        }
-                                                                        onClick={() =>
-                                                                            updateFeedbackReviewStatus(
-                                                                                item.id,
-                                                                                'reviewing',
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        Proses
-                                                                    </Button>
-                                                                    <Button
-                                                                        type="button"
-                                                                        size="sm"
-                                                                        disabled={
-                                                                            item.status ===
-                                                                            'resolved'
-                                                                        }
-                                                                        onClick={() =>
-                                                                            updateFeedbackReviewStatus(
-                                                                                item.id,
-                                                                                'resolved',
-                                                                            )
-                                                                        }
-                                                                    >
-                                                                        Selesai
-                                                                    </Button>
+                                                                <div className="flex flex-wrap justify-end gap-2">
+                                                                    {[
+                                                                        'resolved',
+                                                                        'ignored',
+                                                                    ].includes(
+                                                                        item.status,
+                                                                    ) ? (
+                                                                        <Button
+                                                                            type="button"
+                                                                            size="sm"
+                                                                            variant="ghost"
+                                                                            onClick={(
+                                                                                event,
+                                                                            ) => {
+                                                                                event.stopPropagation();
+                                                                                setSelectedFeedbackReviewId(
+                                                                                    item.id,
+                                                                                );
+                                                                            }}
+                                                                        >
+                                                                            Detail
+                                                                        </Button>
+                                                                    ) : (
+                                                                        <>
+                                                                            <Button
+                                                                                type="button"
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                disabled={
+                                                                                    item.status !==
+                                                                                    'open'
+                                                                                }
+                                                                                onClick={(
+                                                                                    event,
+                                                                                ) => {
+                                                                                    event.stopPropagation();
+                                                                                    updateFeedbackReviewStatus(
+                                                                                        item.id,
+                                                                                        'reviewing',
+                                                                                    );
+                                                                                }}
+                                                                            >
+                                                                                Review
+                                                                            </Button>
+                                                                            <Button
+                                                                                type="button"
+                                                                                size="sm"
+                                                                                variant="outline"
+                                                                                disabled={
+                                                                                    pendingFeedbackAction !==
+                                                                                    null
+                                                                                }
+                                                                                onClick={(
+                                                                                    event,
+                                                                                ) => {
+                                                                                    event.stopPropagation();
+                                                                                    completeFeedbackReview(
+                                                                                        item.id,
+                                                                                        'ignore',
+                                                                                    );
+                                                                                }}
+                                                                            >
+                                                                                {pendingFeedbackAction ===
+                                                                                `ignore:${item.id}`
+                                                                                    ? 'Closing'
+                                                                                    : 'Ignore'}
+                                                                            </Button>
+                                                                            <Button
+                                                                                type="button"
+                                                                                size="sm"
+                                                                                disabled={
+                                                                                    pendingFeedbackAction !==
+                                                                                    null
+                                                                                }
+                                                                                onClick={(
+                                                                                    event,
+                                                                                ) => {
+                                                                                    event.stopPropagation();
+                                                                                    completeFeedbackReview(
+                                                                                        item.id,
+                                                                                        'solve',
+                                                                                    );
+                                                                                }}
+                                                                            >
+                                                                                {pendingFeedbackAction ===
+                                                                                `solve:${item.id}`
+                                                                                    ? 'Solving'
+                                                                                    : 'Solve'}
+                                                                            </Button>
+                                                                        </>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         ),
@@ -1598,38 +1542,47 @@ export default function AdminPage() {
                                         </CardDescription>
                                     </CardHeader>
                                     <CardContent className="space-y-4">
-                                        {knowledgeItems.map((item) => (
-                                            <div
-                                                key={item.title}
-                                                className="flex flex-col gap-3 rounded-md border p-4 sm:flex-row sm:items-center sm:justify-between"
-                                            >
-                                                <div className="flex min-w-0 items-start gap-3">
-                                                    <div className="rounded-md bg-muted p-2">
-                                                        <FileText className="h-4 w-4" />
-                                                    </div>
-                                                    <div className="min-w-0">
-                                                        <p className="truncate text-sm font-medium">
-                                                            {item.title}
-                                                        </p>
-                                                        <p className="mt-1 text-sm text-muted-foreground">
-                                                            {item.source} ·{' '}
-                                                            {item.chunks} chunks
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <Badge
-                                                    variant={
-                                                        item.status === 'active'
-                                                            ? 'secondary'
-                                                            : 'outline'
-                                                    }
+                                        {knowledgeItems.length > 0 ? (
+                                            knowledgeItems.map((item) => (
+                                                <div
+                                                    key={`${item.title}-${item.source}`}
+                                                    className="flex flex-col gap-3 rounded-md border p-4 sm:flex-row sm:items-center sm:justify-between"
                                                 >
-                                                    {knowledgeStatusLabel(
-                                                        item.status,
-                                                    )}
-                                                </Badge>
+                                                    <div className="flex min-w-0 items-start gap-3">
+                                                        <div className="rounded-md bg-muted p-2">
+                                                            <FileText className="h-4 w-4" />
+                                                        </div>
+                                                        <div className="min-w-0">
+                                                            <p className="truncate text-sm font-medium">
+                                                                {item.title}
+                                                            </p>
+                                                            <p className="mt-1 text-sm text-muted-foreground">
+                                                                {item.source}{' '}
+                                                                · {item.chunks}{' '}
+                                                                chunks
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                    <Badge
+                                                        variant={
+                                                            item.status ===
+                                                            'active'
+                                                                ? 'secondary'
+                                                                : 'outline'
+                                                        }
+                                                    >
+                                                        {knowledgeStatusLabel(
+                                                            item.status,
+                                                        )}
+                                                    </Badge>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+                                                Belum ada dokumen knowledge yang
+                                                tersimpan.
                                             </div>
-                                        ))}
+                                        )}
                                     </CardContent>
                                 </Card>
 
@@ -1644,15 +1597,21 @@ export default function AdminPage() {
                                     <CardContent className="space-y-5">
                                         <QualityBar
                                             label="Jawaban pakai data bot"
-                                            value={82}
+                                            value={
+                                                knowledgeStats.answerGrounding
+                                            }
                                         />
                                         <QualityBar
                                             label="Pencarian data siap"
-                                            value={74}
+                                            value={
+                                                knowledgeStats.retrievalReady
+                                            }
                                         />
                                         <QualityBar
                                             label="Sumber jawaban tercatat"
-                                            value={68}
+                                            value={
+                                                knowledgeStats.sourceTraceability
+                                            }
                                         />
                                     </CardContent>
                                 </Card>
@@ -1764,7 +1723,7 @@ export default function AdminPage() {
                                             label="Feedback positif"
                                             value={68}
                                         />
-                                        <div className="rounded-md border border-[#f5d08b] bg-[#fff4df] p-3 text-sm text-[#8a3c06] dark:border-[#7c4a08] dark:bg-[#3b2508] dark:text-[#f7c56b]">
+                                        <div className="rounded-md border border-[#f5d08b] bg-[#fff4df] p-3 text-sm text-[#8a3c06]   ">
                                             <div className="flex items-center gap-2 font-medium">
                                                 <AlertTriangle className="h-4 w-4" />
                                                 Perlu review
@@ -1829,21 +1788,15 @@ export default function AdminPage() {
                                                     Daftar Roles
                                                 </CardTitle>
                                                 <CardDescription>
-                                                    Role yang tersedia untuk
-                                                    pilihan pengguna di
-                                                    dashboard.
+                                                    Kelola role yang bisa
+                                                    dipilih untuk akun
+                                                    pengguna.
                                                 </CardDescription>
                                             </div>
                                             <Button
                                                 type="button"
                                                 size="sm"
-                                                onClick={() => {
-                                                    setSelectedRole(null);
-                                                    setRoleForm(
-                                                        emptyAdminRoleForm,
-                                                    );
-                                                    setRoleDialogOpen(true);
-                                                }}
+                                                onClick={openCreateRoleDialog}
                                             >
                                                 <Plus className="h-4 w-4" />
                                                 Tambah Role
@@ -1852,7 +1805,7 @@ export default function AdminPage() {
                                     </CardHeader>
                                     <CardContent className="min-h-0 flex-1">
                                         <div className="h-full overflow-hidden rounded-md border">
-                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_120px_120px_minmax(220px,1fr)_120px]">
+                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_120px_120px_100px]">
                                                 <span>Role</span>
                                                 <span className="hidden md:block">
                                                     Tipe
@@ -1860,23 +1813,16 @@ export default function AdminPage() {
                                                 <span className="hidden md:block">
                                                     Akun
                                                 </span>
-                                                <span className="hidden md:block">
-                                                    Akses
-                                                </span>
                                                 <span className="text-right">
                                                     Aksi
                                                 </span>
                                             </div>
 
-                                            {roleItems.map((item) => {
-                                                const canDelete =
-                                                    !item.system &&
-                                                    item.usersCount === 0;
-
-                                                return (
+                                            {roleItems.length > 0 ? (
+                                                roleItems.map((item) => (
                                                     <div
                                                         key={item.id}
-                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_120px_120px_minmax(220px,1fr)_120px]"
+                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_120px_120px_100px]"
                                                     >
                                                         <div className="min-w-0">
                                                             <div className="flex items-center gap-2">
@@ -1910,25 +1856,6 @@ export default function AdminPage() {
                                                                 item.usersCount,
                                                             )}
                                                         </p>
-                                                        <div className="hidden min-w-0 flex-wrap gap-2 md:flex">
-                                                            {item.permissions.map(
-                                                                (
-                                                                    permission,
-                                                                ) => (
-                                                                    <Badge
-                                                                        key={
-                                                                            permission
-                                                                        }
-                                                                        variant="secondary"
-                                                                        className="font-normal"
-                                                                    >
-                                                                        {
-                                                                            permission
-                                                                        }
-                                                                    </Badge>
-                                                                ),
-                                                            )}
-                                                        </div>
                                                         <div className="flex justify-end gap-1">
                                                             <Button
                                                                 type="button"
@@ -1949,21 +1876,24 @@ export default function AdminPage() {
                                                                 variant="ghost"
                                                                 title="Hapus role"
                                                                 disabled={
-                                                                    !canDelete
+                                                                    item.system ||
+                                                                    item.usersCount >
+                                                                        0
                                                                 }
                                                                 onClick={() =>
                                                                     handleDeleteRole(
                                                                         item,
                                                                     )
                                                                 }
-                                                                className="text-destructive hover:text-destructive"
                                                             >
-                                                                <Trash2 className="h-4 w-4" />
+                                                                <Trash2 className="h-4 w-4 text-red-500" />
                                                             </Button>
                                                         </div>
                                                     </div>
-                                                );
-                                            })}
+                                                ))
+                                            ) : (
+                                                <EmptyTableRow text="Belum ada role yang tersedia." />
+                                            )}
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -2025,19 +1955,16 @@ export default function AdminPage() {
                                     </CardHeader>
                                     <CardContent className="min-h-0 flex-1">
                                         <div className="h-full overflow-hidden rounded-md border">
-                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_120px_120px_120px_140px_120px]">
+                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(280px,1fr)_130px_140px_120px_110px]">
                                                 <span>Pengguna</span>
                                                 <span className="hidden md:block">
                                                     Role
                                                 </span>
                                                 <span className="hidden md:block">
-                                                    Status
+                                                    Verifikasi
                                                 </span>
                                                 <span className="hidden md:block">
                                                     Chat
-                                                </span>
-                                                <span className="hidden md:block">
-                                                    Aktif
                                                 </span>
                                                 <span className="text-right">
                                                     Aksi
@@ -2048,7 +1975,7 @@ export default function AdminPage() {
                                                 adminUsers.map((item) => (
                                                     <div
                                                         key={item.id}
-                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_120px_120px_120px_140px_120px]"
+                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(280px,1fr)_130px_140px_120px_110px]"
                                                     >
                                                         <div className="min-w-0">
                                                             <div className="flex items-center gap-2">
@@ -2060,6 +1987,18 @@ export default function AdminPage() {
                                                                     className="text-[10px] capitalize md:hidden"
                                                                 >
                                                                     {item.role}
+                                                                </Badge>
+                                                                <Badge
+                                                                    variant="outline"
+                                                                    className={`text-[10px] md:hidden ${
+                                                                        item.emailVerified
+                                                                            ? 'border-transparent bg-[#e8f8ef] text-[#15803d]'
+                                                                            : 'border-transparent bg-[#fff4df] text-[#b45309]'
+                                                                    }`}
+                                                                >
+                                                                    {item.emailVerified
+                                                                        ? 'Verified'
+                                                                        : 'Unverified'}
                                                                 </Badge>
                                                             </div>
                                                             <p className="mt-1 truncate text-xs text-muted-foreground">
@@ -2077,22 +2016,21 @@ export default function AdminPage() {
                                                         <div className="hidden md:block">
                                                             <Badge
                                                                 variant="outline"
-                                                                className={statusClass(
-                                                                    item.status,
-                                                                )}
+                                                                className={
+                                                                    item.emailVerified
+                                                                        ? 'border-transparent bg-[#e8f8ef] text-[#15803d]'
+                                                                        : 'border-transparent bg-[#fff4df] text-[#b45309]'
+                                                                }
                                                             >
-                                                                {userStatusLabel(
-                                                                    item.status,
-                                                                )}
+                                                                {item.emailVerified
+                                                                    ? 'Verified'
+                                                                    : 'Unverified'}
                                                             </Badge>
                                                         </div>
                                                         <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
                                                             {formatNumber(
                                                                 item.conversations,
                                                             )}
-                                                        </p>
-                                                        <p className="hidden text-sm whitespace-nowrap text-muted-foreground md:block">
-                                                            {item.lastSeen}
                                                         </p>
                                                         <div className="flex justify-end gap-1">
                                                             <Button
@@ -2194,28 +2132,41 @@ export default function AdminPage() {
                                                 </CardDescription>
                                             </div>
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <Badge
-                                                    variant="outline"
-                                                    className={
-                                                        activityLiveStatus ===
+                                                <div className="flex items-center gap-2 rounded-full border bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+                                                    <span
+                                                        className={`h-2.5 w-2.5 rounded-full ${
+                                                            activityLiveStatus ===
+                                                            'error'
+                                                                ? 'bg-amber-500'
+                                                                : activityLiveStatus ===
+                                                                    'updating'
+                                                                  ? 'bg-blue-500'
+                                                                  : 'bg-emerald-500'
+                                                        }`}
+                                                    />
+                                                    <span className="font-medium text-foreground">
+                                                        {activityLiveStatus ===
                                                         'error'
-                                                            ? 'border-transparent bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-200'
-                                                            : 'border-transparent bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-200'
-                                                    }
-                                                >
-                                                    {activityLiveStatus ===
-                                                    'error'
-                                                        ? 'Realtime tertunda'
-                                                        : activityLiveStatus ===
-                                                            'updating'
-                                                          ? 'Memuat realtime'
-                                                          : 'Live realtime'}
-                                                </Badge>
+                                                            ? 'Realtime tertunda'
+                                                            : activityLiveStatus ===
+                                                                'updating'
+                                                              ? 'Memuat realtime'
+                                                              : 'Live realtime'}
+                                                    </span>
+                                                    <span>
+                                                        {reportPeriodLabel(
+                                                            activityPeriod,
+                                                        )}
+                                                    </span>
+                                                </div>
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger
                                                         asChild
                                                     >
-                                                        <Button size="sm">
+                                                        <Button
+                                                            size="sm"
+                                                            className="gap-2 shadow-sm"
+                                                        >
                                                             <FileText className="h-4 w-4" />
                                                             Laporan
                                                             <ChevronDown className="h-4 w-4" />
@@ -2313,7 +2264,7 @@ export default function AdminPage() {
                                     <CardContent className="min-h-0 flex-1">
                                         <div className="h-full overflow-x-auto overflow-y-auto rounded-md border">
                                             <div className="min-w-[880px]">
-                                                <div className="grid grid-cols-[minmax(220px,1fr)_140px_minmax(260px,1.2fr)_150px_150px] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                                <div className="sticky top-0 z-10 grid grid-cols-[minmax(220px,1fr)_140px_minmax(260px,1.2fr)_150px_150px] gap-3 border-b bg-background/95 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase backdrop-blur supports-[backdrop-filter]:bg-background/85">
                                                     <span>Admin</span>
                                                     <span>Kategori</span>
                                                     <span>Aktivitas</span>
@@ -2327,7 +2278,7 @@ export default function AdminPage() {
                                                         (item) => (
                                                             <div
                                                                 key={item.id}
-                                                                className="grid grid-cols-[minmax(220px,1fr)_140px_minmax(260px,1.2fr)_150px_150px] gap-3 border-b px-4 py-4 last:border-b-0"
+                                                                className="grid grid-cols-[minmax(220px,1fr)_140px_minmax(260px,1.2fr)_150px_150px] gap-3 border-b px-4 py-4 transition-colors hover:bg-muted/30 last:border-b-0"
                                                             >
                                                                 <div className="min-w-0">
                                                                     <p className="truncate text-sm font-medium">
@@ -2354,12 +2305,12 @@ export default function AdminPage() {
                                                                     </Badge>
                                                                 </div>
                                                                 <div className="min-w-0">
-                                                                    <p className="truncate text-sm font-medium">
+                                                                    <p className="truncate text-sm font-semibold text-foreground">
                                                                         {
                                                                             item.action
                                                                         }
                                                                     </p>
-                                                                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                                    <p className="mt-1 truncate text-xs leading-5 text-muted-foreground/90">
                                                                         {
                                                                             item.target
                                                                         }{' '}
@@ -2369,12 +2320,12 @@ export default function AdminPage() {
                                                                         }
                                                                     </p>
                                                                 </div>
-                                                                <p className="font-mono text-sm text-muted-foreground">
+                                                                <p className="font-mono text-sm text-muted-foreground/80">
                                                                     {
                                                                         item.ipAddress
                                                                     }
                                                                 </p>
-                                                                <p className="text-sm whitespace-nowrap text-muted-foreground">
+                                                                <p className="text-sm whitespace-nowrap font-medium text-muted-foreground">
                                                                     {item.time}
                                                                 </p>
                                                             </div>
@@ -2398,50 +2349,74 @@ export default function AdminPage() {
             />
             {roleDialogOpen && (
                 <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[1.5px]">
-                    <div className="w-full max-w-md rounded-lg border bg-background p-6 shadow-xl">
+                    <div className="w-full max-w-lg rounded-lg border bg-background p-6 shadow-xl">
                         <div className="mb-5">
                             <h2 className="text-lg font-semibold">
                                 {selectedRole ? 'Edit Role' : 'Tambah Role'}
                             </h2>
                             <p className="mt-1 text-sm text-muted-foreground">
-                                Role tampil di daftar role dan pilihan role
-                                pengguna.
+                                Kelola nama, slug, dan deskripsi role.
                             </p>
                         </div>
 
                         <form onSubmit={handleRoleSubmit} className="space-y-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="admin-role-name">
-                                    Nama Role
-                                </Label>
+                                <Label htmlFor="admin-role-name">Nama</Label>
                                 <Input
                                     id="admin-role-name"
-                                    value={roleForm.name}
+                                    value={roleForm.data.name}
                                     onChange={(event) =>
-                                        setRoleForm((form) => ({
-                                            ...form,
-                                            name: event.target.value,
-                                        }))
+                                        roleForm.setData(
+                                            'name',
+                                            event.target.value,
+                                        )
                                     }
                                     required
-                                    placeholder="Contoh: Supervisor"
+                                    placeholder="Mis. Editor"
                                 />
+                                <InputError message={roleForm.errors.name} />
+                            </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="admin-role-slug">Slug</Label>
+                                <Input
+                                    id="admin-role-slug"
+                                    value={roleForm.data.slug}
+                                    onChange={(event) =>
+                                        roleForm.setData(
+                                            'slug',
+                                            event.target.value,
+                                        )
+                                    }
+                                    required
+                                    disabled={selectedRole !== null}
+                                    placeholder="editor"
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    Slug dipakai untuk assignment user dan tidak
+                                    bisa diubah setelah dibuat.
+                                </p>
+                                <InputError message={roleForm.errors.slug} />
                             </div>
 
                             <div className="grid gap-2">
                                 <Label htmlFor="admin-role-description">
                                     Deskripsi
                                 </Label>
-                                <Input
+                                <textarea
                                     id="admin-role-description"
-                                    value={roleForm.description}
+                                    value={roleForm.data.description}
                                     onChange={(event) =>
-                                        setRoleForm((form) => ({
-                                            ...form,
-                                            description: event.target.value,
-                                        }))
+                                        roleForm.setData(
+                                            'description',
+                                            event.target.value,
+                                        )
                                     }
-                                    placeholder="Keterangan singkat role"
+                                    className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring min-h-20 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+                                    placeholder="Ringkasan akses role"
+                                />
+                                <InputError
+                                    message={roleForm.errors.description}
                                 />
                             </div>
 
@@ -2453,17 +2428,181 @@ export default function AdminPage() {
                                 >
                                     Batal
                                 </Button>
-                                <Button type="submit">
-                                    <Plus className="h-4 w-4" />
-                                    {selectedRole
-                                        ? 'Simpan Role'
-                                        : 'Tambah Role'}
+                                <Button
+                                    type="submit"
+                                    disabled={roleForm.processing}
+                                >
+                                    {selectedRole ? 'Simpan' : 'Tambah Role'}
                                 </Button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
+            <Dialog
+                open={selectedFeedbackReview !== null}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setSelectedFeedbackReviewId(null);
+                    }
+                }}
+            >
+                <DialogContent className="max-h-[86vh] overflow-hidden p-0 sm:max-w-2xl">
+                    {selectedFeedbackReview ? (
+                        <>
+                            <DialogHeader className="border-b px-6 py-5">
+                                <div className="flex items-start justify-between gap-4 pr-8">
+                                    <div className="min-w-0">
+                                        <DialogTitle className="line-clamp-2 text-base leading-6">
+                                            {
+                                                selectedFeedbackReview.question
+                                            }
+                                        </DialogTitle>
+                                        <DialogDescription className="mt-1">
+                                            {
+                                                selectedFeedbackReview.conversation
+                                            }{' '}
+                                            ·{' '}
+                                            {
+                                                selectedFeedbackReview.createdAt
+                                            }
+                                        </DialogDescription>
+                                    </div>
+                                    <FeedbackReviewStatusBadge
+                                        status={selectedFeedbackReview.status}
+                                    />
+                                </div>
+                            </DialogHeader>
+
+                            <div className="scrollbar-none max-h-[58vh] space-y-5 overflow-y-auto px-6 py-5">
+                                <section className="space-y-2">
+                                    <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                        User
+                                    </p>
+                                    <div className="rounded-md border bg-muted/20 p-3">
+                                        <p className="text-sm font-medium">
+                                            {selectedFeedbackReview.user}
+                                        </p>
+                                        <p className="mt-1 text-xs text-muted-foreground">
+                                            {selectedFeedbackReview.email}
+                                        </p>
+                                    </div>
+                                </section>
+
+                                <section className="space-y-2">
+                                    <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                        Alasan dislike
+                                    </p>
+                                    <p className="rounded-md border bg-background p-3 text-sm leading-6">
+                                        {selectedFeedbackReview.reason}
+                                    </p>
+                                </section>
+
+                                <section className="space-y-2">
+                                    <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                        Jawaban lama
+                                    </p>
+                                    <p className="rounded-md border bg-muted/20 p-3 text-sm leading-6 text-muted-foreground">
+                                        {selectedFeedbackReview.answer}
+                                    </p>
+                                </section>
+
+                                <section className="space-y-2">
+                                    <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                                        Improvement AI
+                                    </p>
+                                    {selectedFeedbackReview.aiImprovement ? (
+                                        <div className="rounded-md border border-emerald-200 bg-emerald-50/80 p-3 text-sm leading-6 text-emerald-950">
+                                            {
+                                                selectedFeedbackReview.aiImprovement
+                                            }
+                                        </div>
+                                    ) : selectedFeedbackReview.status ===
+                                      'ignored' ? (
+                                        <p className="rounded-md border bg-muted/20 p-3 text-sm leading-6 text-muted-foreground">
+                                            Feedback ini ditutup tanpa masuk ke
+                                            learning AI.
+                                        </p>
+                                    ) : (
+                                        <p className="rounded-md border border-dashed bg-muted/10 p-3 text-sm leading-6 text-muted-foreground">
+                                            Belum ada improvement. Klik Solve
+                                            jika feedback ini valid untuk
+                                            memperbaiki jawaban berikutnya.
+                                        </p>
+                                    )}
+                                </section>
+                            </div>
+
+                            <DialogFooter className="border-t px-6 py-4">
+                                {['resolved', 'ignored'].includes(
+                                    selectedFeedbackReview.status,
+                                ) ? (
+                                    <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                                        {selectedFeedbackReview.status ===
+                                        'resolved'
+                                            ? 'Issue sudah solved dan improvement aktif untuk jawaban berikutnya.'
+                                            : 'Issue sudah ditutup sebagai ignored.'}
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            disabled={
+                                                selectedFeedbackReview.status !==
+                                                'open'
+                                            }
+                                            onClick={() =>
+                                                updateFeedbackReviewStatus(
+                                                    selectedFeedbackReview.id,
+                                                    'reviewing',
+                                                )
+                                            }
+                                        >
+                                            Review
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            disabled={
+                                                pendingFeedbackAction !== null
+                                            }
+                                            onClick={() =>
+                                                completeFeedbackReview(
+                                                    selectedFeedbackReview.id,
+                                                    'ignore',
+                                                )
+                                            }
+                                        >
+                                            {pendingFeedbackAction ===
+                                            `ignore:${selectedFeedbackReview.id}`
+                                                ? 'Closing'
+                                                : 'Ignore'}
+                                        </Button>
+                                        <Button
+                                            type="button"
+                                            disabled={
+                                                pendingFeedbackAction !== null
+                                            }
+                                            onClick={() =>
+                                                completeFeedbackReview(
+                                                    selectedFeedbackReview.id,
+                                                    'solve',
+                                                )
+                                            }
+                                        >
+                                            {pendingFeedbackAction ===
+                                            `solve:${selectedFeedbackReview.id}`
+                                                ? 'Solving'
+                                                : 'Solve'}
+                                        </Button>
+                                    </div>
+                                )}
+                            </DialogFooter>
+                        </>
+                    ) : null}
+                </DialogContent>
+            </Dialog>
             {userDialogOpen && (
                 <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/35 p-4 backdrop-blur-[1.5px]">
                     <div className="w-full max-w-lg rounded-lg border bg-background p-6 shadow-xl">
@@ -2540,6 +2679,38 @@ export default function AdminPage() {
                                 </select>
                                 <InputError message={userForm.errors.role} />
                             </div>
+
+                            <label
+                                htmlFor="admin-user-email-verified"
+                                className="flex items-start gap-3 rounded-md border bg-muted/20 p-3"
+                            >
+                                <input
+                                    id="admin-user-email-verified"
+                                    type="checkbox"
+                                    checked={userForm.data.email_verified}
+                                    onChange={(event) =>
+                                        userForm.setData(
+                                            'email_verified',
+                                            event.target.checked,
+                                        )
+                                    }
+                                    className="mt-1 size-4 rounded border-input"
+                                />
+                                <span>
+                                    <span className="block text-sm font-medium">
+                                        Email sudah terverifikasi
+                                    </span>
+                                    <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+                                        Jika aktif, akun bisa melewati proses
+                                        verifikasi email. Jika nonaktif, user
+                                        harus verifikasi email sebelum memakai
+                                        area yang dilindungi.
+                                    </span>
+                                </span>
+                            </label>
+                            <InputError
+                                message={userForm.errors.email_verified}
+                            />
 
                             <div className="grid gap-2">
                                 <Label htmlFor="admin-user-password">
@@ -2658,10 +2829,6 @@ function conversationStatusLabel(status: string) {
     }
 
     return status;
-}
-
-function userStatusLabel(status: AdminUserItem['status']) {
-    return status === 'active' ? 'Aktif' : 'Nonaktif';
 }
 
 function activityCategoryClass(category: AdminActivityItem['category']) {
@@ -2926,14 +3093,17 @@ function FeedbackReviewStatusBadge({
     const labels: Record<FeedbackReviewItem['status'], string> = {
         open: 'Open',
         reviewing: 'Diproses',
-        resolved: 'Selesai',
+        resolved: 'Solved',
+        ignored: 'Ignored',
     };
     const classes: Record<FeedbackReviewItem['status'], string> = {
-        open: 'border-transparent bg-[#fff4df] text-[#b45309] dark:bg-[#3b2508] dark:text-[#f7c56b]',
+        open: 'border-transparent bg-[#fff4df] text-[#b45309]  ',
         reviewing:
-            'border-transparent bg-[#eaf3ff] text-[#2f80ed] dark:bg-[#102b4a] dark:text-[#8fc1ff]',
+            'border-transparent bg-[#eaf3ff] text-[#2f80ed]  ',
         resolved:
-            'border-transparent bg-[#e8f2ff] text-[#155fc4] dark:bg-[#12365f] dark:text-[#b8d9ff]',
+            'border-transparent bg-[#e8f8ef] text-[#15803d]  ',
+        ignored:
+            'border-transparent bg-[#f1f5f9] text-[#64748b]  ',
     };
 
     return (
@@ -3007,6 +3177,36 @@ function QualityBar({ label, value }: { label: string; value: number }) {
             </div>
         </div>
     );
+}
+
+function getTokenUsageTrendLabel(trend?: TokenUsageTrend) {
+    if (!trend || trend.changePercent === null) {
+        return {
+            value: 'Belum ada data',
+            detail: 'Belum ada pembanding bulan lalu',
+        };
+    }
+
+    if (trend.direction === 'flat' || trend.changePercent === 0) {
+        return {
+            value: 'Stabil',
+            detail: 'Pemakaian token stabil bulan ini',
+        };
+    }
+
+    const directionLabel = trend.direction === 'down' ? 'Turun' : 'Naik';
+
+    return {
+        value: `${directionLabel} ${formatPercent(trend.changePercent)}%`,
+        detail: `${formatNumber(trend.currentTokens)} token bulan ini`,
+    };
+}
+
+function formatPercent(value: number) {
+    return new Intl.NumberFormat('id-ID', {
+        maximumFractionDigits: 1,
+        minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
+    }).format(Math.abs(value));
 }
 
 function formatNumber(value: number) {

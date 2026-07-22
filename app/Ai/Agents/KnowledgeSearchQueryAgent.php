@@ -18,6 +18,7 @@ class KnowledgeSearchQueryAgent implements Agent, HasTools
             .'If conversation context is provided, use it to resolve short follow-up questions such as "kontaknya", "alamatnya", "layanannya", or "foundernya". '
             .'Correct obvious typos and spelling variants before writing queries, such as "deak" to "DEKA", "riski/risky/rizki" to "Rizky", and "rifki" to "Rifqi". '
             .'Expand likely person aliases when useful: Riski/Rizky to Muhammad Rizky Hajar, Rifki/Rifqi to M. Rifqi Oktachandra, Abdul/Rahman to Abdul Rahman, and Aditya/Cahyadi to Aditya Cahyadi. '
+            .'If the user asks multiple Deka questions in one message, include search queries for each intent, for example a person identity query and a services/products query. '
             .'Include Indonesian and likely English terms when useful, but do not answer the question. '
             .'Focus on Deka-related facts such as profile, services, products, portfolio, clients, founder, history, operations, contact, pricing, and chatbot assistant capability. '
             .'If the question is general and not about Deka, return a JSON array containing only the original question.';

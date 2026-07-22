@@ -1,4 +1,4 @@
-import { ChartPie, TrendingUp } from 'lucide-react';
+import { ChartPie, TrendingDown, TrendingUp } from 'lucide-react';
 import { Pie, PieChart } from 'recharts';
 import {
     Card,
@@ -23,8 +23,37 @@ type TokenUsageChartItem = {
     totalTokens: number;
 };
 
+type TokenUsageTrend = {
+    currentTokens: number;
+    previousTokens: number;
+    changePercent: number | null;
+    direction: 'up' | 'down' | 'flat' | 'neutral';
+};
+
 const formatNumber = (value: number) =>
     new Intl.NumberFormat('id-ID').format(value);
+
+const formatPercent = (value: number) =>
+    new Intl.NumberFormat('id-ID', {
+        maximumFractionDigits: 1,
+        minimumFractionDigits: Number.isInteger(value) ? 0 : 1,
+    }).format(Math.abs(value));
+
+const getTrendLabel = (trend?: TokenUsageTrend) => {
+    if (!trend || trend.changePercent === null) {
+        return 'Belum ada pembanding bulan lalu';
+    }
+
+    if (trend.direction === 'flat' || trend.changePercent === 0) {
+        return 'Pemakaian token stabil bulan ini';
+    }
+
+    const directionLabel = trend.direction === 'down' ? 'turun' : 'naik';
+
+    return `Pemakaian token ${directionLabel} ${formatPercent(
+        trend.changePercent,
+    )}% bulan ini`;
+};
 
 const chartConfig = {
     tokens: {
@@ -47,10 +76,12 @@ export function AdminTokenUsageChart({
     chartClassName,
     className,
     data,
+    trend,
 }: {
     chartClassName?: string;
     className?: string;
     data: TokenUsageChartItem[];
+    trend?: TokenUsageTrend;
 }) {
     const totalTokens = data.reduce(
         (total, item) => total + item.totalTokens,
@@ -66,11 +97,17 @@ export function AdminTokenUsageChart({
     );
     const chartData = data.map((item, index) => ({
         fill: tokenSegmentColors[index % tokenSegmentColors.length],
+        name: 'Pemakaian token',
         tokens: item.totalTokens,
-        user: item.user,
     }));
-    const topUsers = chartData.slice(0, 5);
     const hasTokenData = totalTokens > 0;
+    const trendLabel = getTrendLabel(trend);
+    const TrendIcon =
+        trend?.direction === 'up'
+            ? TrendingUp
+            : trend?.direction === 'down'
+              ? TrendingDown
+              : null;
 
     return (
         <Card className={cn('flex h-full flex-col rounded-lg', className)}>
@@ -80,7 +117,7 @@ export function AdminTokenUsageChart({
                     Porsi pemakaian token antar pengguna aktif.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-1 flex-col gap-4 pb-3">
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden pb-3">
                 <div className="grid shrink-0 grid-cols-3 gap-2 text-center">
                     <div className="rounded-md border bg-muted/30 px-3 py-2">
                         <p className="text-[11px] text-muted-foreground">
@@ -112,7 +149,7 @@ export function AdminTokenUsageChart({
                         <ChartContainer
                             config={chartConfig}
                             className={cn(
-                                'mx-auto aspect-square max-h-[360px] w-full flex-1',
+                                'mx-auto aspect-square max-h-[320px] min-h-0 w-full flex-1',
                                 chartClassName,
                             )}
                         >
@@ -124,49 +161,14 @@ export function AdminTokenUsageChart({
                                 <Pie
                                     data={chartData}
                                     dataKey="tokens"
-                                    nameKey="user"
+                                    nameKey="name"
                                 />
                             </PieChart>
                         </ChartContainer>
-                        <div className="grid shrink-0 gap-2">
-                            {topUsers.map((item) => {
-                                const percent = Math.round(
-                                    (item.tokens / totalTokens) * 100,
-                                );
-
-                                return (
-                                    <div
-                                        key={item.user}
-                                        className="grid grid-cols-[1fr_auto_auto] items-center gap-3 text-sm"
-                                    >
-                                        <div className="min-w-0">
-                                            <p className="truncate font-medium">
-                                                {item.user}
-                                            </p>
-                                            <p className="text-xs text-muted-foreground">
-                                                {percent}% dari total
-                                            </p>
-                                        </div>
-                                        <p className="text-right text-sm font-semibold tabular-nums">
-                                            {formatNumber(item.tokens)}
-                                        </p>
-                                        <span className="h-2 w-10 overflow-hidden rounded-full bg-muted">
-                                            <span
-                                                className="block h-full rounded-full"
-                                                style={{
-                                                    backgroundColor: item.fill,
-                                                    width: `${percent}%`,
-                                                }}
-                                            />
-                                        </span>
-                                    </div>
-                                );
-                            })}
-                        </div>
                     </>
                 ) : (
                     <div className="flex min-h-[220px] flex-1 flex-col items-center justify-center rounded-md border border-dashed bg-muted/20 px-6 py-8 text-center">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-950 dark:text-blue-100 dark:ring-blue-900">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-50 text-blue-600 ring-1 ring-blue-100   ">
                             <ChartPie className="h-5 w-5" />
                         </div>
                         <p className="mt-4 text-sm font-semibold">
@@ -179,12 +181,14 @@ export function AdminTokenUsageChart({
                     </div>
                 )}
             </CardContent>
-            <CardFooter className="shrink-0 flex-col gap-2 border-t pt-4 text-sm">
-                <div className="flex items-center gap-2 leading-none font-medium">
+            <CardFooter className="shrink-0 flex-col gap-2 border-t px-4 pt-3 pb-4 text-center text-sm">
+                <div className="flex flex-wrap items-center justify-center gap-2 leading-tight font-medium">
                     {hasTokenData
-                        ? 'Pemakaian token naik 5.2% bulan ini'
+                        ? trendLabel
                         : 'Menunggu data pemakaian token'}
-                    {hasTokenData && <TrendingUp className="h-4 w-4" />}
+                    {hasTokenData && TrendIcon && (
+                        <TrendIcon className="h-4 w-4" />
+                    )}
                 </div>
                 <div className="flex items-center gap-2 leading-none text-muted-foreground">
                     {hasTokenData

@@ -1,9 +1,11 @@
 import { Head, useHttp, usePage } from '@inertiajs/react';
 import {
     ChevronDown,
+    ExternalLink,
     HelpCircle,
     History,
     Info,
+    MapPin,
     MessageSquare,
     Mic,
     Phone,
@@ -16,6 +18,7 @@ import {
     Loader2,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import DekaLogo from '@/components/deka-logo';
 import SettingsModal from '@/components/settings-modal';
 import LogoutConfirmModal from '@/components/logout-confirm-modal';
@@ -30,6 +33,64 @@ import {
     index as getConversations,
     show as getConversation,
 } from '@/routes/api/conversations';
+
+const markdownLinkPattern = /^\[([^\]]+)\]\(([^)]+)\)$/;
+
+const isGoogleMapsUrl = (href: string): boolean => {
+    try {
+        const url = new URL(href);
+
+        return (
+            url.hostname.includes('google.com') &&
+            (url.pathname.startsWith('/maps') || url.searchParams.has('q'))
+        );
+    } catch {
+        return false;
+    }
+};
+
+const extractMarkdownLink = (
+    text: string,
+): { label: string; href: string } | null => {
+    const match = text.trim().match(markdownLinkPattern);
+
+    if (!match) {
+        return null;
+    }
+
+    const [, label, href] = match;
+
+    return { label, href };
+};
+
+const renderMapsPreview = (
+    key: string,
+    href: string,
+    label = 'Buka di Google Maps',
+) => (
+    <a
+        key={key}
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="group my-3 flex w-full max-w-xl items-center justify-between gap-4 rounded-2xl border border-blue-200 bg-linear-to-br from-blue-50 via-white to-sky-50 px-4 py-3 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md"
+    >
+        <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                <MapPin className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+                <p className="text-sm font-semibold text-slate-900 md:text-[15px]">
+                    Google Maps
+                </p>
+                <p className="truncate text-xs text-slate-500 md:text-sm">
+                    {label}
+                </p>
+            </div>
+        </div>
+        <ExternalLink className="h-4.5 w-4.5 flex-none text-blue-500 transition group-hover:text-blue-600" />
+    </a>
+);
 
 interface ConversationItem {
     id: number;
@@ -607,43 +668,47 @@ export default function ChatPage() {
                     break;
 
                 case 'text_delta':
-                    setMessages((prev) => {
-                        const delta = event.delta ?? '';
+                    // Force a paint per delta so React 18 batching does not
+                    // collapse the whole answer into one instant full update.
+                    flushSync(() => {
+                        setMessages((prev) => {
+                            const delta = event.delta ?? '';
 
-                        if (delta.trim() !== '') {
-                            receivedAssistantContent = true;
-                        }
+                            if (delta.trim() !== '') {
+                                receivedAssistantContent = true;
+                            }
 
-                        const assistantIndex = prev.findIndex(
-                            (message) => message.id === tempAssistantId,
-                        );
+                            const assistantIndex = prev.findIndex(
+                                (message) => message.id === tempAssistantId,
+                            );
 
-                        if (assistantIndex === -1) {
-                            const lastMessage = prev[prev.length - 1];
+                            if (assistantIndex === -1) {
+                                const lastMessage = prev[prev.length - 1];
 
-                            return [
-                                ...prev,
-                                {
-                                    id: tempAssistantId,
-                                    conversation_id:
-                                        lastMessage?.conversation_id ?? 0,
-                                    reply_to_message_id: null,
-                                    role: 'assistant',
-                                    content: delta,
-                                    sequence: prev.length + 1,
-                                    created_at: new Date().toISOString(),
-                                },
-                            ];
-                        }
+                                return [
+                                    ...prev,
+                                    {
+                                        id: tempAssistantId,
+                                        conversation_id:
+                                            lastMessage?.conversation_id ?? 0,
+                                        reply_to_message_id: null,
+                                        role: 'assistant',
+                                        content: delta,
+                                        sequence: prev.length + 1,
+                                        created_at: new Date().toISOString(),
+                                    },
+                                ];
+                            }
 
-                        return prev.map((message) =>
-                            message.id === tempAssistantId
-                                ? {
-                                      ...message,
-                                      content: message.content + delta,
-                                  }
-                                : message,
-                        );
+                            return prev.map((message) =>
+                                message.id === tempAssistantId
+                                    ? {
+                                          ...message,
+                                          content: message.content + delta,
+                                      }
+                                    : message,
+                            );
+                        });
                     });
 
                     break;
@@ -763,7 +828,7 @@ export default function ChatPage() {
 
                 {/* Left Sidebar */}
                 <aside
-                    className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200/80 bg-white transition-all duration-300 lg:static lg:h-screen dark:bg-slate-950 ${sidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full overflow-hidden lg:w-16 lg:translate-x-0'} `}
+                    className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200/80 bg-white transition-all duration-300 lg:static lg:h-screen ${sidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full overflow-hidden lg:w-16 lg:translate-x-0'} `}
                 >
                     {sidebarOpen ? (
                         <div className="flex h-full w-full flex-col">
@@ -866,7 +931,7 @@ export default function ChatPage() {
 
                             {/* Sidebar Footer */}
                             {user && (
-                                <div className="border-t border-slate-100 bg-white p-3 dark:border-slate-900 dark:bg-slate-950">
+                                <div className="border-t border-slate-100 bg-white p-3">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <button className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-transparent p-2 text-left transition outline-none hover:border-slate-200 hover:bg-slate-50 focus-visible:border-blue-300 focus-visible:ring-2 focus-visible:ring-blue-100">
@@ -981,13 +1046,13 @@ export default function ChatPage() {
                     >
                         {messages.length === 0 ? (
                             <div className="mx-auto flex h-full w-full max-w-2xl translate-y-3 flex-col items-center justify-center px-6 py-8 text-center">
-                                <div className="mb-5 rounded-full border border-slate-200/70 bg-white p-3 shadow-sm dark:bg-slate-800">
+                                <div className="mb-5 rounded-full border border-slate-200/70 bg-white p-3 shadow-sm">
                                     <DekaLogo className="h-14 w-auto object-contain" />
                                 </div>
-                                <h2 className="mb-3 max-w-xl text-4xl leading-[1.08] font-black tracking-normal text-blue-600 md:text-5xl dark:text-blue-500">
+                                <h2 className="mb-3 max-w-xl text-4xl leading-[1.08] font-black tracking-normal text-blue-600 md:text-5xl">
                                     Ada yang bisa saya bantu hari ini?
                                 </h2>
-                                <p className="mb-7 max-w-lg text-sm leading-relaxed text-slate-500 md:text-base dark:text-slate-400">
+                                <p className="mb-7 max-w-lg text-sm leading-relaxed text-slate-500 md:text-base">
                                     Tanyakan apa saja seputar Deka, layanan
                                     kami, alamat, kontak, atau informasi
                                     lainnya.
@@ -999,13 +1064,13 @@ export default function ChatPage() {
                                         onClick={() =>
                                             handleSendMessage('Apa itu Deka?')
                                         }
-                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700 dark:hover:bg-blue-900/10"
+                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md"
                                     >
                                         <HelpCircle className="mb-2.5 h-5 w-5 text-blue-500 transition-transform duration-200 group-hover:scale-110" />
-                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600 dark:text-slate-200 dark:group-hover:text-blue-400">
+                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600">
                                             Apa itu Deka?
                                         </span>
-                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed dark:text-slate-400">
+                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed">
                                             Cari tahu informasi dasar mengenai
                                             Deka.
                                         </span>
@@ -1014,13 +1079,13 @@ export default function ChatPage() {
                                         onClick={() =>
                                             handleSendMessage('Layanan Deka')
                                         }
-                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700 dark:hover:bg-blue-900/10"
+                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md"
                                     >
                                         <Sparkles className="mb-2.5 h-5 w-5 text-indigo-500 transition-transform duration-200 group-hover:scale-110" />
-                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600 dark:text-slate-200 dark:group-hover:text-blue-400">
+                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600">
                                             Layanan Deka
                                         </span>
-                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed dark:text-slate-400">
+                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed">
                                             Pelajari layanan dan produk yang
                                             kami sediakan.
                                         </span>
@@ -1031,13 +1096,13 @@ export default function ChatPage() {
                                                 'Kontak dan alamat',
                                             )
                                         }
-                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700 dark:hover:bg-blue-900/10"
+                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md"
                                     >
                                         <Phone className="mb-2.5 h-5 w-5 text-emerald-500 transition-transform duration-200 group-hover:scale-110" />
-                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600 dark:text-slate-200 dark:group-hover:text-blue-400">
+                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600">
                                             Kontak & Alamat
                                         </span>
-                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed dark:text-slate-400">
+                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed">
                                             Dapatkan nomor telepon, email, dan
                                             alamat kantor.
                                         </span>
@@ -1048,13 +1113,13 @@ export default function ChatPage() {
                                                 'Fitur chatbot ini',
                                             )
                                         }
-                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-blue-700 dark:hover:bg-blue-900/10"
+                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md"
                                     >
                                         <Info className="mb-2.5 h-5 w-5 text-purple-500 transition-transform duration-200 group-hover:scale-110" />
-                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600 dark:text-slate-200 dark:group-hover:text-blue-400">
+                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600">
                                             Fitur Chatbot
                                         </span>
-                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed dark:text-slate-400">
+                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed">
                                             Ketahui kemampuan asisten AI dalam
                                             membantu Anda.
                                         </span>
@@ -1074,7 +1139,7 @@ export default function ChatPage() {
                                         >
                                             {message.role === 'user' ? (
                                                 <div className="flex w-full justify-end">
-                                                    <div className="max-w-[85%] rounded-3xl border border-slate-200/50 bg-slate-100 px-5 py-2.5 text-base whitespace-pre-wrap text-slate-800 md:text-[18px] dark:border-slate-700/50 dark:bg-slate-800 dark:text-slate-100">
+                                                    <div className="max-w-[85%] rounded-3xl border border-slate-200/50 bg-slate-100 px-5 py-2.5 text-base whitespace-pre-wrap text-slate-800 md:text-[18px]">
                                                         {message.content}
                                                     </div>
                                                 </div>
@@ -1084,9 +1149,9 @@ export default function ChatPage() {
                                                     <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-100 bg-white shadow-sm">
                                                         <DekaLogo className="h-6 w-6 object-contain" />
                                                     </div>
-                                                    <div className="flex-1 text-base leading-relaxed whitespace-pre-wrap text-slate-800 md:text-[18px] dark:text-slate-200">
+                                                    <div className="flex-1 text-base leading-relaxed whitespace-pre-wrap text-slate-800 md:text-[18px]">
                                                         {/* Text content sits directly on the page, no card container */}
-                                                        <div className="prose prose-slate dark:prose-invert max-w-none text-base leading-relaxed md:text-[18px]">
+                                                        <div className="prose prose-slate max-w-none text-base leading-relaxed md:text-[18px]">
                                                             <MarkdownRenderer
                                                                 content={
                                                                     message.content
@@ -1105,7 +1170,7 @@ export default function ChatPage() {
                                                                             'like',
                                                                         )
                                                                     }
-                                                                    className="cursor-pointer rounded-lg p-1.5 text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-emerald-600 dark:hover:bg-slate-800"
+                                                                    className="cursor-pointer rounded-lg p-1.5 text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-emerald-600"
                                                                     title="Suka jawaban ini"
                                                                 >
                                                                     <ThumbsUp
@@ -1127,7 +1192,7 @@ export default function ChatPage() {
                                                                             'dislike',
                                                                         )
                                                                     }
-                                                                    className="cursor-pointer rounded-lg p-1.5 text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-rose-600 dark:hover:bg-slate-800"
+                                                                    className="cursor-pointer rounded-lg p-1.5 text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-rose-600"
                                                                     title="Tidak suka jawaban ini"
                                                                 >
                                                                     <ThumbsDown
@@ -1149,7 +1214,7 @@ export default function ChatPage() {
                                                                 feedbackReasons[
                                                                     message.id
                                                                 ] && (
-                                                                    <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700 dark:bg-rose-950/40 dark:text-rose-200">
+                                                                    <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700">
                                                                         {
                                                                             feedbackReasons[
                                                                                 message
@@ -1202,7 +1267,7 @@ export default function ChatPage() {
                                                         {/* Dive Deeper (Follow-up suggestions) */}
                                                         {isLastMessage &&
                                                             !isGenerating && (
-                                                                <div className="animate-fade-in mt-5 border-t border-slate-100/50 pt-4 dark:border-slate-800/50">
+                                                                <div className="animate-fade-in mt-5 border-t border-slate-100/50 pt-4">
                                                                     <span className="mb-2.5 block text-[10px] font-bold tracking-widest text-slate-400/80 uppercase">
                                                                         DIVE
                                                                         DEEPER
@@ -1224,7 +1289,7 @@ export default function ChatPage() {
                                                                                             suggestion,
                                                                                         )
                                                                                     }
-                                                                                    className="dark:text-slate-350 cursor-pointer rounded-full border border-slate-200/80 bg-white px-4 py-2 text-xs text-slate-600 shadow-sm transition-all duration-250 hover:border-blue-500 hover:bg-blue-50/20 hover:text-blue-600 active:scale-95 md:text-sm dark:border-slate-700 dark:bg-slate-900 dark:hover:border-blue-500 dark:hover:bg-blue-50/10 dark:hover:text-blue-400"
+                                                                                    className="cursor-pointer rounded-full border border-slate-200/80 bg-white px-4 py-2 text-xs text-slate-600 shadow-sm transition-all duration-250 hover:border-blue-500 hover:bg-blue-50/20 hover:text-blue-600 active:scale-95 md:text-sm"
                                                                                 >
                                                                                     {
                                                                                         suggestion
@@ -1306,12 +1371,12 @@ export default function ChatPage() {
                     />
                     {dislikeDialogMessageId !== null && (
                         <div className="fixed inset-0 z-[90] flex items-center justify-center bg-slate-950/35 p-4 backdrop-blur-[1.5px]">
-                            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-950">
+                            <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl">
                                 <div>
-                                    <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">
+                                    <h2 className="text-base font-bold text-slate-900">
                                         Kenapa jawabannya kurang membantu?
                                     </h2>
-                                    <p className="mt-1 text-sm leading-5 text-slate-500 dark:text-slate-400">
+                                    <p className="mt-1 text-sm leading-5 text-slate-500">
                                         Alasan ini membantu admin memperbaiki
                                         kualitas jawaban AI.
                                     </p>
@@ -1327,8 +1392,8 @@ export default function ChatPage() {
                                             }
                                             className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
                                                 dislikeReason === reason
-                                                    ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200'
-                                                    : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900'
+                                                    ? 'border-rose-300 bg-rose-50 text-rose-700'
+                                                    : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
                                             }`}
                                         >
                                             {reason}
@@ -1342,7 +1407,7 @@ export default function ChatPage() {
                                         setDislikeReason(event.target.value)
                                     }
                                     rows={3}
-                                    className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 transition outline-none focus:border-rose-300 focus:ring-4 focus:ring-rose-500/10 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-100"
+                                    className="mt-3 w-full resize-none rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 transition outline-none focus:border-rose-300 focus:ring-4 focus:ring-rose-500/10"
                                     placeholder="Tulis alasan lain..."
                                 />
 
@@ -1353,7 +1418,7 @@ export default function ChatPage() {
                                             setDislikeDialogMessageId(null);
                                             setDislikeReason('');
                                         }}
-                                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50 dark:border-slate-800 dark:text-slate-300 dark:hover:bg-slate-900"
+                                        className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
                                     >
                                         Batal
                                     </button>
@@ -1383,16 +1448,35 @@ export default function ChatPage() {
 }
 
 const parseInline = (text: string): React.ReactNode[] => {
-    // Regex for bold (**text**), italic (*text* or _text_), and inline code (`code`)
-    const parts = text.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+    // Regex for markdown links, bold (**text**), italic (*text*), and inline code (`code`)
+    const parts = text.split(/(\[[^\]]+\]\([^)]+\)|\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
 
     return parts.map((part, index) => {
+        const markdownLink = extractMarkdownLink(part);
+
+        if (markdownLink) {
+            const { label, href } = markdownLink;
+
+            if (isGoogleMapsUrl(href)) {
+                return renderMapsPreview(`map-inline-${index}`, href, label);
+            }
+
+            return (
+                <a
+                    key={index}
+                    href={href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-blue-600 underline underline-offset-3 transition hover:text-blue-500"
+                >
+                    {label}
+                </a>
+            );
+        }
+
         if (part.startsWith('**') && part.endsWith('**')) {
             return (
-                <strong
-                    key={index}
-                    className="font-extrabold text-slate-950 dark:text-white"
-                >
+                <strong key={index} className="font-extrabold text-slate-950">
                     {part.slice(2, -2)}
                 </strong>
             );
@@ -1400,10 +1484,7 @@ const parseInline = (text: string): React.ReactNode[] => {
 
         if (part.startsWith('*') && part.endsWith('*')) {
             return (
-                <em
-                    key={index}
-                    className="text-slate-800 italic dark:text-slate-200"
-                >
+                <em key={index} className="text-slate-800 italic">
                     {part.slice(1, -1)}
                 </em>
             );
@@ -1413,7 +1494,7 @@ const parseInline = (text: string): React.ReactNode[] => {
             return (
                 <code
                     key={index}
-                    className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-rose-600 dark:bg-slate-800 dark:text-rose-400"
+                    className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs text-rose-600"
                 >
                     {part.slice(1, -1)}
                 </code>
@@ -1440,7 +1521,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <ul
                     key={`ul-${key}`}
-                    className="my-3 ml-4 list-inside list-disc space-y-1.5 text-base text-slate-800 md:text-[18px] dark:text-slate-200"
+                    className="my-3 ml-4 list-inside list-disc space-y-1.5 text-base text-slate-800 md:text-[18px]"
                 >
                     {currentList.items}
                 </ul>,
@@ -1449,7 +1530,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <ol
                     key={`ol-${key}`}
-                    className="my-3 ml-4 list-inside list-decimal space-y-1.5 text-base text-slate-800 md:text-[18px] dark:text-slate-200"
+                    className="my-3 ml-4 list-inside list-decimal space-y-1.5 text-base text-slate-800 md:text-[18px]"
                 >
                     {currentList.items}
                 </ol>,
@@ -1461,6 +1542,10 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
 
     lines.forEach((line, idx) => {
         const trimmed = line.trim();
+        const lineLink = extractMarkdownLink(trimmed);
+        const mapsLineMatch = trimmed.match(
+            /^(?:\*\*)?(Google Maps|Maps|Lokasi)(?:\*\*)?:\s+(\[[^\]]+\]\([^)]+\))$/i,
+        );
 
         // Check for empty line
         if (!trimmed) {
@@ -1476,7 +1561,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <h1
                     key={idx}
-                    className="mt-4 mb-2 text-2xl font-black text-slate-900 dark:text-white"
+                    className="mt-4 mb-2 text-2xl font-black text-slate-900"
                 >
                     {parseInline(trimmed.slice(2))}
                 </h1>,
@@ -1490,7 +1575,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <h2
                     key={idx}
-                    className="mt-4.5 mb-2 text-xl font-bold text-slate-900 dark:text-white"
+                    className="mt-4.5 mb-2 text-xl font-bold text-slate-900"
                 >
                     {parseInline(trimmed.slice(3))}
                 </h2>,
@@ -1504,7 +1589,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <h3
                     key={idx}
-                    className="mt-4 mb-1.5 text-lg font-bold text-slate-900 dark:text-white"
+                    className="mt-4 mb-1.5 text-lg font-bold text-slate-900"
                 >
                     {parseInline(trimmed.slice(4))}
                 </h3>,
@@ -1526,6 +1611,43 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             const cleanText = trimmed.startsWith('- ')
                 ? trimmed.slice(2)
                 : trimmed.slice(2);
+            const itemLink = extractMarkdownLink(cleanText);
+            const itemMapsMatch = cleanText.match(
+                /^(?:\*\*)?(Google Maps|Maps|Lokasi)(?:\*\*)?:\s+(\[[^\]]+\]\([^)]+\))$/i,
+            );
+
+            if (itemMapsMatch) {
+                const mapLink = extractMarkdownLink(itemMapsMatch[2]);
+
+                currentList.items.push(
+                    <li key={`li-${idx}`} className="list-none leading-relaxed">
+                        {mapLink
+                            ? renderMapsPreview(
+                                  `map-list-${idx}`,
+                                  mapLink.href,
+                                  mapLink.label,
+                              )
+                            : parseInline(cleanText)}
+                    </li>,
+                );
+
+                return;
+            }
+
+            if (itemLink && isGoogleMapsUrl(itemLink.href)) {
+                currentList.items.push(
+                    <li key={`li-${idx}`} className="list-none leading-relaxed">
+                        {renderMapsPreview(
+                            `map-list-${idx}`,
+                            itemLink.href,
+                            itemLink.label,
+                        )}
+                    </li>,
+                );
+
+                return;
+            }
+
             currentList.items.push(
                 <li key={`li-${idx}`} className="leading-relaxed">
                     {parseInline(cleanText)}
@@ -1557,12 +1679,43 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             return;
         }
 
+        if (mapsLineMatch) {
+            const mapLink = extractMarkdownLink(mapsLineMatch[2]);
+
+            flushList(idx);
+            elements.push(
+                mapLink
+                    ? renderMapsPreview(
+                          `map-line-${idx}`,
+                          mapLink.href,
+                          mapLink.label,
+                      )
+                    : <p
+                          key={idx}
+                          className="text-base leading-relaxed text-slate-800 md:text-[18px]"
+                      >
+                          {parseInline(line)}
+                      </p>,
+            );
+
+            return;
+        }
+
+        if (lineLink && isGoogleMapsUrl(lineLink.href)) {
+            flushList(idx);
+            elements.push(
+                renderMapsPreview(`map-line-${idx}`, lineLink.href, lineLink.label),
+            );
+
+            return;
+        }
+
         // Regular text line
         flushList(idx);
         elements.push(
             <p
                 key={idx}
-                className="text-base leading-relaxed text-slate-800 md:text-[18px] dark:text-slate-200"
+                className="text-base leading-relaxed text-slate-800 md:text-[18px]"
             >
                 {parseInline(line)}
             </p>,

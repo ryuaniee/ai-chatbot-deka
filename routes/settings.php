@@ -8,7 +8,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('settings', fn () => redirect('/chat'));
     Route::get('settings/profile', fn () => redirect('/chat'));
     Route::get('settings/security', fn () => redirect('/chat'));
-    Route::get('settings/appearance', fn () => redirect('/chat'));
 
     Route::patch('settings/profile', [ProfileController::class, 'update'])->name('profile.update');
 });

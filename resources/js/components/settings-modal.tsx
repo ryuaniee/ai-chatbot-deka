@@ -76,7 +76,7 @@ export default function SettingsModal({ isOpen, onClose }: Props) {
                 </aside>
 
                 {/* Right Content Pane */}
-                <main className="flex-1 overflow-y-auto px-8 pt-12 pb-8">
+                <main className="flex-1 scrollbar-none overflow-y-auto px-8 pt-12 pb-8">
                     <div className="space-y-6">
                         {/* Profile Tab */}
                         {activeTab === 'profile' && (

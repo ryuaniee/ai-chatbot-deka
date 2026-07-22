@@ -4,6 +4,9 @@ namespace App\Services;
 
 use App\Ai\Agents\ConversationReplyAgent;
 use App\Ai\Agents\ConversationTitleAgent;
+use App\Ai\Agents\FeedbackImprovementAgent;
+use App\Ai\Agents\KnowledgeCandidateRerankerAgent;
+use App\Ai\Agents\KnowledgeIntentPlannerAgent;
 use App\Ai\Agents\KnowledgeSearchQueryAgent;
 use App\Ai\Agents\MessageModerationAgent;
 use App\Exceptions\AiRuntimeConfigurationException;
@@ -122,6 +125,37 @@ class AiRuntimeClient
     }
 
     /**
+     * @param  array<string, mixed>  $payload
+     * @return array{text: string, usage: array<string, mixed>|null, model: string|null}
+     */
+    public function generateFeedbackImprovement(array $payload): array
+    {
+        $prompt = "Review this disliked Deka chatbot answer and write the future improvement note.\n\n"
+            ."USER_EMAIL:\n".($payload['user'] ?? '-')."\n\n"
+            ."CONVERSATION_TITLE:\n".($payload['conversation'] ?? '-')."\n\n"
+            ."USER_QUESTION:\n".($payload['question'] ?? '-')."\n\n"
+            ."OLD_ASSISTANT_ANSWER:\n".($payload['old_answer'] ?? '-')."\n\n"
+            ."DISLIKE_REASON:\n".($payload['feedback_reason'] ?? '-')."\n\n"
+            ."RECENT_CONTEXT:\n".($payload['context'] ?? '-');
+
+        try {
+            $response = FeedbackImprovementAgent::make()->prompt(
+                $prompt,
+                provider: $this->providerMatrix(),
+                timeout: $this->timeout(),
+            );
+        } catch (Throwable $exception) {
+            throw $this->mapException($exception);
+        }
+
+        return [
+            'text' => trim($response->text),
+            'usage' => $response->usage->toArray(),
+            'model' => $response->meta->model,
+        ];
+    }
+
+    /**
      * @return array<int, string>
      */
     public function rewriteKnowledgeQueries(string $question, array $history = []): array
@@ -154,6 +188,78 @@ class AiRuntimeClient
         }
 
         return $this->parseKnowledgeQueries($response->text, $question);
+    }
+
+    /**
+     * @param  array<int, array{role: string, content: string}>  $history
+     * @return array<int, array{intent: string, question: string, queries: array<int, string>}>
+     */
+    public function planKnowledgeIntents(string $question, array $history = []): array
+    {
+        $question = trim($question);
+
+        if ($question === '') {
+            return [];
+        }
+
+        $prompt = $question;
+
+        if ($history !== []) {
+            $context = collect($history)
+                ->slice(-4)
+                ->map(static fn (array $message): string => sprintf('%s: %s', $message['role'] ?? 'unknown', $message['content'] ?? ''))
+                ->implode("\n");
+
+            $prompt = "Conversation context:\n{$context}\n\nLatest user question:\n{$question}";
+        }
+
+        try {
+            $response = KnowledgeIntentPlannerAgent::make()->prompt(
+                $prompt,
+                provider: $this->providerMatrix(),
+                timeout: $this->timeout(),
+            );
+        } catch (Throwable $exception) {
+            throw $this->mapException($exception);
+        }
+
+        return $this->parseKnowledgeIntents($response->text, $question);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $intentRetrievals
+     * @return array<string, mixed>
+     */
+    public function rerankKnowledgeCandidates(string $question, array $intentRetrievals): array
+    {
+        $candidateBlocks = collect($intentRetrievals)
+            ->map(function (array $intent): string {
+                return 'INTENT: '.($intent['intent'] ?? 'other_deka_fact')."\n"
+                    .'QUESTION: '.($intent['question'] ?? '')."\n"
+                    .'CANDIDATES:'."\n"
+                    .($intent['context'] ?? '');
+            })
+            ->implode("\n\n---\n\n");
+
+        if (trim($candidateBlocks) === '') {
+            return [];
+        }
+
+        $prompt = "USER_QUESTION:\n{$question}\n\nINTENT_CANDIDATES:\n{$candidateBlocks}";
+
+        try {
+            $response = KnowledgeCandidateRerankerAgent::make()->prompt(
+                $prompt,
+                provider: $this->providerMatrix(),
+                timeout: $this->timeout(),
+            );
+        } catch (Throwable $exception) {
+            throw $this->mapException($exception);
+        }
+
+        $decoded = json_decode(trim($response->text), true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**
@@ -268,6 +374,60 @@ class AiRuntimeClient
             ->prepend($fallback)
             ->unique(static fn (string $query): string => mb_strtolower($query))
             ->take((int) config('services.deka_knowledge.query_rewrite_limit', 5))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @return array<int, array{intent: string, question: string, queries: array<int, string>}>
+     */
+    private function parseKnowledgeIntents(string $content, string $fallback): array
+    {
+        $decoded = json_decode(trim($content), true);
+
+        if (! is_array($decoded)) {
+            return [[
+                'intent' => 'other_deka_fact',
+                'question' => $fallback,
+                'queries' => [$fallback],
+            ]];
+        }
+
+        return collect($decoded)
+            ->map(function (mixed $item) use ($fallback): ?array {
+                if (! is_array($item)) {
+                    return null;
+                }
+
+                $intent = trim((string) ($item['intent'] ?? 'other_deka_fact'));
+                $question = trim((string) ($item['question'] ?? $fallback));
+                $queries = $item['queries'] ?? [];
+
+                if (! is_array($queries)) {
+                    $queries = [$question];
+                }
+
+                $queries = collect($queries)
+                    ->map(static fn (mixed $query): string => trim((string) $query))
+                    ->filter(static fn (string $query): bool => $query !== '')
+                    ->prepend($question)
+                    ->unique(static fn (string $query): string => mb_strtolower($query))
+                    ->take(6)
+                    ->values()
+                    ->all();
+
+                if ($question === '' || $queries === []) {
+                    return null;
+                }
+
+                return [
+                    'intent' => $intent !== '' ? $intent : 'other_deka_fact',
+                    'question' => $question,
+                    'queries' => $queries,
+                ];
+            })
+            ->filter()
+            ->take(4)
             ->values()
             ->all();
     }

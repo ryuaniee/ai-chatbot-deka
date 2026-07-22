@@ -11,15 +11,15 @@ class DekaKnowledgeQueryNormalizer
     public function normalize(string $question, array $history = []): array
     {
         $question = $this->clean($question);
-        $normalized = $this->normalized($question);
         $fixedQuestion = $this->applyTypoFixes($question);
+        $normalized = $this->normalized($fixedQuestion);
         $topicQueries = $this->topicQueries($normalized);
         $personQueries = $this->personAliasQueries($normalized);
         $contextQueries = $this->contextualFollowUpQueries($normalized, $history);
 
         $queries = $this->isShortFollowUp($normalized) && ($topicQueries !== [] || $contextQueries !== [])
             ? [...$topicQueries, ...$contextQueries, ...$personQueries, $fixedQuestion]
-            : [$fixedQuestion, ...$topicQueries, ...$personQueries, ...$contextQueries];
+            : [$fixedQuestion, ...$personQueries, ...$topicQueries, ...$contextQueries];
 
         $queries = collect($queries)
             ->map(fn (string $query): string => $this->clean($query))
@@ -41,17 +41,24 @@ class DekaKnowledgeQueryNormalizer
     private function topicQueries(string $normalized): array
     {
         return match (true) {
-            $this->containsAny($normalized, ['kontak', 'kontakny', 'kontaknya', 'alamat', 'alamatnya', 'hubungi']) => [
+            $this->containsAny($normalized, ['kontak', 'kontakny', 'kontaknya', 'alamat', 'alamatnya', 'lokasi', 'kantor', 'rute', 'sana', 'hubungi']) => [
                 'kontak DEKA',
                 'alamat DEKA',
+                'lokasi kantor DEKA',
                 'website DEKA',
                 'media sosial DEKA',
             ],
-            $this->containsAny($normalized, ['founder', 'pendiri', 'foundernya', 'pendirinya']) => [
+            $this->containsAny($normalized, [
+                'founder', 'pendiri', 'foundernya', 'pendirinya', 'pendiriinya',
+                'sejarah', 'awal berdiri', 'tim awal', 'rekan',
+            ]) => [
+                'sejarah DEKA',
+                'awal berdiri DEKA',
                 'founder DEKA',
                 'pendiri DEKA',
                 'Muhammad Rizky Hajar',
                 'tim awal DEKA',
+                'Abdul Rahman Aditya Cahyadi Rifqi Oktachandra',
             ],
             $this->containsAny($normalized, ['layanan', 'layanannya', 'produk', 'produknya', 'jasa']) => [
                 'layanan DEKA',
@@ -162,6 +169,10 @@ class DekaKnowledgeQueryNormalizer
         $fixed = preg_replace('/\bdekaa\b/i', 'DEKA', $fixed) ?? $fixed;
         $fixed = preg_replace('/\bdeka\b/i', 'DEKA', $fixed) ?? $fixed;
         $fixed = preg_replace('/\bkontakny\b/i', 'kontaknya', $fixed) ?? $fixed;
+        $fixed = preg_replace('/\bpendiiri\b/i', 'pendiri', $fixed) ?? $fixed;
+        $fixed = preg_replace('/\bpendrii\b/i', 'pendiri', $fixed) ?? $fixed;
+        $fixed = preg_replace('/\bpendirii\b/i', 'pendiri', $fixed) ?? $fixed;
+        $fixed = preg_replace('/\bfounderr\b/i', 'founder', $fixed) ?? $fixed;
         $fixed = preg_replace('/\brisky\b/i', 'Rizky', $fixed) ?? $fixed;
         $fixed = preg_replace('/\briski\b/i', 'Rizky', $fixed) ?? $fixed;
         $fixed = preg_replace('/\brizki\b/i', 'Rizky', $fixed) ?? $fixed;

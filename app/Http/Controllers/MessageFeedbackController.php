@@ -51,6 +51,11 @@ class MessageFeedbackController extends Controller
                         ? MessageFeedback::REVIEW_STATUS_OPEN
                         : MessageFeedback::REVIEW_STATUS_RESOLVED,
                     'reviewed_at' => null,
+                    'admin_decision' => null,
+                    'admin_note' => null,
+                    'ai_improvement' => null,
+                    'ai_improvement_metadata' => null,
+                    'solved_by_user_id' => null,
                 ],
             );
         }

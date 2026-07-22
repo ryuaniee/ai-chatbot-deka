@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <title>Laporan Progress Backend Chatbot Deka</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 22mm 18mm 18mm;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: #fff;
+            color: #000;
+            font-family: "Times New Roman", Times, serif;
+            font-size: 12pt;
+            line-height: 1.6;
+        }
+
+        h1,
+        h2,
+        h3,
+        p,
+        ul,
+        ol,
+        table {
+            margin: 0;
+        }
+
+        .page {
+            page-break-after: always;
+        }
+
+        .page:last-child {
+            page-break-after: auto;
+        }
+
+        .cover {
+            min-height: 252mm;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .cover h1 {
+            font-size: 24pt;
+            line-height: 1.35;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .cover .subtitle {
+            margin-top: 16px;
+            font-size: 13pt;
+            text-align: center;
+        }
+
+        .cover .meta {
+            margin-top: 38px;
+            border-top: 1.4px solid #000;
+            border-bottom: 1.4px solid #000;
+            padding: 18px 0;
+        }
+
+        .cover .meta p {
+            text-align: center;
+        }
+
+        .section {
+            margin-top: 18px;
+        }
+
+        h2 {
+            margin-bottom: 10px;
+            font-size: 16pt;
+            text-transform: uppercase;
+        }
+
+        h3 {
+            margin-bottom: 8px;
+            font-size: 13pt;
+        }
+
+        p,
+        li,
+        td {
+            text-align: justify;
+        }
+
+        p + p {
+            margin-top: 8px;
+        }
+
+        ul,
+        ol {
+            margin-top: 8px;
+            padding-left: 24px;
+        }
+
+        li + li {
+            margin-top: 6px;
+        }
+
+        .table-wrap,
+        .figure {
+            margin-top: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            border: 1px solid #000;
+            padding: 8px 9px;
+            vertical-align: top;
+        }
+
+        th {
+            text-align: center;
+            font-weight: 700;
+        }
+
+        .mono {
+            font-family: "Courier New", Courier, monospace;
+            font-size: 10.5pt;
+        }
+
+        .small {
+            font-size: 10.5pt;
+        }
+
+        .flowchart {
+            border: 1px solid #000;
+            padding: 10px;
+        }
+
+        .flowchart svg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        .flowchart text {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 11px;
+            fill: #000;
+        }
+
+        .caption {
+            margin-top: 6px;
+            text-align: center;
+            font-size: 10pt;
+        }
+
+        .footer {
+            margin-top: 16px;
+            border-top: 1px solid #000;
+            padding-top: 6px;
+            text-align: right;
+            font-size: 10pt;
+        }
+    </style>
+</head>
+<body>
+    <section class="page cover">
+        <h1>Laporan Progress Backend<br>Chatbot Deka</h1>
+        <p class="subtitle">Pembaruan Dokumen Berdasarkan Implementasi Backend yang Tersedia pada Repository Aktif per 22 Juli 2026</p>
+
+        <div class="meta">
+            <p><strong>Jenis dokumen:</strong> Ringkasan progress backend menyeluruh</p>
+            <p><strong>Fokus pembahasan:</strong> autentikasi, chat, AI runtime, knowledge base RAG, feedback, role, dan dashboard admin</p>
+            <p><strong>Sumber verifikasi:</strong> route, controller, service, migration, model, command, dan pengujian backend Laravel pada repository aktif</p>
+        </div>
+    </section>
+
+    <section class="page">
+        <h2>Pendahuluan</h2>
+        <p>
+            Dokumen ini menyajikan pembaruan formal terhadap progress backend Chatbot Deka berdasarkan implementasi yang dapat diverifikasi langsung dari kode sumber project. Penyusunan laporan difokuskan pada kondisi backend terkini, sehingga isi dokumen tidak hanya menggambarkan rencana pengembangan, tetapi mencatat modul yang telah tersedia, alur yang telah berjalan, serta area yang masih berada pada tahap penguatan.
+        </p>
+        <p>
+            Secara umum, backend telah berkembang dari fondasi aplikasi Laravel dengan autentikasi sesi menuju sistem chatbot yang memiliki penyimpanan percakapan, integrasi runtime AI, alur streaming, knowledge retrieval berbasis RAG, pengelolaan feedback pengguna, dashboard analitik admin, serta modul role yang dikelola melalui tabel khusus. Dengan capaian tersebut, backend sudah berada pada tahap operasional inti dan tidak lagi hanya berupa fondasi awal.
+        </p>
+
+        <div class="section">
+            <h2>Ringkasan Status Akhir</h2>
+            <ul>
+                <li>Autentikasi pengguna telah mendukung register, login, logout, pemeriksaan sesi, verifikasi email, reset password, dan Google OAuth.</li>
+                <li>Alur chat telah mendukung pembuatan percakapan, penyimpanan message, balasan JSON, serta balasan streaming berbasis Server-Sent Events.</li>
+                <li>Runtime AI telah mencakup pembuatan jawaban, moderasi konten, pembuatan judul percakapan, perencanaan intent knowledge, penulisan query knowledge, dan perbaikan jawaban dari feedback dislike.</li>
+                <li>Knowledge base telah memiliki skema dokumen, chunk, ingestion run, proses ingest file dan crawl website, serta retrieval dengan mode <span class="mono">pgvector</span> maupun <span class="mono">fulltext</span>.</li>
+                <li>Fitur feedback sudah tersimpan per pesan assistant dan telah terhubung ke alur review admin, keputusan solve atau ignore, serta rekomendasi improvement berbasis AI.</li>
+                <li>Backend admin telah mencakup dashboard ringkasan, statistik token, tren chat, grafik feedback, daftar pengguna, daftar role, dan log aktivitas admin.</li>
+                <li>Modul role telah dipisahkan ke tabel <span class="mono">roles</span>, dilengkapi CRUD role admin, validasi assignment role pada pengguna, dan proteksi untuk role bawaan.</li>
+            </ul>
+        </div>
+
+        <div class="footer">Laporan Progress Backend Chatbot Deka | 1</div>
+    </section>
+
+    <section class="page">
+        <h2>Timeline Progress Backend</h2>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 18%;">Tanggal</th>
+                        <th style="width: 26%;">Area</th>
+                        <th>Keterangan Progress</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>13 Juli 2026</td>
+                        <td>Chat persistence</td>
+                        <td>Migration percakapan dan pesan dibentuk sebagai dasar penyimpanan <span class="mono">conversations</span> dan <span class="mono">messages</span>, termasuk relasi balasan antar pesan.</td>
+                    </tr>
+                    <tr>
+                        <td>13 Juli 2026</td>
+                        <td>Role awal pengguna</td>
+                        <td>Kolom role ditambahkan ke tabel <span class="mono">users</span> sebagai fondasi awal pembeda akses antara admin dan pengguna biasa.</td>
+                    </tr>
+                    <tr>
+                        <td>14 Juli 2026</td>
+                        <td>Integrasi identitas eksternal</td>
+                        <td>Kolom <span class="mono">google_id</span> disiapkan untuk mendukung login melalui Google OAuth.</td>
+                    </tr>
+                    <tr>
+                        <td>17 Juli 2026</td>
+                        <td>Knowledge base RAG</td>
+                        <td>Tabel <span class="mono">knowledge_documents</span>, <span class="mono">knowledge_chunks</span>, dan <span class="mono">knowledge_ingestion_runs</span> dibentuk sebagai fondasi ingestion dan retrieval knowledge Deka.</td>
+                    </tr>
+                    <tr>
+                        <td>19 Juli 2026</td>
+                        <td>Feedback dan audit admin</td>
+                        <td>Tabel <span class="mono">message_feedback</span> dan <span class="mono">admin_activity_logs</span> ditambahkan untuk mencatat respons pengguna dan jejak aktivitas admin.</td>
+                    </tr>
+                    <tr>
+                        <td>20 Juli 2026</td>
+                        <td>Review feedback lanjutan</td>
+                        <td>Kolom status review, keputusan admin, catatan admin, hasil improvement AI, dan penanggung jawab penyelesaian ditambahkan pada tabel feedback.</td>
+                    </tr>
+                    <tr>
+                        <td>21 Juli 2026</td>
+                        <td>Role management</td>
+                        <td>Tabel <span class="mono">roles</span> dibentuk dengan data bawaan <span class="mono">admin</span> dan <span class="mono">user</span>, lengkap dengan permissions, penanda role sistem, dan urutan tampil.</td>
+                    </tr>
+                    <tr>
+                        <td>22 Juli 2026</td>
+                        <td>Kondisi repository saat ini</td>
+                        <td>Backend telah terintegrasi ke dashboard admin, alur RAG, feedback review, serta pengujian fitur utama yang mewakili operasi backend inti.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>Arsitektur Backend Saat Ini</h2>
+            <p>
+                Arsitektur backend saat ini sudah tersusun dalam lapisan route, controller, service, runtime AI, dan persistence database. Request dari frontend masuk melalui route web dan API, kemudian controller meneruskan proses inti ke service yang memegang validasi bisnis, pemanggilan runtime AI, retrieval knowledge, dan pencatatan metadata. Di sisi admin, backend tidak hanya menampilkan data agregat, tetapi juga menyediakan endpoint tindakan untuk review feedback, CRUD user, CRUD role, dan laporan aktivitas.
+            </p>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 28%;">Lapisan</th>
+                            <th>Keterangan Implementasi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Route</td>
+                            <td>Route memisahkan area publik, auth API, chat API user, pengaturan akun, dan dashboard admin yang diproteksi middleware.</td>
+                        </tr>
+                        <tr>
+                            <td>Controller</td>
+                            <td>Controller menangani pemetaan endpoint ke operasi bisnis seperti auth, conversation, streaming, feedback, dashboard admin, role, dan pengguna.</td>
+                        </tr>
+                        <tr>
+                            <td>Service</td>
+                            <td>Service utama meliputi <span class="mono">ConversationChatService</span>, <span class="mono">AiRuntimeClient</span>, <span class="mono">KnowledgeIngestor</span>, <span class="mono">KnowledgeRetriever</span>, <span class="mono">AdminDashboardService</span>, dan <span class="mono">FeedbackImprovementService</span>.</td>
+                        </tr>
+                        <tr>
+                            <td>AI Runtime</td>
+                            <td>Runtime AI memanfaatkan agent terpisah untuk reply, moderation, title generation, knowledge planning, query rewriting, reranking, dan perbaikan jawaban.</td>
+                        </tr>
+                        <tr>
+                            <td>Persistence</td>
+                            <td>Database menyimpan pengguna, role, percakapan, pesan, feedback, log aktivitas, dokumen knowledge, chunk knowledge, dan riwayat ingestion.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="footer">Laporan Progress Backend Chatbot Deka | 2</div>
+    </section>
+
+    <section class="page">
+        <h2>Flowchart Alur Chat dan RAG</h2>
+        <div class="figure flowchart">
+            <svg viewBox="0 0 760 500" xmlns="http://www.w3.org/2000/svg" aria-label="Flowchart backend chat dan retrieval knowledge">
+                <defs>
+                    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#000"/>
+                    </marker>
+                </defs>
+                <rect x="260" y="18" width="240" height="42" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                <text x="380" y="44" text-anchor="middle">Frontend kirim request chat</text>
+                <rect x="260" y="92" width="240" height="42" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                <text x="380" y="118" text-anchor="middle">Controller dan middleware validasi</text>
+                <rect x="250" y="166" width="260" height="48" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                <text x="380" y="188" text-anchor="middle">ConversationChatService</text>
+                <text x="380" y="204" text-anchor="middle">moderasi dan simpan user message</text>
+                <rect x="48" y="250" width="210" height="56" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                <text x="153" y="274" text-anchor="middle">KnowledgeRetriever</text>
+                <text x="153" y="290" text-anchor="middle">ambil context bila fitur aktif</text>
+                <rect x="502" y="250" width="210" height="56" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                <text x="607" y="274" text-anchor="middle">AiRuntimeClient</text>
+                <text x="607" y="290" text-anchor="middle">reply atau stream assistant</text>
+                <rect x="260" y="352" width="240" height="56" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                <text x="380" y="376" text-anchor="middle">Simpan assistant message</text>
+                <text x="380" y="392" text-anchor="middle">usage, model, dan knowledge source</text>
+                <rect x="260" y="442" width="240" height="38" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                <text x="380" y="466" text-anchor="middle">JSON response atau SSE</text>
+                <line x1="380" y1="60" x2="380" y2="92" stroke="#000" stroke-width="1.2" marker-end="url(#arrow)"/>
+                <line x1="380" y1="134" x2="380" y2="166" stroke="#000" stroke-width="1.2" marker-end="url(#arrow)"/>
+                <line x1="300" y1="214" x2="190" y2="250" stroke="#000" stroke-width="1.2" marker-end="url(#arrow)"/>
+                <line x1="460" y1="214" x2="570" y2="250" stroke="#000" stroke-width="1.2" marker-end="url(#arrow)"/>
+                <line x1="258" y1="278" x2="502" y2="278" stroke="#000" stroke-width="1.2" marker-end="url(#arrow)"/>
+                <line x1="607" y1="306" x2="470" y2="352" stroke="#000" stroke-width="1.2" marker-end="url(#arrow)"/>
+                <line x1="380" y1="408" x2="380" y2="442" stroke="#000" stroke-width="1.2" marker-end="url(#arrow)"/>
+            </svg>
+        </div>
+        <p class="caption">Gambar 1. Alur backend memperlihatkan hubungan request chat, moderasi, retrieval knowledge, runtime AI, dan penyimpanan metadata jawaban.</p>
+
+        <div class="section">
+            <h2>Rincian Komponen Utama</h2>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 24%;">Komponen</th>
+                            <th style="width: 22%;">Status</th>
+                            <th>Keterangan Implementasi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>Autentikasi dan sesi</td>
+                            <td>Selesai dan aktif</td>
+                            <td>Register, login, logout, <span class="mono">me</span>, CSRF endpoint, verifikasi email, reset password, dan 2FA sudah tersedia pada backend.</td>
+                        </tr>
+                        <tr>
+                            <td>Conversation API</td>
+                            <td>Selesai dan aktif</td>
+                            <td>Endpoint conversation mendukung daftar percakapan, detail percakapan, pembuatan percakapan baru, serta penambahan message lanjutan.</td>
+                        </tr>
+                        <tr>
+                            <td>Streaming SSE</td>
+                            <td>Selesai dan aktif</td>
+                            <td>Balasan assistant dapat dikirim bertahap melalui endpoint stream untuk percakapan baru maupun percakapan berjalan.</td>
+                        </tr>
+                        <tr>
+                            <td>Moderasi dan idempotency</td>
+                            <td>Selesai dan aktif</td>
+                            <td>Backend sudah memoderasi input user, mencegah duplikasi request dengan <span class="mono">idempotency key</span>, dan memberi fallback saat provider gagal.</td>
+                        </tr>
+                        <tr>
+                            <td>Knowledge base RAG</td>
+                            <td>Selesai dasar</td>
+                            <td>Ingestion file, crawl website, chunking, embedding, retrieval similarity, retrieval full-text, dan fallback context sudah tersedia.</td>
+                        </tr>
+                        <tr>
+                            <td>Feedback review</td>
+                            <td>Selesai dasar</td>
+                            <td>Like dan dislike tersimpan per jawaban assistant; dislike dapat direview admin dengan status, catatan, keputusan, dan AI improvement.</td>
+                        </tr>
+                        <tr>
+                            <td>Dashboard admin</td>
+                            <td>Selesai dasar</td>
+                            <td>Backend sudah memasok metrik percakapan, token, feedback, pengguna aktif, role, tren chat, dan log aktivitas untuk dashboard admin.</td>
+                        </tr>
+                        <tr>
+                            <td>Role management</td>
+                            <td>Selesai dasar</td>
+                            <td>Role disimpan pada tabel khusus, tersedia CRUD role admin, assignment role tervalidasi, serta proteksi role sistem dan role yang masih dipakai.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="footer">Laporan Progress Backend Chatbot Deka | 3</div>
+    </section>
+
+    <section class="page">
+        <h2>Progress Per Domain Backend</h2>
+
+        <h3>1. Auth, Keamanan, dan Identitas</h3>
+        <p>
+            Backend autentikasi telah memakai session-based authentication yang dipadukan dengan Fortify, verifikasi email, pembaruan password, penghapusan akun, dan autentikasi dua faktor. Endpoint auth API telah dipisahkan untuk kebutuhan frontend modern, sehingga alur login dan register dapat dipanggil secara asinkron tanpa meninggalkan pola sesi Laravel. Selain itu, login juga telah mendukung Google OAuth dan normalisasi email kanonik untuk menjaga konsistensi identitas pengguna.
+        </p>
+
+        <h3>2. Percakapan, Message, dan Streaming</h3>
+        <p>
+            Backend conversation telah mendukung pembuatan percakapan kosong maupun percakapan dengan pesan pertama, penyimpanan sequence message, pembangkitan judul percakapan, serta kepemilikan data berdasarkan user yang sedang login. Untuk kebutuhan pengalaman real-time, endpoint stream telah mengirim event SSE sampai jawaban final selesai lalu menyimpannya kembali ke database beserta metadata pemakaian model.
+        </p>
+
+        <h3>3. Runtime AI</h3>
+        <p>
+            Runtime AI dipusatkan pada <span class="mono">AiRuntimeClient</span> yang menangani reply chat, streaming, moderasi, pembuatan judul, perencanaan intent knowledge, penulisan query knowledge, reranking kandidat knowledge, dan pembuatan usulan improvement dari feedback dislike. Pola ini menunjukkan backend sudah memakai pemisahan tanggung jawab yang cukup baik, karena controller tidak berhubungan langsung dengan detail provider AI.
+        </p>
+
+        <h3>4. Knowledge Base dan RAG</h3>
+        <p>
+            Knowledge backend telah mengalami perluasan dari pendekatan sederhana menjadi modul RAG yang lebih umum. Ingestion dapat berasal dari file lokal dengan format <span class="mono">txt</span>, <span class="mono">md</span>, <span class="mono">html</span>, <span class="mono">pdf</span>, dan <span class="mono">docx</span>, serta dari crawl website. Konten dibersihkan, dipecah menjadi chunk, diberi metadata, lalu disiapkan untuk retrieval menggunakan similarity vector ataupun pencarian full-text PostgreSQL. Jika context tidak memadai, backend telah menyiapkan fallback agar jawaban tidak keluar dari cakupan informasi Deka.
+        </p>
+
+        <h3>5. Feedback, Review, dan Audit</h3>
+        <p>
+            Backend telah memiliki mekanisme bagi pengguna untuk memberi like atau dislike pada pesan assistant. Khusus dislike, data alasan pengguna dapat ditindaklanjuti admin melalui status review, keputusan selesai atau diabaikan, catatan admin, serta saran perbaikan jawaban yang dihasilkan AI. Di sisi yang sama, aktivitas admin juga sudah dicatat pada tabel audit untuk mendukung kebutuhan pelacakan tindakan penting.
+        </p>
+
+        <h3>6. Pengguna, Role, dan Dashboard Admin</h3>
+        <p>
+            Area admin saat ini tidak hanya berisi visualisasi frontend, melainkan juga didukung backend yang menyiapkan data agregat, daftar pengguna, daftar role, serta endpoint tindakan. Modul role backend sudah dipisahkan ke tabel <span class="mono">roles</span> dengan fields deskriptif, data permissions, dan pembatasan penghapusan untuk role sistem. Assignment role pada pengguna telah tervalidasi terhadap data role yang tersedia, sehingga konsistensi data antar tabel menjadi lebih terjaga.
+        </p>
+
+        <div class="footer">Laporan Progress Backend Chatbot Deka | 4</div>
+    </section>
+
+    <section class="page">
+        <h2>Tabel Endpoint dan Entitas Utama</h2>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 30%;">Kelompok</th>
+                        <th style="width: 28%;">Contoh Endpoint atau Entitas</th>
+                        <th>Keterangan</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Auth API</td>
+                        <td><span class="mono">/api/auth/register</span>, <span class="mono">/api/auth/login</span>, <span class="mono">/api/auth/me</span></td>
+                        <td>Mendukung autentikasi sesi, pengambilan user login, dan pengalihan berdasarkan role.</td>
+                    </tr>
+                    <tr>
+                        <td>Chat API</td>
+                        <td><span class="mono">/api/conversations</span>, <span class="mono">/messages</span>, <span class="mono">/stream</span></td>
+                        <td>Mengelola list percakapan, pembuatan chat, pesan lanjutan, dan stream jawaban assistant.</td>
+                    </tr>
+                    <tr>
+                        <td>Feedback API</td>
+                        <td><span class="mono">/messages/{message}/feedback</span></td>
+                        <td>Menyimpan like, dislike, alasan feedback, dan pembersihan feedback saat nilai dikosongkan.</td>
+                    </tr>
+                    <tr>
+                        <td>Admin action</td>
+                        <td><span class="mono">/admin/users</span>, <span class="mono">/admin/roles</span>, <span class="mono">/admin/feedback-review</span></td>
+                        <td>Mendukung CRUD pengguna, CRUD role, perubahan status review feedback, solve, dan ignore.</td>
+                    </tr>
+                    <tr>
+                        <td>Entitas inti</td>
+                        <td><span class="mono">users</span>, <span class="mono">conversations</span>, <span class="mono">messages</span>, <span class="mono">roles</span></td>
+                        <td>Menjadi basis data identitas, chat, dan pengelolaan akses.</td>
+                    </tr>
+                    <tr>
+                        <td>Entitas knowledge</td>
+                        <td><span class="mono">knowledge_documents</span>, <span class="mono">knowledge_chunks</span>, <span class="mono">knowledge_ingestion_runs</span></td>
+                        <td>Menyimpan dokumen sumber, potongan konten, embedding atau indeks retrieval, dan riwayat ingestion.</td>
+                    </tr>
+                    <tr>
+                        <td>Entitas audit</td>
+                        <td><span class="mono">message_feedback</span>, <span class="mono">admin_activity_logs</span></td>
+                        <td>Mencatat evaluasi pengguna atas jawaban AI serta aktivitas administrasi pada dashboard.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>Flowchart Review Feedback Admin</h2>
+            <div class="figure flowchart">
+                <svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg" aria-label="Flowchart review feedback admin">
+                    <defs>
+                        <marker id="arrow2" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto" markerUnits="strokeWidth">
+                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#000"/>
+                        </marker>
+                    </defs>
+                    <rect x="266" y="18" width="228" height="42" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                    <text x="380" y="44" text-anchor="middle">User kirim dislike pada jawaban</text>
+                    <rect x="266" y="88" width="228" height="50" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                    <text x="380" y="112" text-anchor="middle">Backend simpan feedback</text>
+                    <text x="380" y="128" text-anchor="middle">status awal open</text>
+                    <rect x="266" y="166" width="228" height="50" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                    <text x="380" y="190" text-anchor="middle">Admin dashboard ambil item</text>
+                    <text x="380" y="206" text-anchor="middle">review feedback</text>
+                    <rect x="78" y="254" width="220" height="54" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                    <text x="188" y="278" text-anchor="middle">Aksi solve</text>
+                    <text x="188" y="294" text-anchor="middle">AI buat improvement note</text>
+                    <rect x="462" y="254" width="220" height="54" fill="#fff" stroke="#000" stroke-width="1.2"/>
+                    <text x="572" y="278" text-anchor="middle">Aksi ignore</text>
+                    <text x="572" y="294" text-anchor="middle">status diubah tanpa improvement</text>
+                    <line x1="380" y1="60" x2="380" y2="88" stroke="#000" stroke-width="1.2" marker-end="url(#arrow2)"/>
+                    <line x1="380" y1="138" x2="380" y2="166" stroke="#000" stroke-width="1.2" marker-end="url(#arrow2)"/>
+                    <line x1="332" y1="216" x2="228" y2="254" stroke="#000" stroke-width="1.2" marker-end="url(#arrow2)"/>
+                    <line x1="428" y1="216" x2="532" y2="254" stroke="#000" stroke-width="1.2" marker-end="url(#arrow2)"/>
+                </svg>
+            </div>
+            <p class="caption">Gambar 2. Alur backend review feedback menunjukkan bagaimana dislike pengguna dapat ditindaklanjuti admin sampai status selesai atau diabaikan.</p>
+        </div>
+
+        <div class="footer">Laporan Progress Backend Chatbot Deka | 5</div>
+    </section>
+
+    <section class="page">
+        <h2>Verifikasi Melalui Pengujian</h2>
+        <p>
+            Progress backend tidak hanya terlihat dari struktur kode, tetapi juga telah didukung oleh pengujian fitur dan unit yang merepresentasikan perilaku penting. Pengujian yang tersedia mencakup autentikasi, dashboard admin, feedback message, dan retrieval knowledge Deka. Adanya pengujian ini menunjukkan bahwa sejumlah alur utama sudah mulai dipastikan perilakunya secara otomatis, meskipun penguatan cakupan test masih tetap dapat dilanjutkan pada tahap berikutnya.
+        </p>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 34%;">Kelompok Test</th>
+                        <th>Keterangan Cakupan</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="mono">tests/Feature/AuthApiTest.php</span></td>
+                        <td>Memverifikasi perilaku register, login, logout, sesi, dan payload auth API.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="mono">tests/Feature/ChatApiTest.php</span></td>
+                        <td>Memverifikasi alur endpoint percakapan dan message pada sisi pengguna.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="mono">tests/Feature/AdminDashboardBackendTest.php</span></td>
+                        <td>Memverifikasi props dashboard admin, statistik token, role, log aktivitas, dan feedback message.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="mono">tests/Feature/DekaKnowledgeRagTest.php</span></td>
+                        <td>Memverifikasi ingestion dokumen, retrieval similarity, retrieval full-text, fallback, dan penyisipan source knowledge ke prompt maupun metadata jawaban.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="mono">tests/Unit/AiRuntimeClientTest.php</span></td>
+                        <td>Memverifikasi perilaku unit pada runtime AI dan penanganan data hasil agent.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>Kesimpulan</h2>
+            <p>
+                Berdasarkan kondisi repository per 22 Juli 2026, backend Chatbot Deka telah mencapai progress yang signifikan dan telah melampaui tahap fondasi. Sistem sudah memiliki autentikasi yang lengkap, penyimpanan percakapan, integrasi runtime AI, alur streaming, knowledge base RAG, feedback review, dashboard admin, audit log, dan manajemen role berbasis tabel khusus. Dengan demikian, backend saat ini dapat dinilai telah memasuki tahap implementasi operasional inti dengan beberapa area lanjutan yang masih dapat diperkuat, terutama pada pengayaan aturan per-permission dan perluasan cakupan pengujian lanjutan.
+        </p>
+        <p>
+            Dokumen ini dapat dipakai sebagai ringkasan resmi progress backend terkini karena seluruh poin utamanya disusun dari artefak implementasi yang tersedia langsung pada kode sumber aktif project.
+        </p>
+
+        <div class="footer">Laporan Progress Backend Chatbot Deka | 6</div>
+    </section>
+</body>
+</html>

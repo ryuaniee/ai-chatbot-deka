@@ -5,8 +5,6 @@
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 
-@custom-variant dark (&:is(.dark *));
-
 @theme {
     --font-sans:
         'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
@@ -96,41 +94,6 @@
     --sidebar-ring: #2f80ed;
 }
 
-.dark {
-    --background: #071525;
-    --foreground: #edf6ff;
-    --card: #0d1d31;
-    --card-foreground: #edf6ff;
-    --popover: #0d1d31;
-    --popover-foreground: #edf6ff;
-    --primary: #5aa2ff;
-    --primary-foreground: #061224;
-    --secondary: #102b4a;
-    --secondary-foreground: #b8d9ff;
-    --muted: #10233a;
-    --muted-foreground: #9eb3c9;
-    --accent: #12365f;
-    --accent-foreground: #d8ebff;
-    --destructive: oklch(0.396 0.141 25.723);
-    --destructive-foreground: oklch(0.637 0.237 25.331);
-    --border: #1d3652;
-    --input: #1d3652;
-    --ring: #5aa2ff;
-    --chart-1: #5aa2ff;
-    --chart-2: #f59e0b;
-    --chart-3: #38bdf8;
-    --chart-4: #d97706;
-    --chart-5: #93c5fd;
-    --sidebar: #0a192b;
-    --sidebar-foreground: #edf6ff;
-    --sidebar-primary: #5aa2ff;
-    --sidebar-primary-foreground: #061224;
-    --sidebar-accent: #12365f;
-    --sidebar-accent-foreground: #d8ebff;
-    --sidebar-border: #1d3652;
-    --sidebar-ring: #5aa2ff;
-}
-
 @layer base {
     * {
         @apply border-border;
@@ -151,14 +114,16 @@
         transition: background-color 9999s ease-in-out 0s;
     }
 
-    .dark input:-webkit-autofill,
-    .dark input:-webkit-autofill:hover,
-    .dark input:-webkit-autofill:focus,
-    .dark textarea:-webkit-autofill,
-    .dark textarea:-webkit-autofill:hover,
-    .dark textarea:-webkit-autofill:focus {
-        -webkit-text-fill-color: rgb(241 245 249);
-        box-shadow: 0 0 0 1000px rgb(15 23 42) inset;
+}
+
+@layer utilities {
+    .scrollbar-none {
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+
+    .scrollbar-none::-webkit-scrollbar {
+        display: none;
     }
 }
 

@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\EmailAddress;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -69,7 +70,7 @@ class AdminUserController extends Controller
     }
 
     /**
-     * @return array{name: string, email: string, role: string, password?: string}
+     * @return array{name: string, email: string, role: string, email_verified_at: Carbon|null, password?: string}
      */
     private function validatedData(Request $request, bool $creating, ?User $user = null): array
     {
@@ -96,11 +97,20 @@ class AdminUserController extends Controller
                 'max:255',
                 Rule::unique('users', 'canonical_email')->ignore($user),
             ],
-            'role' => ['required', Rule::in([User::ROLE_ADMIN, User::ROLE_USER])],
+            'role' => ['required', Rule::exists('roles', 'slug')],
+            'email_verified' => ['required', 'boolean'],
             'password' => [$creating ? 'required' : 'nullable', 'string', Password::default(), 'confirmed'],
         ];
 
-        return validator($input, $rules)->validate();
+        $validated = validator($input, $rules)->validate();
+        $emailVerified = (bool) $validated['email_verified'];
+        unset($validated['email_verified']);
+
+        $validated['email_verified_at'] = $emailVerified
+            ? ($user?->email_verified_at ?? now())
+            : null;
+
+        return $validated;
     }
 
     private function adminCount(): int

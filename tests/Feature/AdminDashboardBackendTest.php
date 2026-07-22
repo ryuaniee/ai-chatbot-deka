@@ -18,6 +18,8 @@ class AdminDashboardBackendTest extends TestCase
 
     public function test_admin_overview_receives_database_backed_dashboard_props(): void
     {
+        Carbon::setTestNow(Carbon::parse('2026-07-20 10:00:00'));
+
         $admin = User::factory()->admin()->create(['name' => 'Admin Deka']);
         $user = User::factory()->create(['name' => 'Nadia Putri', 'email' => 'nadia@example.com']);
         $conversation = Conversation::factory()->for($user)->create([
@@ -30,6 +32,7 @@ class AdminDashboardBackendTest extends TestCase
             'role' => 'assistant',
             'sequence' => 2,
             'content' => 'Jawaban Deka.',
+            'created_at' => now(),
             'metadata' => [
                 'model' => 'gpt-test',
                 'usage' => [
@@ -55,6 +58,17 @@ class AdminDashboardBackendTest extends TestCase
                 ->has('metrics', 4)
                 ->where('tokenUsageItems.0.email', 'nadia@example.com')
                 ->where('tokenUsageItems.0.totalTokens', 200)
+                ->has('tokenTrendItems', 30)
+                ->where('tokenTrendItems.29.date', '2026-07-20')
+                ->where('tokenTrendItems.29.promptTokens', 120)
+                ->where('tokenTrendItems.29.completionTokens', 80)
+                ->where('tokenTrendItems.29.totalTokens', 200)
+                ->where('tokenTrendItems.29.requests', 1)
+                ->has('roleItems', 2)
+                ->where('roleItems.0.slug', 'admin')
+                ->where('roleItems.0.usersCount', 1)
+                ->where('roleItems.1.slug', 'user')
+                ->where('roleItems.1.usersCount', 1)
                 ->has('chatTrendItems', 90)
                 ->has('feedbackChartItems', 6)
                 ->where('totals.totalLikes', 1));
@@ -64,6 +78,8 @@ class AdminDashboardBackendTest extends TestCase
             'action' => 'Membuka Dashboard Ringkasan',
             'target' => 'Menu admin',
         ]);
+
+        Carbon::setTestNow();
     }
 
     public function test_admin_conversations_section_is_not_available(): void
