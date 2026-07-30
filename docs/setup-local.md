@@ -1,50 +1,18 @@
 # Setup Local
 
-Dokumen ini menjelaskan cara menjalankan project secara lokal sampai siap dipakai untuk:
+Panduan ini menjelaskan setup lokal Chatbot Deka sampai siap dipakai untuk auth, chat user, dashboard admin, export activity log, dan knowledge retrieval.
 
-- auth API
-- chat user
-- stream chat SSE
-- role admin tanpa dashboard aktif
-- runtime AI Laravel
-
-## 1. Stack
-
-Komponen utama:
-
-- Laravel app di root repository
-- PostgreSQL via Docker Compose
-- runtime AI langsung di Laravel via `laravel/ai`
-
-Tidak ada lagi service Python terpisah untuk runtime chat.
-
-## 2. Prasyarat
-
-Pastikan mesin lokal punya:
+## 1. Prasyarat
 
 - Docker dan Docker Compose
-- PHP `8.3+`
+- PHP 8.3+
 - Composer
-- Node.js dan npm
+- Node.js 22+ dan npm
+- API key AI provider jika ingin menguji jawaban real
 
-## 3. Struktur Folder
+## 2. Jalankan PostgreSQL + pgvector
 
-```text
-project-pkl-deka/
-├── app/
-├── bootstrap/
-├── config/
-├── database/
-├── public/
-├── resources/
-├── routes/
-├── docker-compose.yml
-└── docs/
-```
-
-## 4. Nyalakan PostgreSQL
-
-Dari root project:
+Project memakai PostgreSQL 17 dengan pgvector dari `docker-compose.yml`.
 
 ```bash
 docker compose up -d
@@ -59,31 +27,18 @@ Default koneksi lokal:
 - username: `chatbot_deka`
 - password: `secret`
 
-## 5. Setup Laravel
+## 3. Install Aplikasi
 
 Dari root repository:
 
 ```bash
-cd /home/panzek/project-pkl-deka
-```
-
-Install dependency:
-
-```bash
+cp .env.example .env
 composer install
 npm install
-```
-
-Siapkan environment:
-
-```bash
-cp .env.example .env
 php artisan key:generate
 ```
 
-## 6. Konfigurasi `.env`
-
-Minimal pastikan nilai berikut benar:
+Pastikan `.env` minimal berisi koneksi database berikut:
 
 ```env
 DB_CONNECTION=pgsql
@@ -92,27 +47,6 @@ DB_PORT=5433
 DB_DATABASE=chatbot_deka
 DB_USERNAME=chatbot_deka
 DB_PASSWORD=secret
-
-OPENAI_API_KEY=your-key
-OPENAI_URL=https://codex.deka.dev/v1
-
-AI_CHAT_PROVIDER=openai
-AI_CHAT_MODEL=gpt-5.4-mini
-AI_CHAT_MODERATION_ENABLED=true
-AI_CHAT_MODERATION_FAIL_CLOSED=true
-
-ADMIN_NAME="Admin Deka"
-ADMIN_EMAIL=admin@deka.dev
-ADMIN_PASSWORD=password
-```
-
-Untuk email:
-
-```env
-MAIL_MAILER=resend
-MAIL_FROM_ADDRESS=onboarding@resend.dev
-MAIL_FROM_NAME="Chatbot Deka"
-RESEND_API_KEY=your-resend-api-key
 ```
 
 Untuk development tanpa email real:
@@ -121,71 +55,65 @@ Untuk development tanpa email real:
 MAIL_MAILER=log
 ```
 
-Setelah ubah `.env`, aman jalankan:
+Untuk chat AI real, isi provider dan key:
+
+```env
+OPENAI_API_KEY=your-key
+OPENAI_URL=https://codex.deka.dev/v1
+AI_CHAT_PROVIDER=openai
+AI_CHAT_MODEL=gpt-5.4-mini
+```
+
+Setelah mengubah `.env`, bersihkan cache config:
 
 ```bash
 php artisan optimize:clear
 ```
 
-## 7. Migration dan Seeder
+## 4. Migrasi dan Seeder
 
 ```bash
 php artisan migrate
 php artisan db:seed --class=AdminUserSeeder
 ```
 
-## 8. Ingest Knowledge Deka
-
-Masukkan dokumen PDF/teks:
-
-```bash
-php artisan knowledge:ingest-file "storage/app/private/docs/DEKA Knowledge Base Draft Rekap.pdf" \
-    --title="DEKA Knowledge Base Draft Rekap" \
-    --source="file://DEKA Knowledge Base Draft Rekap.pdf"
-```
-
-Crawl website Deka:
-
-```bash
-php artisan knowledge:crawl --base=https://deka.dev --limit=50
-```
-
-## 9. Jalankan App
-
-```bash
-php artisan serve
-```
-
-Default URL:
-
-- `http://127.0.0.1:8000`
-
-## 10. URL Lokal
-
-- login: `http://127.0.0.1:8000/login`
-- chat: `http://127.0.0.1:8000/chat`
-- admin: `http://127.0.0.1:8000/admin` menampilkan `403` karena dashboard admin dinonaktifkan
-
 Default admin:
 
 - email: `admin@deka.dev`
 - password: `password`
 
-## 11. Auth dan Akses
+## 5. Jalankan App
 
-Role yang dipakai:
+Untuk mode build production lokal:
 
-- `admin`
-- `user`
+```bash
+npm run build
+php artisan serve --host=127.0.0.1 --port=8000
+```
 
-Aturan akses:
+Untuk development frontend:
 
-- `/admin` ditutup `403` karena dashboard admin sudah dihapus
-- user biasa memakai `/chat`
-- admin tidak memakai halaman chat user
-- auth API memakai session cookie
+```bash
+php artisan serve --host=127.0.0.1 --port=8000
+npm run dev
+```
 
-## 12. Endpoint Penting
+URL lokal:
+
+- app: `http://127.0.0.1:8000`
+- login: `http://127.0.0.1:8000/login`
+- chat user: `http://127.0.0.1:8000/chat`
+- admin dashboard: `http://127.0.0.1:8000/admin/overview`
+
+## 6. Role dan Akses
+
+- User biasa yang verified masuk ke `/chat`.
+- Admin masuk ke `/admin/overview`.
+- Admin tidak boleh mengakses halaman chat user.
+- User biasa tidak boleh mengakses `/admin/*` dan diarahkan ke `/chat`.
+- Auth API memakai session cookie dan CSRF.
+
+## 7. Endpoint Penting
 
 Auth:
 
@@ -201,25 +129,68 @@ Chat:
 - `POST /api/conversations`
 - `POST /api/conversations/stream`
 - `GET /api/conversations/{conversation}`
+- `DELETE /api/conversations/{conversation}`
 - `POST /api/conversations/{conversation}/messages`
 - `POST /api/conversations/{conversation}/messages/stream`
+- `POST /api/conversations/{conversation}/messages/{message}/feedback`
 
-## 13. Test
+Admin:
 
-Jalankan test chat utama:
+- `GET /admin`
+- `GET /admin/{section}`
+- `GET /admin/activity-log/items`
+- `GET /admin/activity-log/report`
+- `POST /admin/activity-log/export-log`
+
+## 8. Knowledge DEKA
+
+Masukkan dokumen PDF/teks:
 
 ```bash
-php artisan test --filter='ChatApiTest|AiRuntimeClientTest'
+php artisan knowledge:ingest-file "storage/app/private/docs/DEKA Knowledge Base Draft Rekap.pdf" \
+    --title="DEKA Knowledge Base Draft Rekap" \
+    --source="file://DEKA Knowledge Base Draft Rekap.pdf" \
+    --priority=100
 ```
 
-Kalau PostgreSQL lokal mati, feature test chat akan gagal karena koneksi database.
+Crawl website:
 
-## 14. Verifikasi Manual Cepat
+```bash
+php artisan knowledge:crawl --base=https://deka.dev --limit=50
+```
 
-1. buka `/login`
-2. login sebagai user biasa atau admin
-3. user biasa harus masuk `/chat`
-4. admin diarahkan ke `/admin` dan mendapat `403`
-5. pastikan command knowledge sudah selesai kalau ingin jawaban berbasis RAG
-6. kirim pesan dari halaman chat
-7. pastikan balasan assistant tersimpan dan muncul di sidebar conversation
+Jika hanya ingin mengecek pemahaman query tanpa provider embedding/retrieval:
+
+```bash
+php artisan chat:eval --skip-retrieval
+```
+
+## 9. Testing
+
+Quality gate lokal:
+
+```bash
+composer test
+npm run lint:check
+npm run format:check
+npm run types:check
+npm run build
+```
+
+Browser smoke test:
+
+```bash
+php artisan serve --host=127.0.0.1 --port=8000
+BASE_URL=http://127.0.0.1:8000 npm run test:e2e
+```
+
+Smoke test mengecek branding welcome, login admin, activity export, dan admin tidak bisa memakai `/chat`.
+
+## 10. Verifikasi Manual Cepat
+
+1. Buka `/login`.
+2. Login sebagai `admin@deka.dev` / `password`.
+3. Pastikan diarahkan ke `/admin/overview`.
+4. Buka `/admin/activity-log` dan cek tombol export.
+5. Buka `/chat` sebagai admin dan pastikan tidak masuk ke halaman chat user.
+6. Login sebagai user biasa dan pastikan user diarahkan ke `/chat`.

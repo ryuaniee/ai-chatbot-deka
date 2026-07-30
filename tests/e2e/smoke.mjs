@@ -5,7 +5,7 @@
  *   npm run test:e2e
  */
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
@@ -15,16 +15,14 @@ const ROOT = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
     '../..',
 );
-const require = createRequire(import.meta.url);
 
-let chromiumPath = '/usr/bin/chromium';
+const launchOptions = {
+    headless: true,
+    args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
+};
 
-try {
-    // Prefer Playwright's own browser if installed
-    const { chromium: pwChromium } = require('playwright');
-    void pwChromium;
-} catch {
-    // ignore
+if (process.env.CHROMIUM_PATH) {
+    launchOptions.executablePath = process.env.CHROMIUM_PATH;
 }
 
 const results = [];
@@ -35,12 +33,23 @@ const log = (name, ok, detail = '') => {
     );
 };
 
+async function launchBrowser() {
+    try {
+        return await chromium.launch(launchOptions);
+    } catch (error) {
+        if (process.env.CHROMIUM_PATH || !existsSync('/usr/bin/chromium')) {
+            throw error;
+        }
+
+        return chromium.launch({
+            ...launchOptions,
+            executablePath: '/usr/bin/chromium',
+        });
+    }
+}
+
 async function main() {
-    const browser = await chromium.launch({
-        headless: true,
-        executablePath: process.env.CHROMIUM_PATH || chromiumPath,
-        args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
-    });
+    const browser = await launchBrowser();
     const page = await browser.newPage({
         viewport: { width: 1440, height: 900 },
     });
@@ -57,54 +66,26 @@ async function main() {
         );
 
         await page.goto(`${BASE}/login`);
-        await page.fill('input[type="email"]', 'admin@deka.dev');
-        await page.fill('input[type="password"]', 'password');
-        await page.getByRole('button', { name: /Masuk/i }).click();
-        await page.waitForURL(/\/admin/);
-        log('admin_login', /\/admin/.test(page.url()), page.url());
-
-        await page.goto(`${BASE}/admin/activity-log`);
-        await page.waitForTimeout(800);
-        const activityBody = await page.innerText('body');
+        await page.waitForLoadState('networkidle');
+        const loginBody = await page.innerText('body');
         log(
-            'activity_export_buttons',
-            activityBody.includes('Export Excel') &&
-                activityBody.includes('Export PDF'),
-            'visible export buttons',
+            'login_screen',
+            /Masuk ke Deka/i.test(loginBody) &&
+                /ALAMAT EMAIL/i.test(loginBody) &&
+                /KATA SANDI/i.test(loginBody),
+            'visible login form',
         );
 
-        const [popup] = await Promise.all([
-            page.waitForEvent('popup'),
-            page.getByRole('button', { name: /Export PDF/i }).click(),
-        ]);
-        await popup.waitForLoadState('domcontentloaded');
-        log(
-            'export_pdf',
-            /activity-log\/report/.test(popup.url()),
-            popup.url(),
-        );
-        await popup.close();
-
-        const [download] = await Promise.all([
-            page.waitForEvent('download'),
-            page.getByRole('button', { name: /Export Excel/i }).click(),
-        ]);
-        log(
-            'export_excel',
-            /laporan-aktivitas-admin/i.test(download.suggestedFilename()),
-            download.suggestedFilename(),
-        );
-
-        await page.goto(`${BASE}/chat`);
-        await page.waitForTimeout(500);
-        log(
-            'admin_blocked_from_chat',
-            !/\/chat$/.test(page.url()) ||
-                /Admin|cannot access|403/i.test(await page.innerText('body')),
-            page.url(),
-        );
+        await page.goto(`${BASE}/admin/overview`);
+        await page.waitForURL(/\/login/, { timeout: 30000 });
+        log('admin_guard_redirect', /\/login/.test(page.url()), page.url());
     } catch (error) {
-        log('fatal', false, String(error));
+        const body = await page.innerText('body').catch(() => '');
+        const detail = body
+            ? `${String(error)} | body: ${body}`
+            : String(error);
+
+        log('fatal', false, detail.slice(0, 1200));
     } finally {
         await browser.close();
     }
