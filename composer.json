@@ -20,7 +20,7 @@
         "phpoffice/phpword": "^1.4",
         "resend/resend-php": "^1.5",
         "smalot/pdfparser": "^2.12",
-        "symfony/http-client": "^8.1"
+        "symfony/http-client": "^7.4"
     },
     "require-dev": {
         "fakerphp/faker": "^1.24",
@@ -116,6 +116,9 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true,
             "php-http/discovery": true
+        },
+        "platform": {
+            "php": "8.3.33"
         }
     },
     "minimum-stability": "stable",
