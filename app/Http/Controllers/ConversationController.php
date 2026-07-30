@@ -40,6 +40,49 @@ class ConversationController extends Controller
         ]);
     }
 
+    public function update(Request $request, Conversation $conversation): JsonResponse
+    {
+        abort_unless($conversation->user->is($request->user()), 404);
+
+        $validated = $request->validate([
+            'title' => ['required', 'string', 'min:1', 'max:120'],
+        ]);
+
+        $title = trim($validated['title']);
+
+        if ($title === '') {
+            return response()->json([
+                'message' => 'The title field must not be empty.',
+                'errors' => [
+                    'title' => ['The title field must not be empty.'],
+                ],
+            ], 422);
+        }
+
+        $conversation->forceFill([
+            'title' => $title,
+        ])->save();
+
+        return response()->json([
+            'message' => 'Conversation updated.',
+            'data' => ChatResource::conversation($conversation->fresh()),
+        ]);
+    }
+
+    public function destroy(Request $request, Conversation $conversation): JsonResponse
+    {
+        abort_unless($conversation->user->is($request->user()), 404);
+
+        $conversation->delete();
+
+        return response()->json([
+            'message' => 'Conversation deleted.',
+            'data' => [
+                'id' => $conversation->id,
+            ],
+        ]);
+    }
+
     public function store(
         Request $request,
         ConversationChatService $conversationChatService,

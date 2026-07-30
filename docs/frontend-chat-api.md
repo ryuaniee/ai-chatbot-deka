@@ -40,16 +40,16 @@ Contoh `GET /api/auth/me`:
 
 ```json
 {
-  "user": {
-    "id": 22,
-    "name": "Kepin",
-    "email": "kepin@example.com",
-    "role": "user",
-    "email_verified_at": "2026-07-13T15:00:00Z",
-    "requires_email_verification": false,
-    "has_two_factor": false
-  },
-  "redirect_to": "/chat"
+    "user": {
+        "id": 22,
+        "name": "Kepin",
+        "email": "kepin@example.com",
+        "role": "user",
+        "email_verified_at": "2026-07-13T15:00:00Z",
+        "requires_email_verification": false,
+        "has_two_factor": false
+    },
+    "redirect_to": "/chat"
 }
 ```
 
@@ -61,16 +61,59 @@ Ambil daftar percakapan milik user, urut terbaru.
 
 ```json
 {
-  "data": [
-    {
-      "id": 3,
-      "title": "Sapaan awal",
-      "status": "active",
-      "last_message_at": "2026-07-13T15:10:00Z",
-      "created_at": "2026-07-13T15:09:00Z",
-      "updated_at": "2026-07-13T15:10:00Z"
+    "data": [
+        {
+            "id": 3,
+            "title": "Sapaan awal",
+            "status": "active",
+            "last_message_at": "2026-07-13T15:10:00Z",
+            "created_at": "2026-07-13T15:09:00Z",
+            "updated_at": "2026-07-13T15:10:00Z"
+        }
+    ]
+}
+```
+
+### `PATCH /api/conversations/{conversation}`
+
+Ubah judul percakapan milik user.
+
+Request:
+
+```json
+{
+    "title": "Judul baru"
+}
+```
+
+Response:
+
+```json
+{
+    "message": "Conversation updated.",
+    "data": {
+        "id": 3,
+        "title": "Judul baru",
+        "status": "active",
+        "last_message_at": "2026-07-13T15:10:00Z",
+        "created_at": "2026-07-13T15:09:00Z",
+        "updated_at": "2026-07-22T10:00:00Z"
     }
-  ]
+}
+```
+
+### `DELETE /api/conversations/{conversation}`
+
+Hapus percakapan milik user (cascade messages + feedback terkait).
+
+Response:
+
+```json
+{
+    "message": "Conversation deleted.",
+    "data": {
+        "id": 3
+    }
 }
 ```
 
@@ -88,14 +131,14 @@ Response:
 
 ```json
 {
-  "data": {
-    "id": 4,
-    "title": null,
-    "status": "active",
-    "last_message_at": null,
-    "created_at": "2026-07-13T15:11:00Z",
-    "updated_at": "2026-07-13T15:11:00Z"
-  }
+    "data": {
+        "id": 4,
+        "title": null,
+        "status": "active",
+        "last_message_at": null,
+        "created_at": "2026-07-13T15:11:00Z",
+        "updated_at": "2026-07-13T15:11:00Z"
+    }
 }
 ```
 
@@ -103,7 +146,7 @@ Dengan pesan pertama:
 
 ```json
 {
-  "content": "Halo, Deka itu apa?"
+    "content": "Halo, Deka itu apa?"
 }
 ```
 
@@ -111,32 +154,32 @@ Response:
 
 ```json
 {
-  "conversation": {
-    "id": 5,
-    "title": "Sapaan awal",
-    "status": "active",
-    "last_message_at": "2026-07-13T15:12:00Z",
-    "created_at": "2026-07-13T15:12:00Z",
-    "updated_at": "2026-07-13T15:12:00Z"
-  },
-  "user_message": {
-    "id": 10,
-    "conversation_id": 5,
-    "reply_to_message_id": null,
-    "role": "user",
-    "content": "Halo, Deka itu apa?",
-    "sequence": 1,
-    "created_at": "2026-07-13T15:12:00Z"
-  },
-  "assistant_message": {
-    "id": 11,
-    "conversation_id": 5,
-    "reply_to_message_id": 10,
-    "role": "assistant",
-    "content": "Deka adalah ...",
-    "sequence": 2,
-    "created_at": "2026-07-13T15:12:02Z"
-  }
+    "conversation": {
+        "id": 5,
+        "title": "Sapaan awal",
+        "status": "active",
+        "last_message_at": "2026-07-13T15:12:00Z",
+        "created_at": "2026-07-13T15:12:00Z",
+        "updated_at": "2026-07-13T15:12:00Z"
+    },
+    "user_message": {
+        "id": 10,
+        "conversation_id": 5,
+        "reply_to_message_id": null,
+        "role": "user",
+        "content": "Halo, Deka itu apa?",
+        "sequence": 1,
+        "created_at": "2026-07-13T15:12:00Z"
+    },
+    "assistant_message": {
+        "id": 11,
+        "conversation_id": 5,
+        "reply_to_message_id": 10,
+        "role": "assistant",
+        "content": "Deka adalah ...",
+        "sequence": 2,
+        "created_at": "2026-07-13T15:12:02Z"
+    }
 }
 ```
 
@@ -150,7 +193,7 @@ Kirim pesan baru ke percakapan yang sudah ada.
 
 ```json
 {
-  "content": "Lanjutkan penjelasannya"
+    "content": "Lanjutkan penjelasannya"
 }
 ```
 
@@ -172,7 +215,7 @@ Request:
 
 ```json
 {
-  "content": "Halo bot"
+    "content": "Halo bot"
 }
 ```
 
@@ -184,7 +227,7 @@ Request:
 
 ```json
 {
-  "content": "Lanjutkan"
+    "content": "Lanjutkan"
 }
 ```
 
@@ -219,13 +262,13 @@ Payload event:
 
 ```json
 {
-  "type": "conversation_started",
-  "conversation": {
-    "id": 14
-  },
-  "user_message": {
-    "id": 20
-  }
+    "type": "conversation_started",
+    "conversation": {
+        "id": 14
+    },
+    "user_message": {
+        "id": 20
+    }
 }
 ```
 
@@ -233,8 +276,8 @@ Payload event:
 
 ```json
 {
-  "type": "text_delta",
-  "delta": "Halo"
+    "type": "text_delta",
+    "delta": "Halo"
 }
 ```
 
@@ -242,14 +285,14 @@ Payload event:
 
 ```json
 {
-  "type": "message_complete",
-  "conversation": {
-    "id": 14
-  },
-  "assistant_message": {
-    "id": 21,
-    "content": "Halo stream."
-  }
+    "type": "message_complete",
+    "conversation": {
+        "id": 14
+    },
+    "assistant_message": {
+        "id": 21,
+        "content": "Halo stream."
+    }
 }
 ```
 
@@ -259,8 +302,8 @@ Kalau stream gagal saat generation berlangsung:
 
 ```json
 {
-  "type": "error",
-  "message": "Assistant stream failed."
+    "type": "error",
+    "message": "Assistant stream failed."
 }
 ```
 
@@ -297,8 +340,8 @@ Idempotency key dipakai ulang untuk payload berbeda.
 
 ```json
 {
-  "message": "Idempotency-Key has already been used with a different payload.",
-  "code": "IDEMPOTENCY_KEY_REUSED"
+    "message": "Idempotency-Key has already been used with a different payload.",
+    "code": "IDEMPOTENCY_KEY_REUSED"
 }
 ```
 
@@ -310,8 +353,8 @@ Contoh moderation:
 
 ```json
 {
-  "message": "Message blocked by safety policy.",
-  "code": "SELF_HARM_INSTRUCTIONS"
+    "message": "Message blocked by safety policy.",
+    "code": "SELF_HARM_INSTRUCTIONS"
 }
 ```
 
@@ -325,8 +368,8 @@ Runtime AI gagal generate jawaban.
 
 ```json
 {
-  "message": "Assistant response could not be generated.",
-  "code": "AI_RUNTIME_UNAVAILABLE"
+    "message": "Assistant response could not be generated.",
+    "code": "AI_RUNTIME_UNAVAILABLE"
 }
 ```
 
@@ -336,8 +379,8 @@ Runtime AI salah konfigurasi atau sementara tidak tersedia.
 
 ```json
 {
-  "message": "Assistant runtime is temporarily unavailable.",
-  "code": "AI_RUNTIME_MISCONFIGURED"
+    "message": "Assistant runtime is temporarily unavailable.",
+    "code": "AI_RUNTIME_MISCONFIGURED"
 }
 ```
 

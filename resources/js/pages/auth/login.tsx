@@ -98,7 +98,7 @@ export default function Login({ status, canResetPassword }: Props) {
 
             <form
                 onSubmit={handleSubmit}
-                className="flex flex-col gap-6"
+                className="flex flex-col gap-5"
                 noValidate
             >
                 <div className="grid gap-5">
@@ -106,7 +106,7 @@ export default function Login({ status, canResetPassword }: Props) {
                     <div className="grid gap-2">
                         <Label
                             htmlFor="email"
-                            className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
+                            className="text-[11px] font-bold tracking-[0.11em] text-slate-600 uppercase"
                         >
                             Alamat Email
                         </Label>
@@ -131,7 +131,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                         email: '',
                                     }));
                                 }}
-                                className="h-12 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
+                                className="h-12 rounded-xl border-slate-200 bg-white pl-11 text-slate-950 shadow-sm shadow-slate-200/40 transition-all placeholder:text-slate-400 hover:border-slate-300 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
                         <InputError
@@ -145,7 +145,7 @@ export default function Login({ status, canResetPassword }: Props) {
                     <div className="grid gap-2">
                         <Label
                             htmlFor="password"
-                            className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
+                            className="text-[11px] font-bold tracking-[0.11em] text-slate-600 uppercase"
                         >
                             Kata Sandi
                         </Label>
@@ -168,7 +168,7 @@ export default function Login({ status, canResetPassword }: Props) {
                                         password: '',
                                     }));
                                 }}
-                                className="h-12 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
+                                className="h-12 rounded-xl border-slate-200 bg-white pl-11 text-slate-950 shadow-sm shadow-slate-200/40 transition-all placeholder:text-slate-400 hover:border-slate-300 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
                         <InputError
@@ -190,11 +190,11 @@ export default function Login({ status, canResetPassword }: Props) {
                                 onCheckedChange={(checked) =>
                                     http.setData('remember', !!checked)
                                 }
-                                className="h-5 w-5 cursor-pointer rounded-md border-zinc-300 text-[#2f80ed] shadow-sm focus:ring-[#2f80ed] data-[state=checked]:border-[#2f80ed] data-[state=checked]:bg-[#2f80ed]"
+                                className="h-5 w-5 cursor-pointer rounded-md border-slate-300 text-[#2f80ed] shadow-sm focus:ring-[#2f80ed] data-[state=checked]:border-[#2f80ed] data-[state=checked]:bg-[#2f80ed]"
                             />
                             <Label
                                 htmlFor="remember"
-                                className="cursor-pointer text-sm font-semibold text-zinc-700 select-none"
+                                className="cursor-pointer text-sm font-semibold text-slate-700 select-none"
                             >
                                 Ingat saya
                             </Label>
@@ -202,7 +202,7 @@ export default function Login({ status, canResetPassword }: Props) {
                         {canResetPassword && (
                             <TextLink
                                 href={request()}
-                                className="text-sm font-semibold text-zinc-600 hover:text-zinc-900 hover:underline"
+                                className="text-sm font-semibold text-slate-600 underline-offset-4 hover:text-slate-950 hover:underline"
                                 tabIndex={5}
                             >
                                 Lupa password?
@@ -213,7 +213,7 @@ export default function Login({ status, canResetPassword }: Props) {
                     {/* Submit Button */}
                     <Button
                         type="submit"
-                        className="mt-4 flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border-none bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] text-sm font-semibold tracking-wide text-white shadow-md transition-all hover:from-[#1a73e8] hover:to-[#155fc4] hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99]"
+                        className="mt-3 flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border-none bg-[#2563eb] text-sm font-bold tracking-normal text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-[#1d4ed8] hover:shadow-blue-600/25 active:scale-[0.99] disabled:shadow-none"
                         tabIndex={4}
                         disabled={http.processing}
                     >
@@ -224,14 +224,14 @@ export default function Login({ status, canResetPassword }: Props) {
                     </Button>
                 </div>
 
-                <p className="-mt-2 text-center text-xs leading-5 text-zinc-500">
+                <p className="-mt-1 text-center text-xs leading-5 text-slate-500">
                     Akun digunakan untuk menyimpan riwayat percakapan Anda.
                 </p>
 
                 {/* Divider */}
                 <div className="relative flex items-center py-2">
                     <div className="flex-grow border-t border-zinc-200"></div>
-                    <span className="mx-4 flex-shrink text-xs font-semibold text-zinc-400">
+                    <span className="mx-4 flex-shrink text-xs font-semibold text-slate-400">
                         atau lanjut dengan
                     </span>
                     <div className="flex-grow border-t border-zinc-200"></div>
@@ -241,7 +241,7 @@ export default function Login({ status, canResetPassword }: Props) {
                 <button
                     type="button"
                     onClick={() => window.location.assign('/auth/google')}
-                    className="flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white font-semibold text-zinc-700 shadow-sm transition-all hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99]"
+                    className="flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white font-semibold text-slate-700 shadow-sm shadow-slate-200/60 transition-all hover:border-blue-200 hover:bg-blue-50/40 hover:text-slate-950 hover:shadow-md active:scale-[0.99]"
                 >
                     <GoogleIcon />
                     <span className="text-sm font-bold">
@@ -250,7 +250,7 @@ export default function Login({ status, canResetPassword }: Props) {
                 </button>
 
                 {/* Footer */}
-                <div className="mt-2 text-center text-sm font-medium text-zinc-600">
+                <div className="mt-1 text-center text-sm font-medium text-slate-600">
                     Belum punya akun?{' '}
                     <TextLink
                         href={register()}

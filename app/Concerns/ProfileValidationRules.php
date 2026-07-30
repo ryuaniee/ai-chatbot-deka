@@ -2,10 +2,8 @@
 
 namespace App\Concerns;
 
-use App\Models\User;
-use App\Support\EmailAddress;
+use App\Rules\UniqueCanonicalEmail;
 use Illuminate\Contracts\Validation\ValidationRule;
-use Illuminate\Validation\Rule;
 
 trait ProfileValidationRules
 {
@@ -44,19 +42,8 @@ trait ProfileValidationRules
             'string',
             'email',
             'max:255',
-            $userId === null
-                ? Rule::unique(User::class)
-                : Rule::unique(User::class)->ignore($userId),
-            function (string $attribute, mixed $value, \Closure $fail) use ($userId): void {
-                $exists = User::query()
-                    ->where('canonical_email', EmailAddress::canonical((string) $value))
-                    ->when($userId !== null, fn ($query) => $query->whereKeyNot($userId))
-                    ->exists();
-
-                if ($exists) {
-                    $fail(__('The email has already been taken.'));
-                }
-            },
+            $userId === null ? 'unique:users,email' : "unique:users,email,{$userId}",
+            new UniqueCanonicalEmail($userId),
         ];
     }
 }

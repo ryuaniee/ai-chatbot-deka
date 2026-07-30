@@ -22,15 +22,15 @@ Yang sudah ada di repo:
 - runtime AI langsung di Laravel via `laravel/ai`
 - moderation, idempotency, rate limit
 - endpoint chat JSON dan stream SSE
-- retrieval knowledge Deka berbasis PostgreSQL full-text search dan AI selector/reranker
+- retrieval knowledge Deka berbasis PostgreSQL full-text search, embedding/vector similarity, mode hybrid, query rewrite, AI selector/reranker
+- ingestion file dan website dengan chunking, content hash, versi dokumen, probe validasi, dan fallback full-text jika embedding gagal
+- dashboard admin untuk overview, token usage, feedback review, users, roles, activity log, dan status knowledge
 
 Yang belum ada:
 
-- embedding
-- vector store
 - admin UI untuk edit knowledge manual
-
-Catatan: panel admin Filament sudah dihapus. Role admin tetap ada, tetapi `/admin` ditutup `403` sampai ada kebutuhan admin UI baru.
+- workflow approval knowledge manual oleh admin non-teknis
+- monitoring production eksternal seperti APM, alerting, backup verification, dan audit deploy
 
 ## Gambaran Arsitektur Target
 
@@ -83,8 +83,9 @@ Tanggung jawabnya:
 Laravel tidak perlu menjadi:
 
 - crawler
-- worker embedding
 - vector engine
+
+Catatan: crawler/ingestion command saat ini masih berada di aplikasi Laravel untuk operasional awal. Jika volume data membesar, proses crawl dan embedding sebaiknya dipindah ke worker/queue terpisah.
 
 ### Runtime AI
 
@@ -105,31 +106,35 @@ Tanggung jawab runtime:
 - menjalankan stream dan non-stream
 - menjaga prompt policy tetap tipis dan terkontrol
 
-### Retrieval Layer Target
+### Retrieval Layer
 
-Retrieval belum diimplementasikan.
+Retrieval sudah berjalan di service Laravel.
 
-Target ke depan:
+Kemampuan saat ini:
 
 - menerima pertanyaan user
-- mencari chunk paling relevan
-- mengembalikan top-k context
+- menormalisasi typo dan variasi pertanyaan
+- menulis beberapa query pencarian per intent
+- mencari chunk relevan lewat PostgreSQL full-text, vector similarity, atau hybrid
+- menggabungkan ranking full-text/vector
 - menerapkan threshold agar context lemah tidak ikut dipakai
+- memakai AI selector/reranker untuk memilih kandidat yang paling mendukung jawaban
 
-Untuk tahap awal, retrieval bisa tetap berada di Laravel service layer.
+Jika retrieval tidak menemukan konteks kuat, assistant diarahkan untuk menjawab bahwa informasi belum tersedia pada data Deka yang dimiliki.
 
-### Ingestion Worker Target
+### Ingestion
 
-Target tugas ingestion:
+Ingestion saat ini tersedia lewat command Laravel.
 
-- crawl halaman `deka.dev`
+- ingest file teks/PDF dan crawl halaman website
 - ekstrak teks utama
 - bersihkan noise
 - split jadi chunk
-- generate embedding
-- simpan dokumen dan chunk
+- generate embedding bila mode retrieval membutuhkan vector/hybrid
+- simpan dokumen, versi, chunk, embedding/full-text fallback, dan ingestion run
+- validasi versi baru sebelum menggantikan versi aktif jika validation enabled
 
-Worker ini sebaiknya dipisah dari request chat.
+Untuk production dengan volume besar, ingestion sebaiknya dijalankan sebagai queue/worker terpisah dari request chat.
 
 ## Alur Data Saat Ini
 

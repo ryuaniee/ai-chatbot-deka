@@ -17,7 +17,11 @@ type Props = {
     onLogoutClick?: () => void;
 };
 
-export function UserMenuContent({ user, onSettingsClick, onLogoutClick }: Props) {
+export function UserMenuContent({
+    user,
+    onSettingsClick,
+    onLogoutClick,
+}: Props) {
     const cleanup = useMobileNavigation();
 
     const handleSettings = () => {
@@ -53,13 +57,13 @@ export function UserMenuContent({ user, onSettingsClick, onLogoutClick }: Props)
             <DropdownMenuGroup>
                 <DropdownMenuItem onSelect={handleSettings}>
                     <Settings className="mr-2 h-4 w-4" />
-                    Settings
+                    Pengaturan
                 </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={handleLogout} data-test="logout-button">
                 <LogOut className="mr-2 h-4 w-4" />
-                Log out
+                Keluar
             </DropdownMenuItem>
         </>
     );

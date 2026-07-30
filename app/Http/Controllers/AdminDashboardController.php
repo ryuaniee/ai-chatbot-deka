@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MessageFeedback;
 use App\Services\AdminDashboardService;
 use App\Services\FeedbackImprovementService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -16,7 +17,7 @@ class AdminDashboardController extends Controller
 {
     private const SECTIONS = [
         'overview',
-        'token-usage',
+        'analytic',
         'feedback-review',
         'users',
         'roles',
@@ -47,19 +48,57 @@ class AdminDashboardController extends Controller
         AdminDashboardService $dashboardService,
     ): View {
         $payload = $dashboardService->activityLogPayload($request);
-        $period = $payload['filters']['period'] ?? 'month';
+        $period = (string) ($payload['filters']['period'] ?? 'month');
         $periodLabels = [
             'week' => 'Mingguan',
             'month' => 'Bulanan',
             'year' => 'Tahunan',
         ];
+        $periodLabel = (string) ($periodLabels[$period] ?? $periodLabels['month']);
+
+        $dashboardService->logReportExport(
+            $request,
+            'PDF',
+            $periodLabel,
+            count($payload['adminActivityItems'] ?? []),
+        );
 
         return view('admin.reports.activity-log', [
             'items' => $payload['adminActivityItems'],
             'totals' => $payload['totals'],
             'filters' => $payload['filters'],
-            'periodLabel' => $periodLabels[$period] ?? $periodLabels['month'],
-            'generatedAt' => now()->locale('id')->translatedFormat('j F Y H:i'),
+            'periodLabel' => $periodLabel,
+            'generatedAt' => CarbonImmutable::now()->format('j F Y H:i'),
+        ]);
+    }
+
+    public function logActivityExport(
+        Request $request,
+        AdminDashboardService $dashboardService,
+    ): JsonResponse {
+        $validated = $request->validate([
+            'format' => ['required', Rule::in(['Excel', 'PDF', 'excel', 'pdf'])],
+            'period' => ['nullable', Rule::in(['week', 'month', 'year'])],
+            'item_count' => ['nullable', 'integer', 'min:0'],
+        ]);
+
+        $period = $validated['period'] ?? 'month';
+        $periodLabels = [
+            'week' => 'Mingguan',
+            'month' => 'Bulanan',
+            'year' => 'Tahunan',
+        ];
+        $format = strtoupper((string) $validated['format']) === 'PDF' ? 'PDF' : 'Excel';
+
+        $dashboardService->logReportExport(
+            $request,
+            $format,
+            $periodLabels[$period],
+            (int) ($validated['item_count'] ?? 0),
+        );
+
+        return response()->json([
+            'message' => 'Export activity logged.',
         ]);
     }
 
@@ -105,9 +144,21 @@ class AdminDashboardController extends Controller
 
         $validated = $request->validate([
             'note' => ['nullable', 'string', 'max:1000'],
+            'improvement' => ['nullable', 'string', 'max:4000'],
         ]);
 
-        $improvement = $feedbackImprovementService->generate($feedback);
+        $manualImprovement = isset($validated['improvement'])
+            ? trim((string) $validated['improvement'])
+            : '';
+        $improvement = $manualImprovement !== ''
+            ? [
+                'improvement' => $manualImprovement,
+                'metadata' => [
+                    'source' => 'admin_manual',
+                    'edited_at' => now()->toIso8601String(),
+                ],
+            ]
+            : $feedbackImprovementService->generate($feedback);
 
         $feedback->forceFill([
             'review_status' => MessageFeedback::REVIEW_STATUS_RESOLVED,
@@ -116,6 +167,35 @@ class AdminDashboardController extends Controller
             'admin_note' => $validated['note'] ?? null,
             'ai_improvement' => $improvement['improvement'],
             'ai_improvement_metadata' => $improvement['metadata'],
+            'solved_by_user_id' => $request->user()?->id,
+        ])->save();
+
+        return response()->json([
+            'data' => $this->feedbackReviewPayload($feedback),
+        ]);
+    }
+
+    public function updateFeedbackImprovement(
+        Request $request,
+        MessageFeedback $feedback,
+    ): JsonResponse {
+        abort_unless($feedback->type === MessageFeedback::TYPE_DISLIKE, 404);
+
+        $validated = $request->validate([
+            'improvement' => ['required', 'string', 'max:4000'],
+            'note' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $feedback->forceFill([
+            'review_status' => MessageFeedback::REVIEW_STATUS_RESOLVED,
+            'reviewed_at' => now(),
+            'admin_decision' => MessageFeedback::ADMIN_DECISION_SOLVE,
+            'admin_note' => $validated['note'] ?? $feedback->admin_note,
+            'ai_improvement' => trim($validated['improvement']),
+            'ai_improvement_metadata' => [
+                'source' => 'admin_manual',
+                'edited_at' => now()->toIso8601String(),
+            ],
             'solved_by_user_id' => $request->user()?->id,
         ])->save();
 
@@ -140,6 +220,27 @@ class AdminDashboardController extends Controller
             'admin_decision' => MessageFeedback::ADMIN_DECISION_IGNORE,
             'admin_note' => $validated['note'] ?? null,
             'solved_by_user_id' => $request->user()?->id,
+        ])->save();
+
+        return response()->json([
+            'data' => $this->feedbackReviewPayload($feedback),
+        ]);
+    }
+
+    public function rollbackFeedbackReview(
+        Request $request,
+        MessageFeedback $feedback,
+    ): JsonResponse {
+        abort_unless($feedback->type === MessageFeedback::TYPE_DISLIKE, 404);
+
+        $feedback->forceFill([
+            'review_status' => MessageFeedback::REVIEW_STATUS_OPEN,
+            'reviewed_at' => null,
+            'admin_decision' => null,
+            'admin_note' => null,
+            'ai_improvement' => null,
+            'ai_improvement_metadata' => null,
+            'solved_by_user_id' => null,
         ])->save();
 
         return response()->json([

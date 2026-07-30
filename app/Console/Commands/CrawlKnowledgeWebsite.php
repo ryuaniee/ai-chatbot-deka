@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\KnowledgeDocument;
 use App\Models\KnowledgeIngestionRun;
+use App\Services\Knowledge\FuzzyTypoCorrector;
 use App\Services\Knowledge\KnowledgeIngestor;
 use App\Services\Knowledge\KnowledgeTextExtractor;
 use DOMDocument;
@@ -12,6 +13,7 @@ use DOMXPath;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 class CrawlKnowledgeWebsite extends Command
@@ -50,6 +52,10 @@ class CrawlKnowledgeWebsite extends Command
                     continue;
                 }
 
+                if (($stored['status'] ?? null) === 'failed') {
+                    throw new RuntimeException("Knowledge validation failed for {$url}; the previous active version remains in use.");
+                }
+
                 $documentsStored++;
                 $chunksStored += $stored['chunks_stored'];
                 $storedUrls[] = $url;
@@ -62,6 +68,8 @@ class CrawlKnowledgeWebsite extends Command
                     ->where('source_uri', 'like', $baseUrl.'%')
                     ->whereNotIn('source_uri', $storedUrls)
                     ->delete();
+
+                FuzzyTypoCorrector::flushVocabularyCache();
             }
 
             $run->forceFill([
@@ -101,7 +109,7 @@ class CrawlKnowledgeWebsite extends Command
     }
 
     /**
-     * @return array{document_id: int, chunks_stored: int}|null
+     * @return array<string, mixed>|null
      */
     private function ingestUrl(
         string $url,

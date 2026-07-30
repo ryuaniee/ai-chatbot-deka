@@ -72,14 +72,17 @@ class AdminRoleController extends Controller
     {
         $input = $request->all();
         $input['slug'] = Str::slug((string) ($input['slug'] ?? ''));
-        $input['permissions'] = collect($input['permissions'] ?? [])
+        $permissions = is_array($input['permissions'] ?? null)
+            ? $input['permissions']
+            : [];
+        $input['permissions'] = collect($permissions)
             ->map(static fn (mixed $permission): string => trim((string) $permission))
             ->filter(static fn (string $permission): bool => $permission !== '')
             ->unique(static fn (string $permission): string => mb_strtolower($permission))
             ->values()
             ->all();
 
-        return validator($input, [
+        $validated = validator($input, [
             'slug' => [
                 'required',
                 'string',
@@ -92,6 +95,16 @@ class AdminRoleController extends Controller
             'permissions' => ['array', 'max:12'],
             'permissions.*' => ['string', 'max:60'],
         ])->validate();
+
+        return [
+            'slug' => (string) $validated['slug'],
+            'name' => (string) $validated['name'],
+            'description' => isset($validated['description']) ? (string) $validated['description'] : null,
+            'permissions' => array_values(array_map(
+                static fn (mixed $permission): string => (string) $permission,
+                is_array($validated['permissions'] ?? null) ? $validated['permissions'] : [],
+            )),
+        ];
     }
 
     private function log(Request $request, string $action, Role $role, string $description): void

@@ -22,13 +22,9 @@ import {
     Users,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { AdminConversationChart } from '@/components/admin-conversation-chart';
-import { AdminFeedbackBarChart } from '@/components/admin-feedback-bar-chart';
-import { AdminTokenTrendChart } from '@/components/admin-token-trend-chart';
 import type { TokenTrendItem } from '@/components/admin-token-trend-chart';
-import { AdminTokenUsageChart } from '@/components/admin-token-usage-chart';
 import DekaLogo from '@/components/deka-logo';
 import InputError from '@/components/input-error';
 import SettingsModal from '@/components/settings-modal';
@@ -54,15 +50,42 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuLabel,
-    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { UserInfo } from '@/components/user-info';
 import { UserMenuContent } from '@/components/user-menu-content';
 import type { Auth } from '@/types';
+
+const AdminConversationChart = lazy(() =>
+    import('@/components/admin-conversation-chart').then((module) => ({
+        default: module.AdminConversationChart,
+    })),
+);
+const AdminFeedbackBarChart = lazy(() =>
+    import('@/components/admin-feedback-bar-chart').then((module) => ({
+        default: module.AdminFeedbackBarChart,
+    })),
+);
+const AdminTokenTrendChart = lazy(() =>
+    import('@/components/admin-token-trend-chart').then((module) => ({
+        default: module.AdminTokenTrendChart,
+    })),
+);
+const AdminTokenUsageChart = lazy(() =>
+    import('@/components/admin-token-usage-chart').then((module) => ({
+        default: module.AdminTokenUsageChart,
+    })),
+);
 
 type Metric = {
     label: string;
@@ -77,6 +100,12 @@ type KnowledgeItem = {
     source: string;
     chunks: number;
     status: string;
+    version?: number | null;
+    activeVersion?: number | null;
+    changedChunks?: number;
+    probesPassed?: number;
+    probesTotal?: number;
+    validationError?: string | null;
 };
 
 type KnowledgeStats = {
@@ -143,6 +172,11 @@ type FeedbackReviewItem = {
     createdAt: string;
 };
 
+type FeedbackStatusFilter =
+    'all' | 'open' | 'reviewing' | 'resolved' | 'ignored';
+
+type UserRoleFilter = 'all' | 'admin' | 'user';
+
 type RoleItem = {
     id: number;
     slug: string;
@@ -166,7 +200,7 @@ type SectionId =
     | 'roles'
     | 'feedback-review'
     | 'activity-log'
-    | 'token-usage'
+    | 'analytic'
     | 'chat-trend'
     | 'chat-api'
     | 'knowledge'
@@ -179,12 +213,17 @@ type AdminPageProps = {
     section?: SectionId;
     metrics?: Metric[];
     tokenUsageItems?: TokenUsageItem[];
+    tokenUsageSummaryItems?: TokenUsageItem[];
+    analyticTokenUsageItems?: TokenUsageItem[];
+    analyticTokenUsagePagination?: TokenUsagePagination;
     tokenUsageTrend?: TokenUsageTrend;
     tokenTrendItems?: TokenTrendItem[];
     roleItems?: RoleItem[];
     adminUsers?: AdminUserItem[];
     adminActivityItems?: AdminActivityItem[];
+    adminActivityPagination?: ActivityLogPagination;
     feedbackReviewItems?: FeedbackReviewItem[];
+    feedbackReviewPagination?: FeedbackReviewPagination;
     knowledgeItems?: KnowledgeItem[];
     knowledgeStats?: KnowledgeStats;
     chatTrendItems?: ChatTrendItem[];
@@ -207,6 +246,12 @@ type AdminPageProps = {
     filters?: {
         period?: ReportPeriod | null;
         search?: string;
+        page?: number;
+        feedbackSearch?: string;
+        feedbackStatus?: FeedbackStatusFilter;
+        feedbackPage?: number;
+        tokenSearch?: string;
+        tokenPage?: number;
     };
 };
 
@@ -215,13 +260,45 @@ type ActivityLogTotals = Pick<
     'activityToday' | 'conversationActions' | 'reportExports'
 >;
 
+type ActivityLogPagination = {
+    currentPage: number;
+    lastPage: number;
+    perPage: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+    hasMorePages: boolean;
+};
+
 type ActivityLogLivePayload = {
     adminActivityItems: AdminActivityItem[];
+    pagination: ActivityLogPagination;
     filters: {
         period: ReportPeriod;
         search: string;
+        page: number;
     };
     totals: ActivityLogTotals;
+};
+
+type FeedbackReviewPagination = {
+    currentPage: number;
+    lastPage: number;
+    perPage: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+    hasMorePages: boolean;
+};
+
+type TokenUsagePagination = {
+    currentPage: number;
+    lastPage: number;
+    perPage: number;
+    total: number;
+    from: number | null;
+    to: number | null;
+    hasMorePages: boolean;
 };
 
 type AdminUserFormData = {
@@ -281,8 +358,8 @@ const navigation: {
         icon: LayoutDashboard,
     },
     {
-        id: 'token-usage',
-        label: 'Analytic',
+        id: 'analytic',
+        label: 'Analitik',
         description: 'Pemakaian token AI per pengguna',
         icon: Sparkles,
     },
@@ -300,7 +377,7 @@ const navigation: {
     },
     {
         id: 'roles',
-        label: 'Kelola Roles',
+        label: 'Kelola Role',
         description: 'Role sistem dan jumlah akun terkait',
         icon: ShieldCheck,
     },
@@ -316,24 +393,12 @@ const toneClasses: Record<Metric['tone'], string> = {
     green: 'bg-[#e8f2ff] text-[#155fc4] ring-[#b9d8ff]   ',
     blue: 'bg-[#eaf3ff] text-[#2f80ed] ring-[#b9d8ff]   ',
     amber: 'bg-[#fff4df] text-[#b45309] ring-[#f5d08b]   ',
-    neutral:
-        'bg-[#eef4fb] text-[#40566f] ring-[#d9e4f2]   ',
-};
-
-const statusClasses: Record<string, string> = {
-    active: 'border-transparent bg-[#e8f2ff] text-[#155fc4]  ',
-    inactive:
-        'border-transparent bg-[#eef4fb] text-[#40566f]  ',
-    Selesai:
-        'border-transparent bg-[#e8f2ff] text-[#155fc4]  ',
-    Berjalan:
-        'border-transparent bg-[#eaf8ff] text-[#0369a1]  ',
+    neutral: 'bg-[#eef4fb] text-[#40566f] ring-[#d9e4f2]   ',
 };
 
 const activityCategoryClasses: Record<AdminActivityItem['category'], string> = {
     auth: 'border-transparent bg-[#eef2ff] text-[#4338ca]  ',
-    conversation:
-        'border-transparent bg-[#e0f2fe] text-[#0369a1]  ',
+    conversation: 'border-transparent bg-[#e0f2fe] text-[#0369a1]  ',
     user: 'border-transparent bg-[#eff6ff] text-[#1d4ed8]  ',
     report: 'border-transparent bg-[#fff7ed] text-[#c2410c]  ',
     system: 'border-transparent bg-[#ecfdf5] text-[#047857]  ',
@@ -344,6 +409,65 @@ const sectionHref = (sectionId: SectionId) => `/admin/${sectionId}`;
 const isSectionId = (value: unknown): value is SectionId =>
     typeof value === 'string' && navigation.some((item) => item.id === value);
 
+function ChartFallback({ className = '' }: { className?: string }) {
+    return (
+        <div
+            className={`rounded-lg border border-slate-200 bg-white p-6 shadow-sm ${className}`}
+        >
+            <div className="flex items-center justify-between">
+                <div className="h-4 w-36 animate-pulse rounded bg-slate-200" />
+                <div className="h-8 w-20 animate-pulse rounded-full bg-slate-100" />
+            </div>
+            <div className="mt-8 grid h-40 grid-cols-5 items-end gap-3">
+                {[36, 52, 44, 72, 58].map((height, index) => (
+                    <div
+                        key={index}
+                        className="rounded-t-lg bg-slate-100"
+                        style={{ height: `${height}%` }}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function formatImprovementNote(note: string): {
+    paragraphs: string[];
+    bullets: string[];
+} {
+    const normalized = note
+        .replace(/\r/g, '')
+        .replace(/\*\*/g, '')
+        .replace(/\s+[•*]\s+/g, '\n- ')
+        .replace(/^[•*]\s+/gm, '- ')
+        .replace(/\n{2,}/g, '\n')
+        .trim();
+
+    return normalized.split('\n').reduce<{
+        paragraphs: string[];
+        bullets: string[];
+    }>(
+        (accumulator, line) => {
+            const value = line.trim();
+
+            if (value === '') {
+                return accumulator;
+            }
+
+            if (value.startsWith('- ')) {
+                accumulator.bullets.push(value.slice(2).trim());
+
+                return accumulator;
+            }
+
+            accumulator.paragraphs.push(value);
+
+            return accumulator;
+        },
+        { paragraphs: [], bullets: [] },
+    );
+}
+
 function updateActivityPeriod(period: ReportPeriod, search?: string) {
     const normalizedSearch = search?.trim();
 
@@ -351,9 +475,83 @@ function updateActivityPeriod(period: ReportPeriod, search?: string) {
         sectionHref('activity-log'),
         {
             period,
+            page: 1,
             ...(normalizedSearch ? { search: normalizedSearch } : {}),
         },
         { preserveState: false },
+    );
+}
+
+function updateActivityPage(
+    page: number,
+    period: ReportPeriod,
+    search?: string,
+) {
+    const normalizedSearch = search?.trim();
+
+    router.get(
+        sectionHref('activity-log'),
+        {
+            period,
+            page,
+            ...(normalizedSearch ? { search: normalizedSearch } : {}),
+        },
+        { preserveState: false, preserveScroll: true },
+    );
+}
+
+function updateFeedbackReviewFilters(options: {
+    search?: string;
+    status?: FeedbackStatusFilter;
+    page?: number;
+}) {
+    const normalizedSearch = options.search?.trim();
+
+    router.get(
+        sectionHref('feedback-review'),
+        {
+            feedback_page: options.page ?? 1,
+            ...(options.status && options.status !== 'all'
+                ? { feedback_status: options.status }
+                : {}),
+            ...(normalizedSearch ? { feedback_search: normalizedSearch } : {}),
+        },
+        {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+            only: [
+                'section',
+                'feedbackReviewItems',
+                'feedbackReviewPagination',
+                'filters',
+                'totals',
+            ],
+        },
+    );
+}
+
+function updateAnalyticFilters(options: { search?: string; page?: number }) {
+    const normalizedSearch = options.search?.trim();
+
+    router.get(
+        sectionHref('analytic'),
+        {
+            token_page: options.page ?? 1,
+            ...(normalizedSearch ? { token_search: normalizedSearch } : {}),
+        },
+        {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+            only: [
+                'section',
+                'analyticTokenUsageItems',
+                'analyticTokenUsagePagination',
+                'filters',
+                'totals',
+            ],
+        },
     );
 }
 
@@ -374,12 +572,41 @@ export default function AdminPage() {
         section,
         metrics = [],
         tokenUsageItems = [],
+        tokenUsageSummaryItems = [],
+        analyticTokenUsageItems = [],
+        analyticTokenUsagePagination = {
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 12,
+            total: 0,
+            from: null,
+            to: null,
+            hasMorePages: false,
+        },
         tokenUsageTrend,
         tokenTrendItems = [],
         roleItems = [],
         adminUsers = [],
         adminActivityItems = [],
+        adminActivityPagination = {
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 15,
+            total: 0,
+            from: null,
+            to: null,
+            hasMorePages: false,
+        },
         feedbackReviewItems = [],
+        feedbackReviewPagination = {
+            currentPage: 1,
+            lastPage: 1,
+            perPage: 12,
+            total: 0,
+            from: null,
+            to: null,
+            hasMorePages: false,
+        },
         knowledgeItems = [],
         knowledgeStats = {
             answerGrounding: 0,
@@ -391,19 +618,36 @@ export default function AdminPage() {
         totals,
         filters,
     } = usePage<AdminPageProps>().props;
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+        if (typeof window === 'undefined') {
+            return false;
+        }
+
+        return (
+            window.localStorage.getItem('admin-sidebar-collapsed') === 'true'
+        );
+    });
     const [liveActivityItems, setLiveActivityItems] =
         useState(adminActivityItems);
+    const [liveActivityPagination, setLiveActivityPagination] = useState(
+        adminActivityPagination,
+    );
+    const [liveFeedbackReviewPagination, setLiveFeedbackReviewPagination] =
+        useState(feedbackReviewPagination);
     const [liveActivityTotals, setLiveActivityTotals] =
         useState<ActivityLogTotals | null>(null);
     const [localFeedbackReviewItems, setLocalFeedbackReviewItems] =
         useState(feedbackReviewItems);
+    const [analyticSearchDraft, setAnalyticSearchDraft] = useState(
+        filters?.tokenSearch ?? '',
+    );
     const [pendingFeedbackAction, setPendingFeedbackAction] = useState<
         string | null
     >(null);
     const [selectedFeedbackReviewId, setSelectedFeedbackReviewId] = useState<
         number | null
     >(null);
+    const [improvementDraft, setImprovementDraft] = useState('');
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [userDialogOpen, setUserDialogOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState<AdminUserItem | null>(
@@ -413,22 +657,31 @@ export default function AdminPage() {
     const [selectedRole, setSelectedRole] = useState<RoleItem | null>(null);
     const userForm = useForm<AdminUserFormData>(emptyAdminUserForm);
     const roleForm = useForm<RoleFormData>(emptyRoleForm);
+    const [feedbackSearchDraft, setFeedbackSearchDraft] = useState(
+        filters?.feedbackSearch ?? '',
+    );
+    const [usersSearchDraft, setUsersSearchDraft] = useState('');
+    const [usersRoleFilter, setUsersRoleFilter] =
+        useState<UserRoleFilter>('all');
     const [activityLiveStatus, setActivityLiveStatus] = useState<
         'live' | 'updating' | 'error'
     >('live');
     const activeSection = isSectionId(section) ? section : 'overview';
     const totalTokenUsage =
         totals?.totalTokenUsage ??
-        tokenUsageItems.reduce((total, item) => total + item.totalTokens, 0);
-    const totalPromptTokens = tokenUsageItems.reduce(
+        tokenUsageSummaryItems.reduce(
+            (total, item) => total + item.totalTokens,
+            0,
+        );
+    const totalPromptTokens = tokenUsageSummaryItems.reduce(
         (total, item) => total + item.promptTokens,
         0,
     );
-    const totalCompletionTokens = tokenUsageItems.reduce(
+    const totalCompletionTokens = tokenUsageSummaryItems.reduce(
         (total, item) => total + item.completionTokens,
         0,
     );
-    const totalAiRequests = tokenUsageItems.reduce(
+    const totalAiRequests = tokenUsageSummaryItems.reduce(
         (total, item) => total + item.requests,
         0,
     );
@@ -443,7 +696,7 @@ export default function AdminPage() {
         totalTokenUsage / Math.max(totalAiRequests, 1),
     );
     const topTokenUser =
-        tokenUsageItems.reduce<TokenUsageItem | null>(
+        tokenUsageSummaryItems.reduce<TokenUsageItem | null>(
             (topUser, item) =>
                 !topUser || item.totalTokens > topUser.totalTokens
                     ? item
@@ -471,6 +724,7 @@ export default function AdminPage() {
         roleItems[0]?.slug ??
         'user';
     const activityPeriod = filters?.period ?? 'month';
+    const feedbackStatus = filters?.feedbackStatus ?? 'all';
     const activityStats = {
         activityToday:
             liveActivityTotals?.activityToday ?? totals?.activityToday ?? 0,
@@ -493,18 +747,18 @@ export default function AdminPage() {
     const ignoredFeedbackReviews = localFeedbackReviewItems.filter(
         (item) => item.status === 'ignored',
     ).length;
-    const feedbackReviewDisplayItems = [...localFeedbackReviewItems].sort(
-        (first, second) => {
-            const statusOrder: Record<FeedbackReviewItem['status'], number> = {
-                open: 0,
-                reviewing: 1,
-                resolved: 2,
-                ignored: 3,
-            };
+    const feedbackReviewDisplayItems = localFeedbackReviewItems;
+    const filteredAdminUsers = adminUsers.filter((item) => {
+        const normalizedSearch = usersSearchDraft.trim().toLowerCase();
+        const matchesSearch =
+            normalizedSearch === '' ||
+            item.name.toLowerCase().includes(normalizedSearch) ||
+            item.email.toLowerCase().includes(normalizedSearch);
+        const matchesRole =
+            usersRoleFilter === 'all' || item.role === usersRoleFilter;
 
-            return statusOrder[first.status] - statusOrder[second.status];
-        },
-    );
+        return matchesSearch && matchesRole;
+    });
     const selectedFeedbackReview =
         localFeedbackReviewItems.find(
             (item) => item.id === selectedFeedbackReviewId,
@@ -521,29 +775,145 @@ export default function AdminPage() {
     );
     const sidebarNavigationGroups = [
         {
-            label: 'Menu',
+            label: 'Ringkasan',
             items: navigation.filter((item) =>
-                ['overview', 'token-usage', 'feedback-review'].includes(
-                    item.id,
-                ),
+                ['overview', 'analytic', 'feedback-review'].includes(item.id),
             ),
         },
         {
-            label: 'Admin',
+            label: 'Manajemen',
             items: navigation.filter((item) =>
                 ['users', 'roles', 'activity-log'].includes(item.id),
             ),
         },
     ];
 
-    useEffect(() => {
+    const [prevActivitySync, setPrevActivitySync] = useState<
+        [typeof adminActivityItems, typeof adminActivityPagination] | null
+    >(null);
+
+    if (
+        prevActivitySync === null ||
+        prevActivitySync[0] !== adminActivityItems ||
+        prevActivitySync[1] !== adminActivityPagination
+    ) {
+        setPrevActivitySync([adminActivityItems, adminActivityPagination]);
         setLiveActivityItems(adminActivityItems);
         setLiveActivityTotals(null);
-    }, [adminActivityItems]);
+        setLiveActivityPagination(adminActivityPagination);
+    }
+
+    const feedbackSearchFilter = filters?.feedbackSearch ?? '';
+    const [prevFeedbackSync, setPrevFeedbackSync] = useState<
+        | [typeof feedbackReviewItems, typeof feedbackReviewPagination, string]
+        | null
+    >(null);
+
+    if (
+        prevFeedbackSync === null ||
+        prevFeedbackSync[0] !== feedbackReviewItems ||
+        prevFeedbackSync[1] !== feedbackReviewPagination ||
+        prevFeedbackSync[2] !== feedbackSearchFilter
+    ) {
+        setPrevFeedbackSync([
+            feedbackReviewItems,
+            feedbackReviewPagination,
+            feedbackSearchFilter,
+        ]);
+        setLocalFeedbackReviewItems(feedbackReviewItems);
+        setLiveFeedbackReviewPagination(feedbackReviewPagination);
+        setFeedbackSearchDraft(feedbackSearchFilter);
+    }
+
+    const tokenSearchFilter = filters?.tokenSearch ?? '';
+    const [prevTokenSearchFilter, setPrevTokenSearchFilter] = useState<
+        string | null
+    >(null);
+
+    if (prevTokenSearchFilter !== tokenSearchFilter) {
+        setPrevTokenSearchFilter(tokenSearchFilter);
+        setAnalyticSearchDraft(tokenSearchFilter);
+    }
+
+    const selectedFeedbackReviewIdKey = selectedFeedbackReview?.id ?? null;
+    const selectedFeedbackReviewImprovement =
+        selectedFeedbackReview?.aiImprovement ?? '';
+    const [prevImprovementSync, setPrevImprovementSync] = useState<
+        [number | null, string] | null
+    >(null);
+
+    if (
+        prevImprovementSync === null ||
+        prevImprovementSync[0] !== selectedFeedbackReviewIdKey ||
+        prevImprovementSync[1] !== selectedFeedbackReviewImprovement
+    ) {
+        setPrevImprovementSync([
+            selectedFeedbackReviewIdKey,
+            selectedFeedbackReviewImprovement,
+        ]);
+        setImprovementDraft(selectedFeedbackReviewImprovement);
+    }
 
     useEffect(() => {
-        setLocalFeedbackReviewItems(feedbackReviewItems);
-    }, [feedbackReviewItems]);
+        window.localStorage.setItem(
+            'admin-sidebar-collapsed',
+            sidebarCollapsed ? 'true' : 'false',
+        );
+    }, [sidebarCollapsed]);
+
+    useEffect(() => {
+        if (activeSection !== 'analytic') {
+            return;
+        }
+
+        const normalizedDraft = analyticSearchDraft.trim();
+        const normalizedCurrent = filters?.tokenSearch?.trim() ?? '';
+
+        if (normalizedDraft === normalizedCurrent) {
+            return;
+        }
+
+        const timeout = window.setTimeout(() => {
+            updateAnalyticFilters({
+                search: analyticSearchDraft,
+                page: 1,
+            });
+        }, 350);
+
+        return () => {
+            window.clearTimeout(timeout);
+        };
+    }, [activeSection, analyticSearchDraft, filters?.tokenSearch]);
+
+    useEffect(() => {
+        if (activeSection !== 'feedback-review') {
+            return;
+        }
+
+        const normalizedDraft = feedbackSearchDraft.trim();
+        const normalizedCurrent = filters?.feedbackSearch?.trim() ?? '';
+
+        if (normalizedDraft === normalizedCurrent) {
+            return;
+        }
+
+        const timeout = window.setTimeout(() => {
+            updateFeedbackReviewFilters({
+                search: feedbackSearchDraft,
+                status: feedbackStatus,
+                page: 1,
+            });
+        }, 350);
+
+        return () => {
+            window.clearTimeout(timeout);
+        };
+    }, [
+        activeSection,
+        feedbackSearchDraft,
+        feedbackStatus,
+        filters?.feedbackSearch,
+    ]);
 
     useEffect(() => {
         if (activeSection !== 'activity-log') {
@@ -565,6 +935,8 @@ export default function AdminPage() {
                 url.searchParams.set('search', normalizedSearch);
             }
 
+            url.searchParams.set('page', String(filters?.page ?? 1));
+
             try {
                 setActivityLiveStatus('updating');
 
@@ -584,6 +956,7 @@ export default function AdminPage() {
                     (await response.json()) as ActivityLogLivePayload;
 
                 setLiveActivityItems(payload.adminActivityItems);
+                setLiveActivityPagination(payload.pagination);
                 setLiveActivityTotals(payload.totals);
                 setActivityLiveStatus('live');
             } catch (error) {
@@ -604,7 +977,7 @@ export default function AdminPage() {
             controller.abort();
             window.clearInterval(interval);
         };
-    }, [activeSection, activityPeriod, filters?.search]);
+    }, [activeSection, activityPeriod, filters?.search, filters?.page]);
 
     const openCreateRoleDialog = () => {
         setSelectedRole(null);
@@ -725,6 +1098,22 @@ export default function AdminPage() {
         });
     };
 
+    const applyFeedbackReviewPayload = (
+        id: number,
+        payload: Partial<FeedbackReviewItem>,
+    ) => {
+        setLocalFeedbackReviewItems((items) =>
+            items.map((item) =>
+                item.id === id ? { ...item, ...payload } : item,
+            ),
+        );
+    };
+
+    const getCsrfToken = () =>
+        document
+            .querySelector('meta[name="csrf-token"]')
+            ?.getAttribute('content');
+
     const updateFeedbackReviewStatus = (
         id: number,
         status: FeedbackReviewItem['status'],
@@ -733,9 +1122,7 @@ export default function AdminPage() {
             items.map((item) => (item.id === id ? { ...item, status } : item)),
         );
 
-        const csrfToken = document
-            .querySelector('meta[name="csrf-token"]')
-            ?.getAttribute('content');
+        const csrfToken = getCsrfToken();
 
         if (!csrfToken) {
             return;
@@ -754,13 +1141,8 @@ export default function AdminPage() {
         });
     };
 
-    const completeFeedbackReview = (
-        id: number,
-        action: 'solve' | 'ignore',
-    ) => {
-        const csrfToken = document
-            .querySelector('meta[name="csrf-token"]')
-            ?.getAttribute('content');
+    const completeFeedbackReview = (id: number, action: 'solve' | 'ignore') => {
+        const csrfToken = getCsrfToken();
 
         if (!csrfToken) {
             return;
@@ -776,7 +1158,11 @@ export default function AdminPage() {
                 'Content-Type': 'application/json',
                 'X-CSRF-TOKEN': csrfToken,
             },
-            body: JSON.stringify({}),
+            body: JSON.stringify({
+                ...(action === 'solve' && improvementDraft.trim() !== ''
+                    ? { improvement: improvementDraft.trim() }
+                    : {}),
+            }),
         })
             .then(async (response) => {
                 if (!response.ok) {
@@ -787,14 +1173,93 @@ export default function AdminPage() {
                     data: Partial<FeedbackReviewItem> & { id: number };
                 };
 
-                setLocalFeedbackReviewItems((items) =>
-                    items.map((item) =>
-                        item.id === id ? { ...item, ...payload.data } : item,
-                    ),
-                );
+                applyFeedbackReviewPayload(id, payload.data);
             })
             .catch((error) => {
                 console.error('Failed to complete feedback review:', error);
+            })
+            .finally(() => {
+                setPendingFeedbackAction((current) =>
+                    current === actionKey ? null : current,
+                );
+            });
+    };
+
+    const saveFeedbackImprovement = (id: number) => {
+        const csrfToken = getCsrfToken();
+
+        if (!csrfToken || improvementDraft.trim() === '') {
+            return;
+        }
+
+        const actionKey = `save:${id}`;
+        setPendingFeedbackAction(actionKey);
+
+        void fetch(`/admin/feedback-review/${id}/improvement`, {
+            method: 'PATCH',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            body: JSON.stringify({
+                improvement: improvementDraft.trim(),
+            }),
+        })
+            .then(async (response) => {
+                if (!response.ok) {
+                    throw new Error('Failed to save feedback improvement.');
+                }
+
+                const payload = (await response.json()) as {
+                    data: Partial<FeedbackReviewItem> & { id: number };
+                };
+
+                applyFeedbackReviewPayload(id, payload.data);
+            })
+            .catch((error) => {
+                console.error('Failed to save feedback improvement:', error);
+            })
+            .finally(() => {
+                setPendingFeedbackAction((current) =>
+                    current === actionKey ? null : current,
+                );
+            });
+    };
+
+    const rollbackFeedbackReview = (id: number) => {
+        const csrfToken = getCsrfToken();
+
+        if (!csrfToken) {
+            return;
+        }
+
+        const actionKey = `rollback:${id}`;
+        setPendingFeedbackAction(actionKey);
+
+        void fetch(`/admin/feedback-review/${id}/rollback`, {
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            body: JSON.stringify({}),
+        })
+            .then(async (response) => {
+                if (!response.ok) {
+                    throw new Error('Failed to rollback feedback review.');
+                }
+
+                const payload = (await response.json()) as {
+                    data: Partial<FeedbackReviewItem> & { id: number };
+                };
+
+                applyFeedbackReviewPayload(id, payload.data);
+                setImprovementDraft('');
+            })
+            .catch((error) => {
+                console.error('Failed to rollback feedback review:', error);
             })
             .finally(() => {
                 setPendingFeedbackAction((current) =>
@@ -809,12 +1274,12 @@ export default function AdminPage() {
 
             <div className="h-screen overflow-hidden bg-background text-foreground">
                 <aside
-                    className={`fixed inset-y-0 left-0 z-30 hidden border-r bg-card transition-[width] duration-200 lg:flex lg:flex-col ${
+                    className={`fixed inset-y-0 left-0 z-30 hidden border-r border-[#d9e4f2] bg-[#f7fbff] shadow-[0_10px_30px_rgba(15,23,42,0.05)] transition-[width] duration-200 lg:flex lg:flex-col ${
                         sidebarCollapsed ? 'w-20' : 'w-64'
                     }`}
                 >
                     <div
-                        className={`flex h-16 items-center border-b px-4 ${
+                        className={`flex h-18 items-center border-b border-[#d9e4f2] px-4 ${
                             sidebarCollapsed ? 'justify-center' : 'gap-3'
                         }`}
                     >
@@ -825,7 +1290,7 @@ export default function AdminPage() {
                                     ? 'Buka sidebar'
                                     : 'Tutup sidebar'
                             }
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-muted/50 text-primary ring-1 ring-border transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef5ff] text-primary ring-1 ring-[#cfe0f5] transition-colors hover:bg-[#e4efff] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                             onClick={() =>
                                 setSidebarCollapsed((value) => !value)
                             }
@@ -835,20 +1300,20 @@ export default function AdminPage() {
                         <div
                             className={`min-w-0 leading-none ${sidebarCollapsed ? 'hidden' : ''}`}
                         >
-                            <p className="truncate text-[15px] leading-5 font-semibold text-foreground">
+                            <p className="truncate text-[15px] leading-5 font-semibold text-[#1e293b]">
                                 Deka Admin
                             </p>
-                            <p className="mt-0.5 truncate text-xs leading-4 text-muted-foreground">
+                            <p className="mt-0.5 truncate text-xs leading-4 text-[#64748b]">
                                 Chatbot operations
                             </p>
                         </div>
                     </div>
 
-                    <nav className="flex-1 space-y-3 px-3 py-3">
+                    <nav className="flex-1 space-y-4 px-3 py-4">
                         {sidebarNavigationGroups.map((group) => (
-                            <div key={group.label} className="space-y-1">
+                            <div key={group.label} className="space-y-1.5">
                                 <p
-                                    className={`px-3 pb-0.5 text-[11px] leading-4 font-semibold tracking-wide text-muted-foreground/70 uppercase ${
+                                    className={`px-3 pb-1 text-[11px] leading-4 font-semibold tracking-[0.12em] text-[#94a3b8] uppercase ${
                                         sidebarCollapsed ? 'hidden' : ''
                                     }`}
                                 >
@@ -863,13 +1328,19 @@ export default function AdminPage() {
                                                 ? item.label
                                                 : undefined
                                         }
-                                        className={`flex h-10 w-full items-center rounded-md text-sm font-medium transition-colors ${
+                                        className={`group relative flex h-11 w-full items-center overflow-hidden rounded-xl text-sm font-medium transition-all ${
                                             activeSection === item.id
-                                                ? 'bg-primary/90 text-primary-foreground'
-                                                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-                                        } ${sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3'}`}
+                                                ? 'bg-[#2563eb] text-white'
+                                                : 'text-[#64748b] hover:bg-[#eef5ff] hover:text-[#1e3a8a]'
+                                        } ${sidebarCollapsed ? 'justify-center px-0' : 'gap-3 px-3.5'}`}
                                     >
-                                        <item.icon className="h-4 w-4 shrink-0" />
+                                        <item.icon
+                                            className={`h-4 w-4 shrink-0 transition-transform ${
+                                                activeSection === item.id
+                                                    ? 'text-white'
+                                                    : 'text-[#64748b] group-hover:text-[#2563eb]'
+                                            }`}
+                                        />
                                         <span
                                             className={`truncate ${sidebarCollapsed ? 'hidden' : ''}`}
                                         >
@@ -881,24 +1352,24 @@ export default function AdminPage() {
                         ))}
                     </nav>
 
-                    <div className="border-t p-3">
+                    <div className="border-t border-[#d9e4f2] p-3">
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                                 {sidebarCollapsed ? (
                                     <button
                                         type="button"
                                         title={auth.user.name}
-                                        className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-muted text-sm font-semibold text-primary ring-1 ring-border transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                        className="mx-auto flex h-11 w-11 items-center justify-center rounded-full bg-[#eef5ff] text-sm font-semibold text-primary ring-1 ring-[#cfe0f5] transition-colors hover:bg-[#e4efff] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                     >
                                         {profileInitials}
                                     </button>
                                 ) : (
                                     <button
                                         type="button"
-                                        className="flex w-full items-center gap-3 rounded-md border bg-muted/30 p-3 text-left transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                        className="flex w-full items-center gap-3 rounded-xl border border-[#d9e4f2] bg-[#eef5ff] p-3 text-left transition-colors hover:bg-[#e4efff] focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                     >
                                         <UserInfo user={auth.user} showEmail />
-                                        <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
+                                        <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-[#94a3b8]" />
                                     </button>
                                 )}
                             </DropdownMenuTrigger>
@@ -923,7 +1394,7 @@ export default function AdminPage() {
                         sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-64'
                     }`}
                 >
-                    <header className="z-20 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur md:px-6">
+                    <header className="z-20 flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white/92 px-4 backdrop-blur md:px-6">
                         <div className="flex items-center gap-3">
                             <DekaLogo className="h-8 w-auto lg:hidden" />
                             <Separator
@@ -942,8 +1413,8 @@ export default function AdminPage() {
                         </div>
                     </header>
 
-                    <main className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto px-4 py-6 md:px-6">
-                        <div className="flex shrink-0 gap-2 overflow-x-auto pb-1 lg:hidden">
+                    <main className="flex min-h-0 w-full flex-1 flex-col gap-6 overflow-y-auto bg-slate-50/70 px-4 py-6 md:px-6">
+                        <div className="-mx-4 flex shrink-0 gap-2 overflow-x-auto border-b border-slate-200/70 bg-white/80 px-4 pb-3 lg:hidden">
                             {navigation.map((item) => (
                                 <Button
                                     key={item.id}
@@ -954,7 +1425,7 @@ export default function AdminPage() {
                                             ? 'default'
                                             : 'outline'
                                     }
-                                    className="shrink-0"
+                                    className="h-9 shrink-0 rounded-full"
                                 >
                                     <Link href={sectionHref(item.id)}>
                                         <item.icon className="h-4 w-4" />
@@ -975,28 +1446,46 @@ export default function AdminPage() {
                                     ))}
                                 </div>
 
-                                <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-[1.2fr_1fr_1fr]">
-                                    <AdminConversationChart
-                                        data={chatTrendItems}
-                                        className="flex min-h-0 flex-col"
-                                        chartClassName="h-full min-h-[240px]"
-                                    />
-                                    <AdminFeedbackBarChart
-                                        data={feedbackChartItems}
-                                        className="flex min-h-0 flex-col"
-                                        chartClassName="h-full min-h-[240px]"
-                                    />
-                                    <AdminTokenUsageChart
-                                        data={tokenUsageItems}
-                                        trend={tokenUsageTrend}
-                                        className="flex min-h-0 flex-col"
-                                        chartClassName="h-full min-h-[240px]"
-                                    />
+                                <div className="grid min-h-0 flex-1 items-stretch gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.95fr)_minmax(340px,0.85fr)]">
+                                    <Suspense
+                                        fallback={
+                                            <ChartFallback className="min-h-[320px]" />
+                                        }
+                                    >
+                                        <AdminConversationChart
+                                            data={chatTrendItems}
+                                            className="flex h-full min-h-0 flex-col"
+                                            chartClassName="h-[220px]"
+                                        />
+                                    </Suspense>
+                                    <Suspense
+                                        fallback={
+                                            <ChartFallback className="min-h-[320px]" />
+                                        }
+                                    >
+                                        <AdminFeedbackBarChart
+                                            data={feedbackChartItems}
+                                            className="flex min-h-0 flex-col"
+                                            chartClassName="h-[220px]"
+                                        />
+                                    </Suspense>
+                                    <Suspense
+                                        fallback={
+                                            <ChartFallback className="min-h-[320px]" />
+                                        }
+                                    >
+                                        <AdminTokenUsageChart
+                                            data={tokenUsageItems}
+                                            trend={tokenUsageTrend}
+                                            className="flex flex-col"
+                                            chartClassName="h-[180px] max-h-[180px]"
+                                        />
+                                    </Suspense>
                                 </div>
                             </section>
                         )}
 
-                        {activeSection === 'token-usage' && (
+                        {activeSection === 'analytic' && (
                             <section className="flex min-h-0 flex-1 flex-col gap-6">
                                 <div className="grid shrink-0 gap-4 md:grid-cols-2 2xl:grid-cols-4">
                                     <UserMetricCard
@@ -1027,12 +1516,18 @@ export default function AdminPage() {
                                     />
                                 </div>
 
-                                <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(360px,0.8fr)]">
-                                    <AdminTokenTrendChart
-                                        data={tokenTrendItems}
-                                        className="flex min-h-[430px] flex-col"
-                                        chartClassName="h-full min-h-[300px]"
-                                    />
+                                <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]">
+                                    <Suspense
+                                        fallback={
+                                            <ChartFallback className="min-h-[380px]" />
+                                        }
+                                    >
+                                        <AdminTokenTrendChart
+                                            data={tokenTrendItems}
+                                            className="flex min-h-[380px] flex-col"
+                                            chartClassName="h-full min-h-[260px]"
+                                        />
+                                    </Suspense>
 
                                     <Card className="rounded-lg">
                                         <CardHeader className="pb-4">
@@ -1044,7 +1539,7 @@ export default function AdminPage() {
                                                 pemakaian token saat ini.
                                             </CardDescription>
                                         </CardHeader>
-                                        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                                        <CardContent className="space-y-3">
                                             <TokenInsightCard
                                                 label="Pengguna tertinggi"
                                                 value={
@@ -1057,9 +1552,10 @@ export default function AdminPage() {
                                                         ? `${formatNumber(topTokenUser.totalTokens)} token`
                                                         : 'Belum ada data'
                                                 }
+                                                tone="blue"
+                                                variant="hero"
                                             />
-                                            <TokenInsightCard
-                                                label="Trend bulan ini"
+                                            <TokenTrendSummaryCard
                                                 value={
                                                     tokenUsageTrendLabel.value
                                                 }
@@ -1067,28 +1563,34 @@ export default function AdminPage() {
                                                     tokenUsageTrendLabel.detail
                                                 }
                                             />
-                                            <TokenInsightCard
-                                                label="Biaya / request"
-                                                value={formatUsd(
-                                                    estimatedCostPerRequest,
-                                                )}
-                                                detail="Estimasi rata-rata biaya"
-                                            />
-                                            <TokenInsightCard
-                                                label="Input : Output"
-                                                value={`${promptTokenShare}:${completionTokenShare}`}
-                                                detail="Rasio komposisi token"
-                                            />
+                                            <div className="grid gap-3 sm:grid-cols-2">
+                                                <TokenInsightCard
+                                                    label="Biaya / request"
+                                                    value={formatUsd(
+                                                        estimatedCostPerRequest,
+                                                    )}
+                                                    detail="Estimasi rata-rata biaya"
+                                                    tone="green"
+                                                    variant="compact"
+                                                />
+                                                <TokenInsightCard
+                                                    label="Input : Output"
+                                                    value={`${promptTokenShare}:${completionTokenShare}`}
+                                                    detail="Rasio komposisi token"
+                                                    tone="neutral"
+                                                    variant="compact"
+                                                />
+                                            </div>
                                         </CardContent>
                                     </Card>
                                 </div>
 
                                 <Card className="rounded-lg">
                                     <CardHeader className="gap-3 pb-4">
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                                             <div>
                                                 <CardTitle>
-                                                    Usage token per user
+                                                    Penggunaan token per user
                                                 </CardTitle>
                                                 <CardDescription>
                                                     Ringkasan token AI yang
@@ -1098,13 +1600,50 @@ export default function AdminPage() {
                                                     token jawaban AI.
                                                 </CardDescription>
                                             </div>
-                                            <Badge
-                                                variant="secondary"
-                                                className="w-fit"
-                                            >
-                                                {formatNumber(totalTokenUsage)}{' '}
-                                                total token
-                                            </Badge>
+                                            <div className="flex flex-col gap-3 lg:min-w-[520px] lg:items-end">
+                                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                                                    <Input
+                                                        value={
+                                                            analyticSearchDraft
+                                                        }
+                                                        onChange={(event) =>
+                                                            setAnalyticSearchDraft(
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                        placeholder="Cari nama atau email pengguna..."
+                                                        className="w-full sm:w-[360px]"
+                                                    />
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="w-fit"
+                                                    >
+                                                        {formatNumber(
+                                                            analyticTokenUsagePagination.total,
+                                                        )}{' '}
+                                                        pengguna terdata
+                                                    </Badge>
+                                                    {filters?.tokenSearch && (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() =>
+                                                                updateAnalyticFilters(
+                                                                    {
+                                                                        page: 1,
+                                                                    },
+                                                                )
+                                                            }
+                                                        >
+                                                            Reset filter
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
                                     </CardHeader>
                                     <CardContent className="flex flex-1 flex-col gap-4">
@@ -1151,8 +1690,9 @@ export default function AdminPage() {
                                                         Total
                                                     </span>
                                                 </div>
-                                                {tokenUsageItems.length > 0 ? (
-                                                    tokenUsageItems.map(
+                                                {analyticTokenUsageItems.length >
+                                                0 ? (
+                                                    analyticTokenUsageItems.map(
                                                         (item) => (
                                                             <div
                                                                 key={item.email}
@@ -1222,6 +1762,64 @@ export default function AdminPage() {
                                                 )}
                                             </div>
                                         </div>
+                                        <div className="mt-1 flex flex-col gap-3 border-t pt-4 lg:flex-row lg:items-center lg:justify-between">
+                                            <p className="text-sm leading-6 text-muted-foreground">
+                                                {analyticTokenUsagePagination.total >
+                                                0
+                                                    ? `Menampilkan ${analyticTokenUsagePagination.from}-${analyticTokenUsagePagination.to} dari ${analyticTokenUsagePagination.total} pengguna`
+                                                    : 'Belum ada data analytic untuk filter ini.'}
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={
+                                                        analyticTokenUsagePagination.currentPage <=
+                                                        1
+                                                    }
+                                                    onClick={() =>
+                                                        updateAnalyticFilters({
+                                                            search: analyticSearchDraft,
+                                                            page:
+                                                                analyticTokenUsagePagination.currentPage -
+                                                                1,
+                                                        })
+                                                    }
+                                                >
+                                                    Sebelumnya
+                                                </Button>
+                                                <div className="min-w-[132px] rounded-md border bg-muted/30 px-3 py-1.5 text-center text-sm text-foreground">
+                                                    Halaman{' '}
+                                                    {
+                                                        analyticTokenUsagePagination.currentPage
+                                                    }{' '}
+                                                    /{' '}
+                                                    {Math.max(
+                                                        analyticTokenUsagePagination.lastPage,
+                                                        1,
+                                                    )}
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={
+                                                        !analyticTokenUsagePagination.hasMorePages
+                                                    }
+                                                    onClick={() =>
+                                                        updateAnalyticFilters({
+                                                            search: analyticSearchDraft,
+                                                            page:
+                                                                analyticTokenUsagePagination.currentPage +
+                                                                1,
+                                                        })
+                                                    }
+                                                >
+                                                    Berikutnya
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </CardContent>
                                 </Card>
                             </section>
@@ -1248,7 +1846,7 @@ export default function AdminPage() {
                                     />
                                     <UserMetricCard
                                         icon={ShieldCheck}
-                                        label="Solved"
+                                        label="Selesai"
                                         tone="green"
                                         value={formatNumber(
                                             resolvedFeedbackReviews,
@@ -1256,7 +1854,7 @@ export default function AdminPage() {
                                     />
                                     <UserMetricCard
                                         icon={MessageSquare}
-                                        label="Ignored"
+                                        label="Diabaikan"
                                         tone="neutral"
                                         value={formatNumber(
                                             ignoredFeedbackReviews,
@@ -1269,27 +1867,99 @@ export default function AdminPage() {
                                         <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                                             <div>
                                                 <CardTitle>
-                                                    Issue review dislike
+                                                    Feedback yang perlu ditinjau
                                                 </CardTitle>
                                                 <CardDescription>
-                                                    Admin menentukan feedback
-                                                    mana yang valid untuk
-                                                    diperbaiki AI ke depannya.
+                                                    Tentukan masukan mana yang
+                                                    perlu dipakai untuk
+                                                    memperbaiki jawaban AI.
                                                 </CardDescription>
                                             </div>
-                                            <Badge
-                                                variant="secondary"
-                                                className="w-fit"
-                                            >
-                                                {formatNumber(
-                                                    localFeedbackReviewItems.length,
-                                                )}{' '}
-                                                feedback masuk
-                                            </Badge>
+                                            <div className="flex flex-col gap-3 lg:min-w-[520px] lg:items-end">
+                                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                                                    <Input
+                                                        value={
+                                                            feedbackSearchDraft
+                                                        }
+                                                        onChange={(event) =>
+                                                            setFeedbackSearchDraft(
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                        placeholder="Cari user, email, alasan, issue..."
+                                                        className="w-full sm:w-[360px]"
+                                                    />
+                                                    <Select
+                                                        value={feedbackStatus}
+                                                        onValueChange={(
+                                                            value,
+                                                        ) =>
+                                                            updateFeedbackReviewFilters(
+                                                                {
+                                                                    search: feedbackSearchDraft,
+                                                                    status: value as FeedbackStatusFilter,
+                                                                    page: 1,
+                                                                },
+                                                            )
+                                                        }
+                                                    >
+                                                        <SelectTrigger className="w-full sm:w-[180px]">
+                                                            <SelectValue placeholder="Semua status" />
+                                                        </SelectTrigger>
+                                                        <SelectContent align="end">
+                                                            <SelectItem value="all">
+                                                                Semua status
+                                                            </SelectItem>
+                                                            <SelectItem value="open">
+                                                                Baru
+                                                            </SelectItem>
+                                                            <SelectItem value="reviewing">
+                                                                Sedang ditinjau
+                                                            </SelectItem>
+                                                            <SelectItem value="resolved">
+                                                                Selesai
+                                                            </SelectItem>
+                                                            <SelectItem value="ignored">
+                                                                Diabaikan
+                                                            </SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                                                    <Badge
+                                                        variant="secondary"
+                                                        className="w-fit"
+                                                    >
+                                                        {formatNumber(
+                                                            liveFeedbackReviewPagination.total,
+                                                        )}{' '}
+                                                        feedback masuk
+                                                    </Badge>
+                                                    {(filters?.feedbackSearch ||
+                                                        feedbackStatus !==
+                                                            'all') && (
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            onClick={() =>
+                                                                updateFeedbackReviewFilters(
+                                                                    {
+                                                                        page: 1,
+                                                                    },
+                                                                )
+                                                            }
+                                                        >
+                                                            Reset filter
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
                                         </div>
                                     </CardHeader>
-                                    <CardContent className="min-h-0 flex-1">
-                                        <div className="h-full overflow-x-auto rounded-md border">
+                                    <CardContent className="flex min-h-0 flex-1 flex-col">
+                                        <div className="min-h-0 flex-1 overflow-x-auto rounded-md border">
                                             <div className="min-w-[920px]">
                                                 <div className="grid grid-cols-[minmax(170px,0.75fr)_minmax(250px,1fr)_minmax(360px,1.45fr)_150px_120px_170px] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                                     <span>User</span>
@@ -1331,7 +2001,10 @@ export default function AdminPage() {
                                                                     }
                                                                 }}
                                                                 className={`grid grid-cols-[minmax(170px,0.75fr)_minmax(250px,1fr)_minmax(360px,1.45fr)_150px_120px_170px] gap-3 border-b px-4 last:border-b-0 ${
-                                                                    ['resolved', 'ignored'].includes(
+                                                                    [
+                                                                        'resolved',
+                                                                        'ignored',
+                                                                    ].includes(
                                                                         item.status,
                                                                     )
                                                                         ? 'bg-slate-50/70 py-3 text-muted-foreground'
@@ -1382,15 +2055,16 @@ export default function AdminPage() {
                                                                             variant="outline"
                                                                             className="w-fit border-emerald-200 bg-emerald-50 text-emerald-700"
                                                                         >
-                                                                            Improvement
+                                                                            Perbaikan
                                                                             tersimpan
                                                                         </Badge>
                                                                     ) : item.status ===
                                                                       'ignored' ? (
                                                                         <div className="text-xs leading-5 text-muted-foreground">
                                                                             Tidak
-                                                                            masuk
-                                                                            learning
+                                                                            dipakai
+                                                                            untuk
+                                                                            perbaikan
                                                                             AI.
                                                                         </div>
                                                                     ) : null}
@@ -1404,7 +2078,7 @@ export default function AdminPage() {
                                                                     {item.status ===
                                                                     'resolved' ? (
                                                                         <p className="text-xs leading-4 text-emerald-700">
-                                                                            Improvement
+                                                                            Perbaikan
                                                                             aktif
                                                                         </p>
                                                                     ) : item.status ===
@@ -1484,8 +2158,8 @@ export default function AdminPage() {
                                                                             >
                                                                                 {pendingFeedbackAction ===
                                                                                 `ignore:${item.id}`
-                                                                                    ? 'Closing'
-                                                                                    : 'Ignore'}
+                                                                                    ? 'Menutup...'
+                                                                                    : 'Abaikan'}
                                                                             </Button>
                                                                             <Button
                                                                                 type="button"
@@ -1506,8 +2180,8 @@ export default function AdminPage() {
                                                                             >
                                                                                 {pendingFeedbackAction ===
                                                                                 `solve:${item.id}`
-                                                                                    ? 'Solving'
-                                                                                    : 'Solve'}
+                                                                                    ? 'Menyelesaikan...'
+                                                                                    : 'Simpan perbaikan'}
                                                                             </Button>
                                                                         </>
                                                                     )}
@@ -1520,6 +2194,70 @@ export default function AdminPage() {
                                                 )}
                                             </div>
                                         </div>
+                                        <div className="mt-4 flex flex-col gap-3 border-t pt-4 lg:flex-row lg:items-center lg:justify-between">
+                                            <p className="text-sm leading-6 text-muted-foreground">
+                                                {liveFeedbackReviewPagination.total >
+                                                0
+                                                    ? `Menampilkan ${liveFeedbackReviewPagination.from}-${liveFeedbackReviewPagination.to} dari ${liveFeedbackReviewPagination.total} feedback`
+                                                    : 'Belum ada feedback untuk filter ini.'}
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={
+                                                        liveFeedbackReviewPagination.currentPage <=
+                                                        1
+                                                    }
+                                                    onClick={() =>
+                                                        updateFeedbackReviewFilters(
+                                                            {
+                                                                search: feedbackSearchDraft,
+                                                                status: feedbackStatus,
+                                                                page:
+                                                                    liveFeedbackReviewPagination.currentPage -
+                                                                    1,
+                                                            },
+                                                        )
+                                                    }
+                                                >
+                                                    Sebelumnya
+                                                </Button>
+                                                <div className="min-w-[132px] rounded-md border bg-muted/30 px-3 py-1.5 text-center text-sm text-foreground">
+                                                    Halaman{' '}
+                                                    {
+                                                        liveFeedbackReviewPagination.currentPage
+                                                    }{' '}
+                                                    /{' '}
+                                                    {Math.max(
+                                                        liveFeedbackReviewPagination.lastPage,
+                                                        1,
+                                                    )}
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={
+                                                        !liveFeedbackReviewPagination.hasMorePages
+                                                    }
+                                                    onClick={() =>
+                                                        updateFeedbackReviewFilters(
+                                                            {
+                                                                search: feedbackSearchDraft,
+                                                                status: feedbackStatus,
+                                                                page:
+                                                                    liveFeedbackReviewPagination.currentPage +
+                                                                    1,
+                                                            },
+                                                        )
+                                                    }
+                                                >
+                                                    Berikutnya
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </CardContent>
                                 </Card>
                             </section>
@@ -1527,7 +2265,15 @@ export default function AdminPage() {
 
                         {activeSection === 'chat-trend' && (
                             <section className="min-h-0">
-                                <AdminConversationChart data={chatTrendItems} />
+                                <Suspense
+                                    fallback={
+                                        <ChartFallback className="min-h-[360px]" />
+                                    }
+                                >
+                                    <AdminConversationChart
+                                        data={chatTrendItems}
+                                    />
+                                </Suspense>
                             </section>
                         )}
 
@@ -1557,10 +2303,34 @@ export default function AdminPage() {
                                                                 {item.title}
                                                             </p>
                                                             <p className="mt-1 text-sm text-muted-foreground">
-                                                                {item.source}{' '}
-                                                                · {item.chunks}{' '}
-                                                                chunks
+                                                                {item.source} ·{' '}
+                                                                {item.chunks}{' '}
+                                                                bagian data · v
+                                                                {item.version ??
+                                                                    '-'}
                                                             </p>
+                                                            <p className="mt-1 text-xs text-muted-foreground">
+                                                                Aktif v
+                                                                {item.activeVersion ??
+                                                                    '-'}{' '}
+                                                                ·{' '}
+                                                                {item.changedChunks ??
+                                                                    0}{' '}
+                                                                bagian berubah ·
+                                                                validasi{' '}
+                                                                {item.probesPassed ??
+                                                                    0}
+                                                                /
+                                                                {item.probesTotal ??
+                                                                    0}
+                                                            </p>
+                                                            {item.validationError && (
+                                                                <p className="mt-1 text-xs text-destructive">
+                                                                    {
+                                                                        item.validationError
+                                                                    }
+                                                                </p>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     <Badge
@@ -1579,8 +2349,8 @@ export default function AdminPage() {
                                             ))
                                         ) : (
                                             <div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
-                                                Belum ada dokumen knowledge yang
-                                                tersimpan.
+                                                Belum ada dokumen pengetahuan
+                                                yang tersimpan.
                                             </div>
                                         )}
                                     </CardContent>
@@ -1632,7 +2402,7 @@ export default function AdminPage() {
                                         <RuntimePanel
                                             icon={Sparkles}
                                             title="Penyedia AI"
-                                            value="OpenAI compatible"
+                                            value="Kompatibel OpenAI"
                                             detail="Tempat aplikasi mengirim request AI."
                                         />
                                         <RuntimePanel
@@ -1644,7 +2414,7 @@ export default function AdminPage() {
                                         <RuntimePanel
                                             icon={Clock3}
                                             title="Cara balasan"
-                                            value="SSE aktif"
+                                            value="Streaming aktif"
                                             detail="Bot bisa membalas biasa atau streaming bertahap."
                                         />
                                     </CardContent>
@@ -1723,14 +2493,14 @@ export default function AdminPage() {
                                             label="Feedback positif"
                                             value={68}
                                         />
-                                        <div className="rounded-md border border-[#f5d08b] bg-[#fff4df] p-3 text-sm text-[#8a3c06]   ">
+                                        <div className="rounded-md border border-[#f5d08b] bg-[#fff4df] p-3 text-sm text-[#8a3c06]">
                                             <div className="flex items-center gap-2 font-medium">
                                                 <AlertTriangle className="h-4 w-4" />
                                                 Perlu review
                                             </div>
                                             <p className="mt-1 leading-5">
                                                 Beberapa pertanyaan user belum
-                                                memiliki sumber knowledge yang
+                                                memiliki sumber pengetahuan yang
                                                 kuat.
                                             </p>
                                         </div>
@@ -1785,12 +2555,11 @@ export default function AdminPage() {
                                         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                             <div>
                                                 <CardTitle>
-                                                    Daftar Roles
+                                                    Daftar Role
                                                 </CardTitle>
                                                 <CardDescription>
                                                     Kelola role yang bisa
-                                                    dipilih untuk akun
-                                                    pengguna.
+                                                    dipilih untuk akun pengguna.
                                                 </CardDescription>
                                             </div>
                                             <Button
@@ -1805,11 +2574,8 @@ export default function AdminPage() {
                                     </CardHeader>
                                     <CardContent className="min-h-0 flex-1">
                                         <div className="h-full overflow-hidden rounded-md border">
-                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_120px_120px_100px]">
+                                            <div className="grid grid-cols-[1fr_auto] gap-3 border-b bg-muted/50 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase md:grid-cols-[minmax(260px,1fr)_120px_100px]">
                                                 <span>Role</span>
-                                                <span className="hidden md:block">
-                                                    Tipe
-                                                </span>
                                                 <span className="hidden md:block">
                                                     Akun
                                                 </span>
@@ -1822,34 +2588,17 @@ export default function AdminPage() {
                                                 roleItems.map((item) => (
                                                     <div
                                                         key={item.id}
-                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_120px_120px_100px]"
+                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(260px,1fr)_120px_100px]"
                                                     >
                                                         <div className="min-w-0">
-                                                            <div className="flex items-center gap-2">
-                                                                <p className="truncate text-sm font-medium">
-                                                                    {item.name}
-                                                                </p>
-                                                                <Badge
-                                                                    variant="outline"
-                                                                    className="text-[10px] md:hidden"
-                                                                >
-                                                                    {item.system
-                                                                        ? 'Bawaan'
-                                                                        : 'Kustom'}
-                                                                </Badge>
-                                                            </div>
+                                                            <p className="truncate text-sm font-medium">
+                                                                {item.name}
+                                                            </p>
                                                             <p className="mt-1 truncate text-xs text-muted-foreground">
                                                                 {
                                                                     item.description
                                                                 }
                                                             </p>
-                                                        </div>
-                                                        <div className="hidden md:block">
-                                                            <Badge variant="outline">
-                                                                {item.system
-                                                                    ? 'Bawaan'
-                                                                    : 'Kustom'}
-                                                            </Badge>
                                                         </div>
                                                         <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
                                                             {formatNumber(
@@ -1933,7 +2682,7 @@ export default function AdminPage() {
 
                                 <Card className="flex min-h-0 flex-col rounded-lg">
                                     <CardHeader className="gap-3">
-                                        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                        <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                                             <div>
                                                 <CardTitle>
                                                     Daftar Pengguna
@@ -1943,14 +2692,76 @@ export default function AdminPage() {
                                                     chatbot Deka.
                                                 </CardDescription>
                                             </div>
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                onClick={openCreateUserDialog}
-                                            >
-                                                <Plus className="h-4 w-4" />
-                                                Tambah Pengguna
-                                            </Button>
+                                            <div className="flex flex-col gap-3 lg:min-w-[520px] lg:items-end">
+                                                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+                                                    <Input
+                                                        value={usersSearchDraft}
+                                                        onChange={(event) =>
+                                                            setUsersSearchDraft(
+                                                                event.target
+                                                                    .value,
+                                                            )
+                                                        }
+                                                        placeholder="Cari nama atau email pengguna..."
+                                                        className="w-full sm:w-[280px]"
+                                                    />
+                                                    <Select
+                                                        value={usersRoleFilter}
+                                                        onValueChange={(
+                                                            value,
+                                                        ) =>
+                                                            setUsersRoleFilter(
+                                                                value as UserRoleFilter,
+                                                            )
+                                                        }
+                                                    >
+                                                        <SelectTrigger className="w-full sm:w-[180px]">
+                                                            <SelectValue placeholder="Semua role" />
+                                                        </SelectTrigger>
+                                                        <SelectContent align="end">
+                                                            <SelectItem value="all">
+                                                                Semua role
+                                                            </SelectItem>
+                                                            <SelectItem value="admin">
+                                                                Admin
+                                                            </SelectItem>
+                                                            <SelectItem value="user">
+                                                                User
+                                                            </SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        onClick={
+                                                            openCreateUserDialog
+                                                        }
+                                                    >
+                                                        <Plus className="h-4 w-4" />
+                                                        Tambah Pengguna
+                                                    </Button>
+                                                </div>
+                                                {(usersSearchDraft.trim() !==
+                                                    '' ||
+                                                    usersRoleFilter !==
+                                                        'all') && (
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        onClick={() => {
+                                                            setUsersSearchDraft(
+                                                                '',
+                                                            );
+                                                            setUsersRoleFilter(
+                                                                'all',
+                                                            );
+                                                        }}
+                                                    >
+                                                        Reset filter
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </div>
                                     </CardHeader>
                                     <CardContent className="min-h-0 flex-1">
@@ -1971,108 +2782,114 @@ export default function AdminPage() {
                                                 </span>
                                             </div>
 
-                                            {adminUsers.length > 0 ? (
-                                                adminUsers.map((item) => (
-                                                    <div
-                                                        key={item.id}
-                                                        className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(280px,1fr)_130px_140px_120px_110px]"
-                                                    >
-                                                        <div className="min-w-0">
-                                                            <div className="flex items-center gap-2">
-                                                                <p className="truncate text-sm font-medium">
-                                                                    {item.name}
+                                            {filteredAdminUsers.length > 0 ? (
+                                                filteredAdminUsers.map(
+                                                    (item) => (
+                                                        <div
+                                                            key={item.id}
+                                                            className="grid grid-cols-[1fr_auto] gap-3 border-b px-4 py-4 last:border-b-0 md:grid-cols-[minmax(280px,1fr)_130px_140px_120px_110px]"
+                                                        >
+                                                            <div className="min-w-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    <p className="truncate text-sm font-medium">
+                                                                        {
+                                                                            item.name
+                                                                        }
+                                                                    </p>
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className="text-[10px] capitalize md:hidden"
+                                                                    >
+                                                                        {
+                                                                            item.role
+                                                                        }
+                                                                    </Badge>
+                                                                    <Badge
+                                                                        variant="outline"
+                                                                        className={`text-[10px] md:hidden ${
+                                                                            item.emailVerified
+                                                                                ? 'border-transparent bg-[#e8f8ef] text-[#15803d]'
+                                                                                : 'border-transparent bg-[#fff4df] text-[#b45309]'
+                                                                        }`}
+                                                                    >
+                                                                        {item.emailVerified
+                                                                            ? 'Verified'
+                                                                            : 'Unverified'}
+                                                                    </Badge>
+                                                                </div>
+                                                                <p className="mt-1 truncate text-xs text-muted-foreground">
+                                                                    {item.email}
                                                                 </p>
+                                                            </div>
+                                                            <div className="hidden md:block">
                                                                 <Badge
                                                                     variant="outline"
-                                                                    className="text-[10px] capitalize md:hidden"
+                                                                    className="capitalize"
                                                                 >
                                                                     {item.role}
                                                                 </Badge>
+                                                            </div>
+                                                            <div className="hidden md:block">
                                                                 <Badge
                                                                     variant="outline"
-                                                                    className={`text-[10px] md:hidden ${
+                                                                    className={
                                                                         item.emailVerified
                                                                             ? 'border-transparent bg-[#e8f8ef] text-[#15803d]'
                                                                             : 'border-transparent bg-[#fff4df] text-[#b45309]'
-                                                                    }`}
+                                                                    }
                                                                 >
                                                                     {item.emailVerified
                                                                         ? 'Verified'
                                                                         : 'Unverified'}
                                                                 </Badge>
                                                             </div>
-                                                            <p className="mt-1 truncate text-xs text-muted-foreground">
-                                                                {item.email}
+                                                            <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
+                                                                {formatNumber(
+                                                                    item.conversations,
+                                                                )}
                                                             </p>
+                                                            <div className="flex justify-end gap-1">
+                                                                <Button
+                                                                    type="button"
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    title="Edit pengguna"
+                                                                    onClick={() =>
+                                                                        openEditUserDialog(
+                                                                            item,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    <Pencil className="h-4 w-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    type="button"
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    title="Hapus pengguna"
+                                                                    disabled={
+                                                                        item.id ===
+                                                                            auth
+                                                                                .user
+                                                                                .id ||
+                                                                        (item.role ===
+                                                                            'admin' &&
+                                                                            adminUserCount <=
+                                                                                1)
+                                                                    }
+                                                                    onClick={() =>
+                                                                        handleDeleteUser(
+                                                                            item,
+                                                                        )
+                                                                    }
+                                                                    className="text-destructive hover:text-destructive"
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </div>
                                                         </div>
-                                                        <div className="hidden md:block">
-                                                            <Badge
-                                                                variant="outline"
-                                                                className="capitalize"
-                                                            >
-                                                                {item.role}
-                                                            </Badge>
-                                                        </div>
-                                                        <div className="hidden md:block">
-                                                            <Badge
-                                                                variant="outline"
-                                                                className={
-                                                                    item.emailVerified
-                                                                        ? 'border-transparent bg-[#e8f8ef] text-[#15803d]'
-                                                                        : 'border-transparent bg-[#fff4df] text-[#b45309]'
-                                                                }
-                                                            >
-                                                                {item.emailVerified
-                                                                    ? 'Verified'
-                                                                    : 'Unverified'}
-                                                            </Badge>
-                                                        </div>
-                                                        <p className="hidden text-sm text-muted-foreground tabular-nums md:block">
-                                                            {formatNumber(
-                                                                item.conversations,
-                                                            )}
-                                                        </p>
-                                                        <div className="flex justify-end gap-1">
-                                                            <Button
-                                                                type="button"
-                                                                size="icon"
-                                                                variant="ghost"
-                                                                title="Edit pengguna"
-                                                                onClick={() =>
-                                                                    openEditUserDialog(
-                                                                        item,
-                                                                    )
-                                                                }
-                                                            >
-                                                                <Pencil className="h-4 w-4" />
-                                                            </Button>
-                                                            <Button
-                                                                type="button"
-                                                                size="icon"
-                                                                variant="ghost"
-                                                                title="Hapus pengguna"
-                                                                disabled={
-                                                                    item.id ===
-                                                                        auth
-                                                                            .user
-                                                                            .id ||
-                                                                    (item.role ===
-                                                                        'admin' &&
-                                                                        adminUserCount <=
-                                                                            1)
-                                                                }
-                                                                onClick={() =>
-                                                                    handleDeleteUser(
-                                                                        item,
-                                                                    )
-                                                                }
-                                                                className="text-destructive hover:text-destructive"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </Button>
-                                                        </div>
-                                                    </div>
-                                                ))
+                                                    ),
+                                                )
                                             ) : (
                                                 <EmptyTableRow text="Belum ada pengguna yang cocok." />
                                             )}
@@ -2165,10 +2982,11 @@ export default function AdminPage() {
                                                     >
                                                         <Button
                                                             size="sm"
+                                                            variant="outline"
                                                             className="gap-2 shadow-sm"
                                                         >
-                                                            <FileText className="h-4 w-4" />
-                                                            Laporan
+                                                            <Clock3 className="h-4 w-4" />
+                                                            Periode
                                                             <ChevronDown className="h-4 w-4" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
@@ -2177,7 +2995,7 @@ export default function AdminPage() {
                                                         className="w-56"
                                                     >
                                                         <DropdownMenuLabel>
-                                                            Periode
+                                                            Periode laporan
                                                         </DropdownMenuLabel>
                                                         <DropdownMenuItem
                                                             onSelect={() =>
@@ -2230,39 +3048,40 @@ export default function AdminPage() {
                                                                 </span>
                                                             )}
                                                         </DropdownMenuItem>
-                                                        <DropdownMenuSeparator />
-                                                        <DropdownMenuLabel>
-                                                            Export
-                                                        </DropdownMenuLabel>
-                                                        <DropdownMenuItem
-                                                            onSelect={() =>
-                                                                exportAdminActivityReport(
-                                                                    activityPeriod,
-                                                                    liveActivityItems,
-                                                                )
-                                                            }
-                                                        >
-                                                            <Download className="h-4 w-4" />
-                                                            Excel
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                            onSelect={() =>
-                                                                openActivityLogReport(
-                                                                    activityPeriod,
-                                                                    filters?.search,
-                                                                )
-                                                            }
-                                                        >
-                                                            <Printer className="h-4 w-4" />
-                                                            PDF
-                                                        </DropdownMenuItem>
                                                     </DropdownMenuContent>
                                                 </DropdownMenu>
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    className="gap-2 shadow-sm"
+                                                    onClick={() =>
+                                                        exportAdminActivityReport(
+                                                            activityPeriod,
+                                                            liveActivityItems,
+                                                        )
+                                                    }
+                                                >
+                                                    <Download className="h-4 w-4" />
+                                                    Export Excel
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    className="gap-2 shadow-sm"
+                                                    onClick={() =>
+                                                        openActivityLogReport(
+                                                            activityPeriod,
+                                                            filters?.search,
+                                                        )
+                                                    }
+                                                >
+                                                    <Printer className="h-4 w-4" />
+                                                    Export PDF
+                                                </Button>
                                             </div>
                                         </div>
                                     </CardHeader>
-                                    <CardContent className="min-h-0 flex-1">
-                                        <div className="h-full overflow-x-auto overflow-y-auto rounded-md border">
+                                    <CardContent className="flex min-h-0 flex-1 flex-col">
+                                        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto rounded-md border">
                                             <div className="min-w-[880px]">
                                                 <div className="sticky top-0 z-10 grid grid-cols-[minmax(220px,1fr)_140px_minmax(260px,1.2fr)_150px_150px] gap-3 border-b bg-background/95 px-4 py-3 text-xs font-medium tracking-wide text-muted-foreground uppercase backdrop-blur supports-[backdrop-filter]:bg-background/85">
                                                     <span>Admin</span>
@@ -2278,7 +3097,7 @@ export default function AdminPage() {
                                                         (item) => (
                                                             <div
                                                                 key={item.id}
-                                                                className="grid grid-cols-[minmax(220px,1fr)_140px_minmax(260px,1.2fr)_150px_150px] gap-3 border-b px-4 py-4 transition-colors hover:bg-muted/30 last:border-b-0"
+                                                                className="grid grid-cols-[minmax(220px,1fr)_140px_minmax(260px,1.2fr)_150px_150px] gap-3 border-b px-4 py-4 transition-colors last:border-b-0 hover:bg-muted/30"
                                                             >
                                                                 <div className="min-w-0">
                                                                     <p className="truncate text-sm font-medium">
@@ -2325,7 +3144,7 @@ export default function AdminPage() {
                                                                         item.ipAddress
                                                                     }
                                                                 </p>
-                                                                <p className="text-sm whitespace-nowrap font-medium text-muted-foreground">
+                                                                <p className="text-sm font-medium whitespace-nowrap text-muted-foreground">
                                                                     {item.time}
                                                                 </p>
                                                             </div>
@@ -2334,6 +3153,64 @@ export default function AdminPage() {
                                                 ) : (
                                                     <EmptyTableRow text="Belum ada aktivitas admin yang tercatat." />
                                                 )}
+                                            </div>
+                                        </div>
+                                        <div className="mt-4 flex flex-col gap-3 border-t pt-4 lg:flex-row lg:items-center lg:justify-between">
+                                            <p className="text-sm leading-6 text-muted-foreground">
+                                                {liveActivityPagination.total >
+                                                0
+                                                    ? `Menampilkan ${liveActivityPagination.from}-${liveActivityPagination.to} dari ${liveActivityPagination.total} aktivitas`
+                                                    : 'Belum ada aktivitas untuk filter ini.'}
+                                            </p>
+                                            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={
+                                                        liveActivityPagination.currentPage <=
+                                                        1
+                                                    }
+                                                    onClick={() =>
+                                                        updateActivityPage(
+                                                            liveActivityPagination.currentPage -
+                                                                1,
+                                                            activityPeriod,
+                                                            filters?.search,
+                                                        )
+                                                    }
+                                                >
+                                                    Sebelumnya
+                                                </Button>
+                                                <div className="min-w-[132px] rounded-md border bg-muted/30 px-3 py-1.5 text-center text-sm text-foreground">
+                                                    Halaman{' '}
+                                                    {
+                                                        liveActivityPagination.currentPage
+                                                    }{' '}
+                                                    /{' '}
+                                                    {Math.max(
+                                                        liveActivityPagination.lastPage,
+                                                        1,
+                                                    )}
+                                                </div>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="outline"
+                                                    disabled={
+                                                        !liveActivityPagination.hasMorePages
+                                                    }
+                                                    onClick={() =>
+                                                        updateActivityPage(
+                                                            liveActivityPagination.currentPage +
+                                                                1,
+                                                            activityPeriod,
+                                                            filters?.search,
+                                                        )
+                                                    }
+                                                >
+                                                    Berikutnya
+                                                </Button>
                                             </div>
                                         </div>
                                     </CardContent>
@@ -2412,7 +3289,7 @@ export default function AdminPage() {
                                             event.target.value,
                                         )
                                     }
-                                    className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring min-h-20 rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+                                    className="min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
                                     placeholder="Ringkasan akses role"
                                 />
                                 <InputError
@@ -2454,18 +3331,13 @@ export default function AdminPage() {
                                 <div className="flex items-start justify-between gap-4 pr-8">
                                     <div className="min-w-0">
                                         <DialogTitle className="line-clamp-2 text-base leading-6">
-                                            {
-                                                selectedFeedbackReview.question
-                                            }
+                                            {selectedFeedbackReview.question}
                                         </DialogTitle>
                                         <DialogDescription className="mt-1">
                                             {
                                                 selectedFeedbackReview.conversation
                                             }{' '}
-                                            ·{' '}
-                                            {
-                                                selectedFeedbackReview.createdAt
-                                            }
+                                            · {selectedFeedbackReview.createdAt}
                                         </DialogDescription>
                                     </div>
                                     <FeedbackReviewStatusBadge
@@ -2474,7 +3346,7 @@ export default function AdminPage() {
                                 </div>
                             </DialogHeader>
 
-                            <div className="scrollbar-none max-h-[58vh] space-y-5 overflow-y-auto px-6 py-5">
+                            <div className="max-h-[58vh] scrollbar-none space-y-5 overflow-y-auto px-6 py-5">
                                 <section className="space-y-2">
                                     <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                         User
@@ -2509,39 +3381,172 @@ export default function AdminPage() {
 
                                 <section className="space-y-2">
                                     <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                                        Improvement AI
+                                        Perbaikan AI
                                     </p>
-                                    {selectedFeedbackReview.aiImprovement ? (
-                                        <div className="rounded-md border border-emerald-200 bg-emerald-50/80 p-3 text-sm leading-6 text-emerald-950">
-                                            {
-                                                selectedFeedbackReview.aiImprovement
-                                            }
-                                        </div>
-                                    ) : selectedFeedbackReview.status ===
-                                      'ignored' ? (
+                                    {selectedFeedbackReview.status ===
+                                    'ignored' ? (
                                         <p className="rounded-md border bg-muted/20 p-3 text-sm leading-6 text-muted-foreground">
-                                            Feedback ini ditutup tanpa masuk ke
-                                            learning AI.
+                                            Feedback ini ditutup tanpa dipakai
+                                            untuk perbaikan AI.
                                         </p>
                                     ) : (
-                                        <p className="rounded-md border border-dashed bg-muted/10 p-3 text-sm leading-6 text-muted-foreground">
-                                            Belum ada improvement. Klik Solve
-                                            jika feedback ini valid untuk
-                                            memperbaiki jawaban berikutnya.
-                                        </p>
+                                        <div className="space-y-3">
+                                            <textarea
+                                                value={improvementDraft}
+                                                onChange={(event) =>
+                                                    setImprovementDraft(
+                                                        event.target.value,
+                                                    )
+                                                }
+                                                className="min-h-32 w-full rounded-md border border-emerald-200 bg-emerald-50/50 px-3 py-2 text-sm leading-6 text-emerald-950 ring-offset-background placeholder:text-emerald-900/55 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 focus-visible:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
+                                                placeholder="Tulis perbaikan manual di sini. Jika dikosongkan lalu klik Simpan perbaikan, sistem akan membuat saran dari AI."
+                                            />
+                                            {(() => {
+                                                const hasDraft =
+                                                    improvementDraft.trim() !==
+                                                    '';
+
+                                                if (!hasDraft) {
+                                                    return (
+                                                        <p className="rounded-md border border-dashed bg-muted/10 p-3 text-sm leading-6 text-muted-foreground">
+                                                            Belum ada perbaikan.
+                                                            Tulis manual atau
+                                                            klik Simpan
+                                                            perbaikan untuk
+                                                            membuat saran dari
+                                                            AI.
+                                                        </p>
+                                                    );
+                                                }
+
+                                                const formattedDraft =
+                                                    formatImprovementNote(
+                                                        improvementDraft,
+                                                    );
+
+                                                return (
+                                                    <div className="rounded-md border border-emerald-200 bg-emerald-50/80 p-3 text-sm leading-6 text-emerald-950">
+                                                        <div className="space-y-2">
+                                                            {formattedDraft.paragraphs.map(
+                                                                (
+                                                                    paragraph,
+                                                                    index,
+                                                                ) => (
+                                                                    <p
+                                                                        key={
+                                                                            index
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            paragraph
+                                                                        }
+                                                                    </p>
+                                                                ),
+                                                            )}
+                                                            {formattedDraft
+                                                                .bullets
+                                                                .length > 0 ? (
+                                                                <ul className="list-disc space-y-2 pl-5">
+                                                                    {formattedDraft.bullets.map(
+                                                                        (
+                                                                            bullet,
+                                                                            index,
+                                                                        ) => (
+                                                                            <li
+                                                                                key={
+                                                                                    index
+                                                                                }
+                                                                            >
+                                                                                {
+                                                                                    bullet
+                                                                                }
+                                                                            </li>
+                                                                        ),
+                                                                    )}
+                                                                </ul>
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
                                     )}
                                 </section>
                             </div>
 
                             <DialogFooter className="border-t px-6 py-4">
-                                {['resolved', 'ignored'].includes(
-                                    selectedFeedbackReview.status,
-                                ) ? (
-                                    <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
-                                        {selectedFeedbackReview.status ===
-                                        'resolved'
-                                            ? 'Issue sudah solved dan improvement aktif untuk jawaban berikutnya.'
-                                            : 'Issue sudah ditutup sebagai ignored.'}
+                                {selectedFeedbackReview.status ===
+                                'resolved' ? (
+                                    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                                            Feedback sudah selesai dan perbaikan
+                                            aktif untuk jawaban berikutnya.
+                                        </div>
+                                        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                disabled={
+                                                    pendingFeedbackAction !==
+                                                        null ||
+                                                    improvementDraft.trim() ===
+                                                        ''
+                                                }
+                                                onClick={() =>
+                                                    saveFeedbackImprovement(
+                                                        selectedFeedbackReview.id,
+                                                    )
+                                                }
+                                            >
+                                                {pendingFeedbackAction ===
+                                                `save:${selectedFeedbackReview.id}`
+                                                    ? 'Menyimpan...'
+                                                    : 'Simpan perubahan'}
+                                            </Button>
+                                            <Button
+                                                type="button"
+                                                variant="outline"
+                                                disabled={
+                                                    pendingFeedbackAction !==
+                                                    null
+                                                }
+                                                onClick={() =>
+                                                    rollbackFeedbackReview(
+                                                        selectedFeedbackReview.id,
+                                                    )
+                                                }
+                                            >
+                                                {pendingFeedbackAction ===
+                                                `rollback:${selectedFeedbackReview.id}`
+                                                    ? 'Mengembalikan...'
+                                                    : 'Batalkan status selesai'}
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : selectedFeedbackReview.status ===
+                                  'ignored' ? (
+                                    <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                                        <div className="rounded-md bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                                            Feedback sudah ditutup sebagai
+                                            diabaikan.
+                                        </div>
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            disabled={
+                                                pendingFeedbackAction !== null
+                                            }
+                                            onClick={() =>
+                                                rollbackFeedbackReview(
+                                                    selectedFeedbackReview.id,
+                                                )
+                                            }
+                                        >
+                                            {pendingFeedbackAction ===
+                                            `rollback:${selectedFeedbackReview.id}`
+                                                ? 'Mengembalikan...'
+                                                : 'Buka kembali'}
+                                        </Button>
                                     </div>
                                 ) : (
                                     <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -2559,7 +3564,7 @@ export default function AdminPage() {
                                                 )
                                             }
                                         >
-                                            Review
+                                            Tandai ditinjau
                                         </Button>
                                         <Button
                                             type="button"
@@ -2576,8 +3581,8 @@ export default function AdminPage() {
                                         >
                                             {pendingFeedbackAction ===
                                             `ignore:${selectedFeedbackReview.id}`
-                                                ? 'Closing'
-                                                : 'Ignore'}
+                                                ? 'Menutup...'
+                                                : 'Abaikan feedback'}
                                         </Button>
                                         <Button
                                             type="button"
@@ -2593,8 +3598,8 @@ export default function AdminPage() {
                                         >
                                             {pendingFeedbackAction ===
                                             `solve:${selectedFeedbackReview.id}`
-                                                ? 'Solving'
-                                                : 'Solve'}
+                                                ? 'Menyelesaikan...'
+                                                : 'Simpan perbaikan'}
                                         </Button>
                                     </div>
                                 )}
@@ -2793,42 +3798,29 @@ function MetricCard({ metric }: { metric: Metric }) {
     const Icon = metricIcons[metric.icon] ?? LayoutDashboard;
 
     return (
-        <Card className="rounded-lg">
-            <CardHeader className="flex-row items-start justify-between gap-4 space-y-0">
+        <Card className="overflow-hidden rounded-lg border-slate-200 bg-white shadow-sm shadow-slate-900/4">
+            <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 pb-3">
                 <div>
-                    <CardDescription>{metric.label}</CardDescription>
-                    <CardTitle className="mt-3 text-2xl">
+                    <CardDescription className="text-[13px] font-medium text-slate-500">
+                        {metric.label}
+                    </CardDescription>
+                    <CardTitle className="mt-3 text-3xl tracking-tight text-slate-950">
                         {metric.value}
                     </CardTitle>
                 </div>
                 <span
-                    className={`rounded-md p-2 ring-1 ${toneClasses[metric.tone]}`}
+                    className={`rounded-xl p-2.5 ring-1 ${toneClasses[metric.tone]}`}
                 >
                     <Icon className="h-4 w-4" />
                 </span>
             </CardHeader>
-            <CardContent>
-                <p className="text-sm text-muted-foreground">
+            <CardContent className="pt-0">
+                <p className="text-sm leading-6 text-slate-500">
                     {metric.description}
                 </p>
             </CardContent>
         </Card>
     );
-}
-
-function statusClass(status: string) {
-    return (
-        statusClasses[status] ??
-        'border-transparent bg-muted text-muted-foreground'
-    );
-}
-
-function conversationStatusLabel(status: string) {
-    if (status === 'active') {
-        return 'Aktif';
-    }
-
-    return status;
 }
 
 function activityCategoryClass(category: AdminActivityItem['category']) {
@@ -2866,36 +3858,71 @@ function escapeHtml(value: string | number | null | undefined) {
         .replaceAll("'", '&#39;');
 }
 
+function logActivityExport(
+    format: 'Excel' | 'PDF',
+    period: ReportPeriod,
+    itemCount: number,
+) {
+    const csrfToken = document.querySelector<HTMLMetaElement>(
+        'meta[name="csrf-token"]',
+    )?.content;
+
+    void fetch('/admin/activity-log/export-log', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrfToken ?? '',
+            'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: JSON.stringify({
+            format,
+            period,
+            item_count: itemCount,
+        }),
+    }).catch((error) => {
+        console.error('Failed to log activity export:', error);
+    });
+}
+
 function exportAdminActivityReport(
     period: ReportPeriod,
     items: AdminActivityItem[],
 ) {
     const periodLabel = reportPeriodLabel(period);
-    const rowCount = Math.max(items.length, 25);
-    const rows = Array.from({ length: rowCount }, (_, index) => {
-        const item = items[index];
+    const exportItems =
+        items.length > 0
+            ? items
+            : [
+                  {
+                      id: 0,
+                      admin: '-',
+                      email: '-',
+                      category: 'system' as const,
+                      action: 'Tidak ada data aktivitas',
+                      target: '-',
+                      detail: `Tidak ada log untuk periode ${periodLabel}.`,
+                      ipAddress: '-',
+                      time: '-',
+                  },
+              ];
+    const rowCount = exportItems.length;
+    logActivityExport('Excel', period, items.length);
+    const rows = exportItems
+        .map((item, index) => {
+            const activityText = `${escapeHtml(item.action)}${item.target ? ` - ${escapeHtml(item.target)}` : ''}`;
+            const commentsText = `${escapeHtml(item.detail)} | ${escapeHtml(activityCategoryLabel(item.category))} | ${escapeHtml(item.admin)} | IP: ${escapeHtml(item.ipAddress)}`;
 
-        if (!item) {
             return `
-   <Row ss:Height="22">
-    <Cell ss:StyleID="cellCenter"><Data ss:Type="Number">${index + 1}</Data></Cell>
-    <Cell ss:StyleID="cellCenter"><Data ss:Type="String"></Data></Cell>
-    <Cell ss:StyleID="cellLeft"><Data ss:Type="String"></Data></Cell>
-    <Cell ss:StyleID="cellLeft"><Data ss:Type="String"></Data></Cell>
-   </Row>`;
-        }
-
-        const activityText = `${escapeHtml(item.action)}${item.target ? ` - ${escapeHtml(item.target)}` : ''}`;
-        const commentsText = `${escapeHtml(item.detail)} | ${escapeHtml(activityCategoryLabel(item.category))} | ${escapeHtml(item.admin)} | IP: ${escapeHtml(item.ipAddress)}`;
-
-        return `
    <Row ss:Height="26">
     <Cell ss:StyleID="cellCenter"><Data ss:Type="Number">${index + 1}</Data></Cell>
     <Cell ss:StyleID="cellCenter"><Data ss:Type="String">${escapeHtml(item.time)}</Data></Cell>
     <Cell ss:StyleID="cellLeft"><Data ss:Type="String">${activityText}</Data></Cell>
     <Cell ss:StyleID="cellLeft"><Data ss:Type="String">${commentsText}</Data></Cell>
    </Row>`;
-    }).join('');
+        })
+        .join('');
 
     const excel = `<?xml version="1.0" encoding="utf-8"?>
 <?mso-application progid="Excel.Sheet"?>
@@ -3009,6 +4036,18 @@ function knowledgeStatusLabel(status: string) {
         return 'Kosong';
     }
 
+    if (status === 'pending_validation') {
+        return 'Menunggu validasi';
+    }
+
+    if (status === 'failed') {
+        return 'Validasi gagal';
+    }
+
+    if (status === 'archived') {
+        return 'Diarsipkan';
+    }
+
     return status;
 }
 
@@ -3068,19 +4107,89 @@ function TokenCell({ value }: { value: string }) {
 function TokenInsightCard({
     detail,
     label,
+    tone = 'neutral',
+    variant = 'default',
     value,
 }: {
     detail: string;
     label: string;
+    tone?: 'blue' | 'green' | 'amber' | 'neutral';
+    variant?: 'default' | 'hero' | 'compact';
+    value: string;
+}) {
+    const toneStyles = {
+        blue: 'border-[#b9d8ff] bg-[#f4f9ff] text-[#155fc4]',
+        green: 'border-[#bfe7cf] bg-[#f3fbf6] text-[#15803d]',
+        amber: 'border-[#f5d08b] bg-[#fff8eb] text-[#b45309]',
+        neutral: 'border-[#d9e4f2] bg-[#f7faff] text-[#40566f]',
+    } satisfies Record<typeof tone, string>;
+    const variantStyles = {
+        default: {
+            wrapper: 'rounded-xl p-3.5',
+            value: 'mt-2.5 text-lg',
+            detail: 'mt-1 text-xs leading-4.5',
+        },
+        hero: {
+            wrapper: 'rounded-2xl p-5',
+            value: 'mt-3 text-[1.95rem] leading-none',
+            detail: 'mt-2 text-sm leading-5',
+        },
+        compact: {
+            wrapper: 'rounded-xl p-3.5',
+            value: 'mt-2 text-[1.35rem] leading-none',
+            detail: 'mt-1 text-xs leading-5',
+        },
+    } satisfies Record<
+        typeof variant,
+        { wrapper: string; value: string; detail: string }
+    >;
+
+    return (
+        <div
+            className={`border shadow-sm ${toneStyles[tone]} ${variantStyles[variant].wrapper}`}
+        >
+            <p className="text-[11px] font-semibold tracking-[0.08em] uppercase opacity-80">
+                {label}
+            </p>
+            <p
+                className={`${variantStyles[variant].value} truncate font-semibold tracking-tight text-foreground`}
+            >
+                {value}
+            </p>
+            <p
+                className={`${variantStyles[variant].detail} text-muted-foreground`}
+            >
+                {detail}
+            </p>
+        </div>
+    );
+}
+
+function TokenTrendSummaryCard({
+    detail,
+    value,
+}: {
+    detail: string;
     value: string;
 }) {
     return (
-        <div className="rounded-md border bg-muted/20 p-3">
-            <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className="mt-2 truncate text-sm font-semibold">{value}</p>
-            <p className="mt-1 truncate text-xs text-muted-foreground">
-                {detail}
-            </p>
+        <div className="rounded-2xl border border-[#f5d08b] bg-linear-to-br from-[#fff9ef] to-[#fff3db] p-4 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <p className="text-[11px] font-semibold tracking-[0.08em] text-[#b45309] uppercase">
+                        Trend bulan ini
+                    </p>
+                    <p className="mt-2 text-xl font-semibold tracking-tight text-foreground">
+                        {value}
+                    </p>
+                    <p className="mt-1 text-sm leading-5 text-muted-foreground">
+                        {detail}
+                    </p>
+                </div>
+                <div className="rounded-full border border-[#f5d08b] bg-white/70 px-2.5 py-1 text-[11px] font-medium text-[#b45309]">
+                    Monthly
+                </div>
+            </div>
         </div>
     );
 }
@@ -3091,40 +4200,22 @@ function FeedbackReviewStatusBadge({
     status: FeedbackReviewItem['status'];
 }) {
     const labels: Record<FeedbackReviewItem['status'], string> = {
-        open: 'Open',
-        reviewing: 'Diproses',
-        resolved: 'Solved',
-        ignored: 'Ignored',
+        open: 'Baru',
+        reviewing: 'Sedang ditinjau',
+        resolved: 'Selesai',
+        ignored: 'Diabaikan',
     };
     const classes: Record<FeedbackReviewItem['status'], string> = {
         open: 'border-transparent bg-[#fff4df] text-[#b45309]  ',
-        reviewing:
-            'border-transparent bg-[#eaf3ff] text-[#2f80ed]  ',
-        resolved:
-            'border-transparent bg-[#e8f8ef] text-[#15803d]  ',
-        ignored:
-            'border-transparent bg-[#f1f5f9] text-[#64748b]  ',
+        reviewing: 'border-transparent bg-[#eaf3ff] text-[#2f80ed]  ',
+        resolved: 'border-transparent bg-[#e8f8ef] text-[#15803d]  ',
+        ignored: 'border-transparent bg-[#f1f5f9] text-[#64748b]  ',
     };
 
     return (
         <Badge variant="outline" className={classes[status]}>
             {labels[status]}
         </Badge>
-    );
-}
-
-function FeedbackCell({
-    icon: Icon,
-    value,
-}: {
-    icon: LucideIcon;
-    value: number;
-}) {
-    return (
-        <div className="hidden items-center gap-2 text-sm font-medium text-muted-foreground md:flex">
-            <Icon className="h-4 w-4 text-primary" />
-            {formatNumber(value)}
-        </div>
     );
 }
 

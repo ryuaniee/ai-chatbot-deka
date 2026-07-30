@@ -192,6 +192,27 @@ class AdminDashboardBackendTest extends TestCase
         $this->assertDatabaseCount('admin_activity_logs', 1);
     }
 
+    public function test_admin_can_log_activity_export_for_excel(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->actingAs($admin)
+            ->postJson(route('admin.activity-log.export-log'), [
+                'format' => 'Excel',
+                'period' => 'month',
+                'item_count' => 12,
+            ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Export activity logged.');
+
+        $this->assertDatabaseHas('admin_activity_logs', [
+            'admin_user_id' => $admin->id,
+            'category' => 'report',
+            'action' => 'Export log aktivitas Excel',
+            'target' => 'Laporan Log Aktivitas',
+        ]);
+    }
+
     public function test_user_can_persist_and_clear_assistant_message_feedback(): void
     {
         $user = User::factory()->create();

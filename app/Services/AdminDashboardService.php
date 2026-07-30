@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AdminActivityLog;
 use App\Models\Conversation;
 use App\Models\KnowledgeDocument;
+use App\Models\KnowledgeDocumentVersion;
 use App\Models\Message;
 use App\Models\MessageFeedback;
 use App\Models\Role;
@@ -12,6 +13,7 @@ use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 
 class AdminDashboardService
@@ -21,18 +23,32 @@ class AdminDashboardService
      */
     public function props(string $section, Request $request): array
     {
-        $tokenUsageItems = $this->tokenUsageItems();
+        $tokenUsageSummaryItems = $this->tokenUsageItems();
+        $tokenUsageItems = collect($tokenUsageSummaryItems)
+            ->take(12)
+            ->values()
+            ->all();
+        $analyticTokenUsageItems = $this->analyticTokenUsageItems(
+            $request,
+            $tokenUsageSummaryItems,
+        );
         $adminUsers = $this->adminUsers($request);
         $adminActivityItems = $this->adminActivityItems($request);
+        $feedbackReviewItems = $this->feedbackReviewItems($request);
 
         return [
             'section' => $section,
             'metrics' => $this->metrics($adminUsers),
             'tokenUsageItems' => $tokenUsageItems,
+            'tokenUsageSummaryItems' => $tokenUsageSummaryItems,
+            'analyticTokenUsageItems' => $analyticTokenUsageItems['items'],
+            'analyticTokenUsagePagination' => $analyticTokenUsageItems['pagination'],
             'roleItems' => $this->roleItems(),
             'adminUsers' => $adminUsers,
-            'adminActivityItems' => $adminActivityItems,
-            'feedbackReviewItems' => $this->feedbackReviewItems(),
+            'adminActivityItems' => $adminActivityItems['items'],
+            'adminActivityPagination' => $adminActivityItems['pagination'],
+            'feedbackReviewItems' => $feedbackReviewItems['items'],
+            'feedbackReviewPagination' => $feedbackReviewItems['pagination'],
             'knowledgeItems' => $this->knowledgeItems(),
             'knowledgeStats' => $this->knowledgeStats(),
             'chatTrendItems' => $this->chatTrendItems(),
@@ -40,7 +56,7 @@ class AdminDashboardService
             'tokenTrendItems' => $this->tokenTrendItems(),
             'tokenUsageTrend' => $this->tokenUsageTrend(),
             'totals' => [
-                'totalTokenUsage' => array_sum(array_column($tokenUsageItems, 'totalTokens')),
+                'totalTokenUsage' => array_sum(array_column($tokenUsageSummaryItems, 'totalTokens')),
                 'totalLikes' => MessageFeedback::query()->where('type', MessageFeedback::TYPE_LIKE)->count(),
                 'totalDislikes' => MessageFeedback::query()->where('type', MessageFeedback::TYPE_DISLIKE)->count(),
                 'activeUsers' => collect($adminUsers)->where('status', 'active')->count(),
@@ -51,6 +67,12 @@ class AdminDashboardService
             'filters' => [
                 'search' => trim((string) $request->query('search', '')),
                 'period' => $this->periodFilter($request),
+                'page' => $this->activityPage($request),
+                'feedbackSearch' => trim((string) $request->query('feedback_search', '')),
+                'feedbackStatus' => $this->feedbackStatusFilter($request),
+                'feedbackPage' => $this->feedbackPage($request),
+                'tokenSearch' => trim((string) $request->query('token_search', '')),
+                'tokenPage' => $this->tokenPage($request),
             ],
         ];
     }
@@ -60,12 +82,16 @@ class AdminDashboardService
      */
     public function activityLogPayload(Request $request): array
     {
+        $adminActivityItems = $this->adminActivityItems($request);
+
         return [
-            'adminActivityItems' => $this->adminActivityItems($request),
+            'adminActivityItems' => $adminActivityItems['items'],
+            'pagination' => $adminActivityItems['pagination'],
             'totals' => $this->activityTotals(),
             'filters' => [
                 'search' => trim((string) $request->query('search', '')),
                 'period' => $this->periodFilter($request),
+                'page' => $this->activityPage($request),
             ],
         ];
     }
@@ -187,6 +213,48 @@ class AdminDashboardService
     }
 
     /**
+     * @param  array<int, array<string, mixed>>  $items
+     * @return array{items: array<int, array<string, mixed>>, pagination: array<string, int|bool|null>}
+     */
+    private function analyticTokenUsageItems(
+        Request $request,
+        array $items,
+    ): array {
+        $search = trim((string) $request->query('token_search', ''));
+        $page = $this->tokenPage($request);
+        $perPage = 12;
+
+        $filtered = collect($items)
+            ->when($search !== '', function ($collection) use ($search) {
+                return $collection->filter(function (array $item) use ($search): bool {
+                    return str_contains(mb_strtolower((string) $item['user']), mb_strtolower($search))
+                        || str_contains(mb_strtolower((string) $item['email']), mb_strtolower($search));
+                });
+            })
+            ->values();
+
+        $total = $filtered->count();
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $currentPage = min($page, $lastPage);
+        $offset = ($currentPage - 1) * $perPage;
+        $pageItems = $filtered->slice($offset, $perPage)->values();
+        $countOnPage = $pageItems->count();
+
+        return [
+            'items' => $pageItems->all(),
+            'pagination' => [
+                'currentPage' => $currentPage,
+                'lastPage' => $lastPage,
+                'perPage' => $perPage,
+                'total' => $total,
+                'from' => $countOnPage > 0 ? $offset + 1 : null,
+                'to' => $countOnPage > 0 ? $offset + $countOnPage : null,
+                'hasMorePages' => $currentPage < $lastPage,
+            ],
+        ];
+    }
+
+    /**
      * @return array{currentTokens: int, previousTokens: int, changePercent: float|null, direction: string}
      */
     private function tokenUsageTrend(): array
@@ -305,16 +373,17 @@ class AdminDashboardService
                 $lastSeen = $user->conversations_max_last_message_at
                     ? Carbon::parse($user->conversations_max_last_message_at)
                     : null;
+                $status = $lastSeen && $lastSeen->gte($activeSince) ? 'active' : 'inactive';
 
                 return [
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
                     'role' => $user->role,
-                    'status' => $lastSeen && $lastSeen->gte($activeSince) ? 'active' : 'inactive',
+                    'status' => $status,
                     'emailVerified' => $user->email_verified_at !== null,
-                    'emailVerifiedAt' => $user->email_verified_at?->locale('id')->translatedFormat('j M Y'),
-                    'joinedAt' => $user->created_at?->locale('id')->translatedFormat('j M Y') ?? '-',
+                    'emailVerifiedAt' => $this->formattedDate($user->email_verified_at),
+                    'joinedAt' => $this->formattedDate($user->created_at) ?? '-',
                     'lastSeen' => $this->relativeTime($lastSeen),
                     'conversations' => (int) $user->conversations_count,
                 ];
@@ -323,9 +392,45 @@ class AdminDashboardService
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @return array{items: array<int, array<string, mixed>>, pagination: array<string, int|bool|null>}
      */
     private function adminActivityItems(Request $request): array
+    {
+        $paginator = $this->adminActivityPaginator($request);
+
+        return [
+            'items' => $this->mapAdminActivityItems($paginator->items()),
+            'pagination' => [
+                'currentPage' => $paginator->currentPage(),
+                'lastPage' => $paginator->lastPage(),
+                'perPage' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
+                'hasMorePages' => $paginator->hasMorePages(),
+            ],
+        ];
+    }
+
+    /**
+     * @return LengthAwarePaginator<int, AdminActivityLog>
+     */
+    private function adminActivityPaginator(
+        Request $request,
+        int $perPage = 15,
+    ): LengthAwarePaginator {
+        return $this->adminActivityQuery($request)->paginate(
+            $perPage,
+            ['*'],
+            'page',
+            $this->activityPage($request),
+        );
+    }
+
+    /**
+     * @return Builder<AdminActivityLog>
+     */
+    private function adminActivityQuery(Request $request): Builder
     {
         $search = trim((string) $request->query('search', ''));
         $period = $this->periodFilter($request);
@@ -347,9 +452,16 @@ class AdminDashboardService
             })
             ->where('created_at', '>=', $this->periodStart($period))
             ->latest('created_at')
-            ->latest('id')
-            ->limit(50)
-            ->get()
+            ->latest('id');
+    }
+
+    /**
+     * @param  array<int, AdminActivityLog>  $items
+     * @return array<int, array<string, mixed>>
+     */
+    private function mapAdminActivityItems(array $items): array
+    {
+        return collect($items)
             ->map(function (AdminActivityLog $item): array {
                 $isLegacyMenuVisit = $item->action === 'Membuka menu admin';
                 $target = $isLegacyMenuVisit ? 'Menu admin' : $item->target;
@@ -360,8 +472,8 @@ class AdminDashboardService
 
                 return [
                     'id' => $item->id,
-                    'admin' => $item->admin?->name ?? 'Admin',
-                    'email' => $item->admin?->email ?? '-',
+                    'admin' => $item->admin->name,
+                    'email' => $item->admin->email,
                     'category' => $this->normalizedActivityCategory($item->category),
                     'action' => $action,
                     'target' => $target,
@@ -375,6 +487,11 @@ class AdminDashboardService
             ->all();
     }
 
+    private function activityPage(Request $request): int
+    {
+        return max(1, (int) $request->integer('page', 1));
+    }
+
     private function ipLabel(?string $ipAddress): string
     {
         return match ($ipAddress) {
@@ -385,10 +502,68 @@ class AdminDashboardService
     }
 
     /**
-     * @return array<int, array<string, mixed>>
+     * @return array{items: array<int, array<string, mixed>>, pagination: array<string, int|bool|null>}
      */
-    private function feedbackReviewItems(): array
+    private function feedbackReviewItems(Request $request): array
     {
+        $paginator = $this->feedbackReviewPaginator($request);
+
+        return [
+            'items' => collect($paginator->items())
+                ->map(function (MessageFeedback $feedback): array {
+                    $message = $feedback->message;
+
+                    return [
+                        'id' => $feedback->id,
+                        'user' => $feedback->user->name,
+                        'email' => $feedback->user->email,
+                        'conversation' => $message?->conversation?->title ?: 'Percakapan tanpa judul',
+                        'question' => str($message?->replyToMessage->content ?: '-')->limit(220)->toString(),
+                        'answer' => str($message?->content ?: '-')->limit(180)->toString(),
+                        'reason' => $feedback->reason ?: 'Tidak ada alasan tertulis',
+                        'status' => $this->normalizedFeedbackReviewStatus($feedback->review_status),
+                        'adminDecision' => $feedback->admin_decision,
+                        'adminNote' => $feedback->admin_note,
+                        'aiImprovement' => $feedback->ai_improvement,
+                        'createdAt' => $this->relativeTime($feedback->created_at),
+                    ];
+                })
+                ->all(),
+            'pagination' => [
+                'currentPage' => $paginator->currentPage(),
+                'lastPage' => $paginator->lastPage(),
+                'perPage' => $paginator->perPage(),
+                'total' => $paginator->total(),
+                'from' => $paginator->firstItem(),
+                'to' => $paginator->lastItem(),
+                'hasMorePages' => $paginator->hasMorePages(),
+            ],
+        ];
+    }
+
+    /**
+     * @return LengthAwarePaginator<int, MessageFeedback>
+     */
+    private function feedbackReviewPaginator(
+        Request $request,
+        int $perPage = 12,
+    ): LengthAwarePaginator {
+        return $this->feedbackReviewQuery($request)->paginate(
+            $perPage,
+            ['*'],
+            'feedback_page',
+            $this->feedbackPage($request),
+        );
+    }
+
+    /**
+     * @return Builder<MessageFeedback>
+     */
+    private function feedbackReviewQuery(Request $request): Builder
+    {
+        $search = trim((string) $request->query('feedback_search', ''));
+        $status = $this->feedbackStatusFilter($request);
+
         return MessageFeedback::query()
             ->with([
                 'user:id,name,email',
@@ -397,28 +572,48 @@ class AdminDashboardService
                 'message.conversation:id,title',
             ])
             ->where('type', MessageFeedback::TYPE_DISLIKE)
-            ->latest('created_at')
-            ->limit(50)
-            ->get()
-            ->map(function (MessageFeedback $feedback): array {
-                $message = $feedback->message;
-
-                return [
-                    'id' => $feedback->id,
-                    'user' => $feedback->user?->name ?? 'User',
-                    'email' => $feedback->user?->email ?? '-',
-                    'conversation' => $message?->conversation?->title ?: 'Percakapan tanpa judul',
-                    'question' => str($message?->replyToMessage?->content ?? '-')->limit(220)->toString(),
-                    'answer' => str($message?->content ?? '-')->limit(180)->toString(),
-                    'reason' => $feedback->reason ?: 'Tidak ada alasan tertulis',
-                    'status' => $this->normalizedFeedbackReviewStatus($feedback->review_status),
-                    'adminDecision' => $feedback->admin_decision,
-                    'adminNote' => $feedback->admin_note,
-                    'aiImprovement' => $feedback->ai_improvement,
-                    'createdAt' => $this->relativeTime($feedback->created_at),
-                ];
+            ->when($status !== 'all', function (Builder $query) use ($status): void {
+                $query->where('review_status', $status);
             })
-            ->all();
+            ->when($search !== '', function (Builder $query) use ($search): void {
+                $query->where(function (Builder $query) use ($search): void {
+                    $query->where('reason', 'like', "%{$search}%")
+                        ->orWhereHas('user', function (Builder $query) use ($search): void {
+                            $query->where('name', 'like', "%{$search}%")
+                                ->orWhere('email', 'like', "%{$search}%");
+                        })
+                        ->orWhereHas('message', function (Builder $query) use ($search): void {
+                            $query->where('content', 'like', "%{$search}%")
+                                ->orWhereHas('replyToMessage', function (Builder $query) use ($search): void {
+                                    $query->where('content', 'like', "%{$search}%");
+                                })
+                                ->orWhereHas('conversation', function (Builder $query) use ($search): void {
+                                    $query->where('title', 'like', "%{$search}%");
+                                });
+                        });
+                });
+            })
+            ->latest('created_at')
+            ->latest('id');
+    }
+
+    private function feedbackStatusFilter(Request $request): string
+    {
+        $status = trim((string) $request->query('feedback_status', 'all'));
+        $allowed = [
+            'all',
+            MessageFeedback::REVIEW_STATUS_OPEN,
+            MessageFeedback::REVIEW_STATUS_REVIEWING,
+            MessageFeedback::REVIEW_STATUS_RESOLVED,
+            MessageFeedback::REVIEW_STATUS_IGNORED,
+        ];
+
+        return in_array($status, $allowed, true) ? $status : 'all';
+    }
+
+    private function feedbackPage(Request $request): int
+    {
+        return max(1, (int) $request->integer('feedback_page', 1));
     }
 
     /**
@@ -427,17 +622,33 @@ class AdminDashboardService
     private function knowledgeItems(): array
     {
         return KnowledgeDocument::query()
-            ->withCount('chunks')
+            ->with([
+                'activeVersion.chunks',
+                'versions' => fn ($query) => $query->latest('version')->limit(1),
+            ])
             ->latest('last_ingested_at')
             ->latest('updated_at')
             ->limit(50)
             ->get()
-            ->map(fn (KnowledgeDocument $document): array => [
-                'title' => $document->title ?: basename(parse_url($document->source_uri, PHP_URL_PATH) ?: $document->source_uri),
-                'source' => $this->knowledgeSourceLabel($document),
-                'chunks' => (int) $document->chunks_count,
-                'status' => $document->status,
-            ])
+            ->map(function (KnowledgeDocument $document): array {
+                $latest = $document->versions->first();
+                $validation = $latest !== null && is_array($latest->validation_summary)
+                    ? $latest->validation_summary
+                    : [];
+
+                return [
+                    'title' => $document->title ?: basename(parse_url($document->source_uri, PHP_URL_PATH) ?: $document->source_uri),
+                    'source' => $this->knowledgeSourceLabel($document),
+                    'chunks' => (int) ($document->activeVersion?->chunks->count() ?? 0),
+                    'status' => $latest !== null ? $latest->status : $document->status,
+                    'version' => $latest?->version,
+                    'activeVersion' => $document->activeVersion?->version,
+                    'changedChunks' => $latest !== null ? $latest->changed_chunks_count : 0,
+                    'probesPassed' => (int) ($validation['probes_passed'] ?? 0),
+                    'probesTotal' => (int) ($validation['probes_total'] ?? 0),
+                    'validationError' => $validation['error'] ?? null,
+                ];
+            })
             ->all();
     }
 
@@ -448,11 +659,27 @@ class AdminDashboardService
     {
         $documentCount = KnowledgeDocument::query()->count();
         $activeDocumentCount = KnowledgeDocument::query()->where('status', 'active')->count();
-        $activeChunkCount = KnowledgeDocument::query()
+        $activeVersions = KnowledgeDocumentVersion::query()
             ->where('status', 'active')
             ->withCount('chunks')
-            ->get()
-            ->sum('chunks_count');
+            ->get();
+        $activeChunkCount = $activeVersions->sum('chunks_count');
+        $validatedActiveVersions = $activeVersions->filter(
+            function (KnowledgeDocumentVersion $version): bool {
+                $summary = is_array($version->validation_summary)
+                    ? $version->validation_summary
+                    : [];
+
+                return $version->validated_at !== null || (bool) ($summary['migrated'] ?? false);
+            },
+        )->count();
+        $validationReadiness = $activeVersions->count() > 0
+            ? (int) round(($validatedActiveVersions / $activeVersions->count()) * 100)
+            : 0;
+        $minimumDocuments = max(1, (int) config('services.deka_knowledge.min_active_documents_for_ready', 3));
+        $minimumChunks = max(1, (int) config('services.deka_knowledge.min_active_chunks_for_ready', 20));
+        $documentReadiness = min(100, (int) round(($activeDocumentCount / $minimumDocuments) * 100));
+        $chunkReadiness = min(100, (int) round(($activeChunkCount / $minimumChunks) * 100));
 
         $assistantMessages = Message::query()->where('role', 'assistant')->count();
         $groundedMessages = Message::query()
@@ -465,7 +692,7 @@ class AdminDashboardService
             'answerGrounding' => $assistantMessages > 0
                 ? min(100, (int) round(($groundedMessages / $assistantMessages) * 100))
                 : 0,
-            'retrievalReady' => min(100, (int) round(($activeDocumentCount * 30) + ($activeChunkCount > 0 ? 40 : 0))),
+            'retrievalReady' => (int) round(($documentReadiness * 0.3) + ($chunkReadiness * 0.4) + ($validationReadiness * 0.3)),
             'sourceTraceability' => $documentCount > 0
                 ? min(100, (int) round(($activeDocumentCount / $documentCount) * 100))
                 : 0,
@@ -535,7 +762,7 @@ class AdminDashboardService
                 $monthRows = $rows->get($date->format('Y-m'), collect());
 
                 return [
-                    'month' => $date->locale('id')->translatedFormat('F'),
+                    'month' => Carbon::parse($date)->format('F'),
                     'likes' => $monthRows->where('type', MessageFeedback::TYPE_LIKE)->count(),
                     'dislikes' => $monthRows->where('type', MessageFeedback::TYPE_DISLIKE)->count(),
                 ];
@@ -562,12 +789,40 @@ class AdminDashboardService
         ]);
     }
 
+    public function logReportExport(
+        Request $request,
+        string $format,
+        string $periodLabel,
+        int $itemCount,
+    ): void {
+        $user = $request->user();
+
+        if (! $user) {
+            return;
+        }
+
+        AdminActivityLog::query()->create([
+            'admin_user_id' => $user->id,
+            'category' => 'report',
+            'action' => 'Export log aktivitas '.$format,
+            'target' => 'Laporan Log Aktivitas',
+            'description' => sprintf(
+                'Admin mengekspor log aktivitas format %s untuk periode %s (%d baris).',
+                $format,
+                $periodLabel,
+                $itemCount,
+            ),
+            'ip_address' => $request->ip(),
+            'user_agent' => substr((string) $request->userAgent(), 0, 1000),
+        ]);
+    }
+
     private function categoryForSection(string $section): string
     {
         return match ($section) {
             'users', 'roles' => 'user',
             'feedback-review' => 'conversation',
-            'token-usage' => 'report',
+            'analytic' => 'report',
             default => 'system',
         };
     }
@@ -575,13 +830,18 @@ class AdminDashboardService
     private function labelForSection(string $section): string
     {
         return match ($section) {
-            'token-usage' => 'Token Usage',
+            'analytic' => 'Analytic',
             'feedback-review' => 'Review Feedback',
             'users' => 'Kelola Pengguna',
             'roles' => 'Kelola Roles',
             'activity-log' => 'Log Aktivitas',
             default => 'Dashboard Ringkasan',
         };
+    }
+
+    private function tokenPage(Request $request): int
+    {
+        return max(1, (int) $request->integer('token_page', 1));
     }
 
     private function periodFilter(Request $request): string
@@ -621,6 +881,15 @@ class AdminDashboardService
     private function relativeTime(?CarbonInterface $time): string
     {
         return $time?->locale('id')->diffForHumans() ?? '-';
+    }
+
+    private function formattedDate(CarbonInterface|string|null $time): ?string
+    {
+        if ($time === null) {
+            return null;
+        }
+
+        return Carbon::parse($time)->format('j M Y');
     }
 
     private function formatNumber(int $value): string

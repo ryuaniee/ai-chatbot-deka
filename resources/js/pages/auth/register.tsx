@@ -1,5 +1,5 @@
 import { Head, useHttp } from '@inertiajs/react';
-import { User, Mail, Lock } from 'lucide-react';
+import { CheckCircle2, Circle, Lock, Mail, User } from 'lucide-react';
 import { useState } from 'react';
 import InputError from '@/components/input-error';
 import PasswordInput from '@/components/password-input';
@@ -8,12 +8,82 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { cn } from '@/lib/utils';
 import { login } from '@/routes';
 import { register as apiRegister } from '@/routes/api/auth';
 
 type Props = {
     passwordRules: string;
 };
+
+const getMinPasswordLength = (passwordRules: string) =>
+    Number(passwordRules.match(/minlength:\s*(\d+)/i)?.[1] ?? 8);
+
+const getPasswordStrength = (password: string, minLength: number) => {
+    const checks = [
+        password.length >= minLength,
+        /[a-z]/.test(password),
+        /[A-Z]/.test(password),
+        /\d/.test(password),
+        /[^A-Za-z0-9]/.test(password),
+        password.length >= Math.max(12, minLength + 4),
+    ];
+    const score = checks.filter(Boolean).length;
+    const percent = Math.round((score / checks.length) * 100);
+
+    if (score <= 2) {
+        return {
+            label: 'Lemah',
+            percent,
+            barClass: 'bg-rose-500',
+            textClass: 'text-rose-600',
+        };
+    }
+
+    if (score <= 4) {
+        return {
+            label: 'Cukup',
+            percent,
+            barClass: 'bg-amber-500',
+            textClass: 'text-amber-600',
+        };
+    }
+
+    if (score === 5) {
+        return {
+            label: 'Kuat',
+            percent,
+            barClass: 'bg-emerald-500',
+            textClass: 'text-emerald-600',
+        };
+    }
+
+    return {
+        label: 'Sangat kuat',
+        percent,
+        barClass: 'bg-blue-600',
+        textClass: 'text-blue-700',
+    };
+};
+
+const getPasswordRequirements = (password: string, minLength: number) => [
+    {
+        label: `${minLength}+ karakter`,
+        met: password.length >= minLength,
+    },
+    {
+        label: 'Besar dan kecil',
+        met: /[a-z]/.test(password) && /[A-Z]/.test(password),
+    },
+    {
+        label: 'Angka',
+        met: /\d/.test(password),
+    },
+    {
+        label: 'Simbol',
+        met: /[^A-Za-z0-9]/.test(password),
+    },
+];
 
 const GoogleIcon = () => (
     <svg
@@ -54,6 +124,23 @@ export default function Register({ passwordRules }: Props) {
         password: '',
         password_confirmation: '',
     });
+    const [passwordFocused, setPasswordFocused] = useState(false);
+    const minPasswordLength = getMinPasswordLength(passwordRules);
+    const passwordStrength = getPasswordStrength(
+        http.data.password,
+        minPasswordLength,
+    );
+    const passwordRequirements = getPasswordRequirements(
+        http.data.password,
+        minPasswordLength,
+    );
+    const showPasswordHelp = passwordFocused || http.data.password.length > 0;
+    const confirmationStatus =
+        http.data.password_confirmation.length === 0
+            ? null
+            : http.data.password === http.data.password_confirmation
+              ? 'match'
+              : 'mismatch';
 
     const validate = () => {
         const errors = {
@@ -77,6 +164,8 @@ export default function Register({ passwordRules }: Props) {
 
         if (!http.data.password_confirmation) {
             errors.password_confirmation = 'Konfirmasi kata sandi wajib diisi.';
+        } else if (http.data.password !== http.data.password_confirmation) {
+            errors.password_confirmation = 'Konfirmasi kata sandi belum cocok.';
         }
 
         setValidationErrors(errors);
@@ -112,15 +201,15 @@ export default function Register({ passwordRules }: Props) {
             <Head title="Daftar" />
             <form
                 onSubmit={handleSubmit}
-                className="flex flex-col gap-4"
+                className="flex flex-col gap-3"
                 noValidate
             >
-                <div className="grid gap-3">
+                <div className="grid gap-2.5">
                     {/* Name */}
                     <div className="grid gap-1.5">
                         <Label
                             htmlFor="name"
-                            className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
+                            className="text-[11px] font-bold tracking-[0.11em] text-slate-600 uppercase"
                         >
                             Nama Lengkap
                         </Label>
@@ -145,7 +234,7 @@ export default function Register({ passwordRules }: Props) {
                                         name: '',
                                     }));
                                 }}
-                                className="h-11 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
+                                className="h-11 rounded-xl border-slate-200 bg-white pl-11 text-slate-950 shadow-sm shadow-slate-200/40 transition-all placeholder:text-slate-400 hover:border-slate-300 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
                         <InputError
@@ -157,7 +246,7 @@ export default function Register({ passwordRules }: Props) {
                     <div className="grid gap-1.5">
                         <Label
                             htmlFor="email"
-                            className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
+                            className="text-[11px] font-bold tracking-[0.11em] text-slate-600 uppercase"
                         >
                             Alamat Email
                         </Label>
@@ -181,7 +270,7 @@ export default function Register({ passwordRules }: Props) {
                                         email: '',
                                     }));
                                 }}
-                                className="h-11 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
+                                className="h-11 rounded-xl border-slate-200 bg-white pl-11 text-slate-950 shadow-sm shadow-slate-200/40 transition-all placeholder:text-slate-400 hover:border-slate-300 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
                         <InputError
@@ -195,7 +284,7 @@ export default function Register({ passwordRules }: Props) {
                     <div className="grid gap-1.5">
                         <Label
                             htmlFor="password"
-                            className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
+                            className="text-[11px] font-bold tracking-[0.11em] text-slate-600 uppercase"
                         >
                             Kata Sandi
                         </Label>
@@ -219,7 +308,9 @@ export default function Register({ passwordRules }: Props) {
                                         password: '',
                                     }));
                                 }}
-                                className="h-11 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
+                                onFocus={() => setPasswordFocused(true)}
+                                onBlur={() => setPasswordFocused(false)}
+                                className="h-11 rounded-xl border-slate-200 bg-white pl-11 text-slate-950 shadow-sm shadow-slate-200/40 transition-all placeholder:text-slate-400 hover:border-slate-300 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
                             />
                         </div>
                         <InputError
@@ -228,13 +319,59 @@ export default function Register({ passwordRules }: Props) {
                                 http.errors.password
                             }
                         />
+                        <div
+                            className="space-y-2"
+                            aria-live="polite"
+                            aria-label={`Kekuatan kata sandi ${passwordStrength.label}`}
+                        >
+                            <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 ring-1 ring-slate-200/70">
+                                <div
+                                    className={`h-full rounded-full transition-all duration-300 ${passwordStrength.barClass}`}
+                                    style={{
+                                        width: `${passwordStrength.percent}%`,
+                                    }}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between text-[11px] leading-4">
+                                <span className="text-slate-500">
+                                    Minimal {minPasswordLength} karakter
+                                </span>
+                                <span
+                                    className={`font-semibold ${passwordStrength.textClass}`}
+                                >
+                                    {passwordStrength.label}
+                                </span>
+                            </div>
+                            {showPasswordHelp && (
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    {passwordRequirements.map((requirement) => (
+                                        <div
+                                            key={requirement.label}
+                                            className={cn(
+                                                'inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10px] leading-none font-semibold transition-colors',
+                                                requirement.met
+                                                    ? 'border-blue-200 bg-blue-50 text-blue-700'
+                                                    : 'border-slate-200 bg-white/70 text-slate-500',
+                                            )}
+                                        >
+                                            {requirement.met ? (
+                                                <CheckCircle2 className="h-3 w-3 shrink-0" />
+                                            ) : (
+                                                <Circle className="h-3 w-3 shrink-0" />
+                                            )}
+                                            <span>{requirement.label}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     {/* Confirm Password */}
                     <div className="grid gap-1.5">
                         <Label
                             htmlFor="password_confirmation"
-                            className="text-xs font-bold tracking-wider text-zinc-700 uppercase"
+                            className="text-[11px] font-bold tracking-[0.11em] text-slate-600 uppercase"
                         >
                             Ulangi Kata Sandi
                         </Label>
@@ -261,7 +398,13 @@ export default function Register({ passwordRules }: Props) {
                                         password_confirmation: '',
                                     }));
                                 }}
-                                className="h-11 rounded-xl border-zinc-200 bg-white pl-11 text-black shadow-sm transition-all placeholder:text-zinc-400 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25"
+                                className={cn(
+                                    'h-11 rounded-xl border-slate-200 bg-white pl-11 text-slate-950 shadow-sm shadow-slate-200/40 transition-all placeholder:text-slate-400 hover:border-slate-300 focus:shadow-md focus-visible:border-[#2f80ed] focus-visible:ring-[#2f80ed]/25',
+                                    confirmationStatus === 'match' &&
+                                        'border-blue-300 focus-visible:border-blue-500 focus-visible:ring-blue-500/25',
+                                    confirmationStatus === 'mismatch' &&
+                                        'border-rose-300 focus-visible:border-rose-500 focus-visible:ring-rose-500/20',
+                                )}
                             />
                         </div>
                         <InputError
@@ -270,12 +413,32 @@ export default function Register({ passwordRules }: Props) {
                                 http.errors.password_confirmation
                             }
                         />
+                        {confirmationStatus && (
+                            <p
+                                className={cn(
+                                    'flex items-center gap-1.5 text-xs leading-5 font-medium',
+                                    confirmationStatus === 'match'
+                                        ? 'text-blue-700'
+                                        : 'text-rose-600',
+                                )}
+                                aria-live="polite"
+                            >
+                                {confirmationStatus === 'match' ? (
+                                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                                ) : (
+                                    <Circle className="h-3.5 w-3.5 shrink-0" />
+                                )}
+                                {confirmationStatus === 'match'
+                                    ? 'Kata sandi cocok.'
+                                    : 'Kata sandi belum sama.'}
+                            </p>
+                        )}
                     </div>
 
                     {/* Submit Button */}
                     <Button
                         type="submit"
-                        className="mt-2 flex h-11 w-full cursor-pointer items-center justify-center rounded-xl border-none bg-gradient-to-r from-[#2f80ed] to-[#1a73e8] text-sm font-semibold tracking-wide text-white shadow-md transition-all hover:from-[#1a73e8] hover:to-[#155fc4] hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.99]"
+                        className="mt-1 flex h-12 w-full cursor-pointer items-center justify-center rounded-xl border-none bg-[#2563eb] text-sm font-bold tracking-normal text-white shadow-lg shadow-blue-600/20 transition-all hover:bg-[#1d4ed8] hover:shadow-blue-600/25 active:scale-[0.99] disabled:shadow-none"
                         tabIndex={5}
                         data-test="register-user-button"
                         disabled={http.processing}
@@ -288,9 +451,9 @@ export default function Register({ passwordRules }: Props) {
                 </div>
 
                 {/* Divider */}
-                <div className="relative flex items-center py-2">
+                <div className="relative flex items-center py-1.5">
                     <div className="flex-grow border-t border-zinc-200"></div>
-                    <span className="mx-4 flex-shrink text-xs font-semibold text-zinc-400">
+                    <span className="mx-4 flex-shrink text-xs font-semibold text-slate-400">
                         atau lanjut dengan
                     </span>
                     <div className="flex-grow border-t border-zinc-200"></div>
@@ -300,7 +463,7 @@ export default function Register({ passwordRules }: Props) {
                 <button
                     type="button"
                     onClick={() => window.location.assign('/auth/google')}
-                    className="flex h-11 w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white font-semibold text-zinc-700 shadow-sm transition-all hover:border-zinc-300 hover:bg-zinc-50 active:scale-[0.99]"
+                    className="flex h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white font-semibold text-slate-700 shadow-sm shadow-slate-200/60 transition-all hover:border-blue-200 hover:bg-blue-50/40 hover:text-slate-950 hover:shadow-md active:scale-[0.99]"
                 >
                     <GoogleIcon />
                     <span className="text-sm font-bold">
@@ -309,7 +472,7 @@ export default function Register({ passwordRules }: Props) {
                 </button>
 
                 {/* Footer - redirects to login */}
-                <div className="mt-2 text-center text-sm font-medium text-zinc-600">
+                <div className="mt-1 text-center text-sm font-medium text-slate-600">
                     Sudah punya akun?{' '}
                     <TextLink
                         href={login()}

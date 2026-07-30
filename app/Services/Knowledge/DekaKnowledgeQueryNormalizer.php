@@ -4,22 +4,48 @@ namespace App\Services\Knowledge;
 
 class DekaKnowledgeQueryNormalizer
 {
+    public function __construct(
+        private readonly ?FuzzyTypoCorrector $typoCorrector = null,
+    ) {}
+
     /**
      * @param  array<int, array{role: string, content: string}>  $history
-     * @return array{primary: string, alternates: array<int, string>, ambiguous: bool}
+     * @return array{primary: string, alternates: array<int, string>, ambiguous: bool, original: string, corrected: string}
      */
     public function normalize(string $question, array $history = []): array
     {
         $question = $this->clean($question);
         $fixedQuestion = $this->applyTypoFixes($question);
+        $fixedQuestion = $this->shouldSkipFuzzyTypoCorrection($fixedQuestion)
+            ? $fixedQuestion
+            : $this->applyFuzzyTypoCorrection($fixedQuestion);
+        $fixedQuestion = $this->applyTypoFixes($fixedQuestion);
         $normalized = $this->normalized($fixedQuestion);
         $topicQueries = $this->topicQueries($normalized);
-        $personQueries = $this->personAliasQueries($normalized);
+
+        if (
+            $topicQueries === []
+            && preg_match('/^(?:(pak|bu|bapak|ibu) )?(siapa|siapa saja|siapa saja yang ada|orang siapa)(?: di)? deka\??$/u', $normalized) === 1
+        ) {
+            $topicQueries = [
+                'tim karyawan DEKA',
+                'struktur tim DEKA',
+                $fixedQuestion,
+            ];
+        }
+
         $contextQueries = $this->contextualFollowUpQueries($normalized, $history);
 
-        $queries = $this->isShortFollowUp($normalized) && ($topicQueries !== [] || $contextQueries !== [])
-            ? [...$topicQueries, ...$contextQueries, ...$personQueries, $fixedQuestion]
-            : [$fixedQuestion, ...$personQueries, ...$topicQueries, ...$contextQueries];
+        $queries = $this->shouldPrioritizeTopicQueries($normalized, $topicQueries)
+            ? [...$topicQueries, ...$contextQueries, $fixedQuestion]
+            : ($this->isShortFollowUp($normalized) && ($topicQueries !== [] || $contextQueries !== [])
+            ? [...$topicQueries, ...$contextQueries, $fixedQuestion]
+            : [$fixedQuestion, ...$topicQueries, ...$contextQueries]);
+
+        // Keep original (pre-fuzzy) phrasing as alternate so retrieval still sees raw user words.
+        if ($question !== $fixedQuestion) {
+            $queries[] = $question;
+        }
 
         $queries = collect($queries)
             ->map(fn (string $query): string => $this->clean($query))
@@ -32,7 +58,16 @@ class DekaKnowledgeQueryNormalizer
             'primary' => $queries[0] ?? $question,
             'alternates' => array_slice($queries, 1),
             'ambiguous' => $this->isAmbiguousDekaQuestion($normalized),
+            'original' => $question,
+            'corrected' => $fixedQuestion,
         ];
+    }
+
+    private function applyFuzzyTypoCorrection(string $question): string
+    {
+        $corrector = $this->typoCorrector ?? new FuzzyTypoCorrector;
+
+        return $this->clean($corrector->correct($question));
     }
 
     /**
@@ -41,8 +76,25 @@ class DekaKnowledgeQueryNormalizer
     private function topicQueries(string $normalized): array
     {
         return match (true) {
-            $this->containsAny($normalized, ['kontak', 'kontakny', 'kontaknya', 'alamat', 'alamatnya', 'lokasi', 'kantor', 'rute', 'sana', 'hubungi']) => [
+            $this->containsAny($normalized, [
+                'struktur tim', 'struktur organisasi', 'tim', 'karyawan', 'pegawai',
+                'staff', 'staf', 'anggota tim', 'personel', 'jabatan', 'role',
+                'posisi', 'divisi', 'developer', 'programmer', 'backend', 'frontend',
+                'front end', 'fullstack', 'full stack', 'designer', 'design',
+                'ui', 'ux', 'manager', 'direktur', 'sekretaris', 'penasehat',
+                'hrd', 'administrasi',
+            ]) => [
+                'tim karyawan DEKA',
+                'struktur tim DEKA',
+                'daftar karyawan DEKA',
+                'anggota tim DEKA',
+                'nama dan jabatan tim DEKA',
+            ],
+            $this->containsAny($normalized, ['kontak', 'kontakny', 'kontaknya', 'alamat', 'alamatnya', 'lokasi', 'kantor', 'rute', 'sana', 'hubungi', 'whatsapp', 'wa', 'telepon', 'telpon', 'nomor', 'nomer', 'hp']) => [
                 'kontak DEKA',
+                'WhatsApp DEKA',
+                'nomor WhatsApp DEKA',
+                'telepon DEKA',
                 'alamat DEKA',
                 'lokasi kantor DEKA',
                 'website DEKA',
@@ -56,13 +108,17 @@ class DekaKnowledgeQueryNormalizer
                 'awal berdiri DEKA',
                 'founder DEKA',
                 'pendiri DEKA',
-                'Muhammad Rizky Hajar',
                 'tim awal DEKA',
-                'Abdul Rahman Aditya Cahyadi Rifqi Oktachandra',
             ],
-            $this->containsAny($normalized, ['layanan', 'layanannya', 'produk', 'produknya', 'jasa']) => [
+            $this->containsAny($normalized, ['produk', 'produknya', 'katalog', 'inaproc', 'harga']) => [
+                'Produk DEKA di INAPROC Katalog Elektronik',
+                'produk DEKA INAPROC',
+                'daftar produk DEKA di INAPROC',
+                'URL produk DEKA di INAPROC',
+                'harga produk DEKA INAPROC',
+            ],
+            $this->containsAny($normalized, ['layanan', 'layanannya', 'jasa']) => [
                 'layanan DEKA',
-                'produk DEKA',
                 'jasa DEKA',
                 'solusi digital DEKA',
             ],
@@ -76,58 +132,16 @@ class DekaKnowledgeQueryNormalizer
     }
 
     /**
-     * @return array<int, string>
-     */
-    private function personAliasQueries(string $normalized): array
-    {
-        $queries = [];
-
-        if ($this->containsAny($normalized, ['riski', 'riskı', 'risky', 'rizki', 'rizky', 'rizqy'])) {
-            $queries = [
-                ...$queries,
-                'Muhammad Rizky Hajar',
-                'Rizky Hajar',
-                'founder DEKA',
-                'pendiri DEKA',
-            ];
-        }
-
-        if ($this->containsAny($normalized, ['rifqi', 'rifki', 'rifqy', 'oktachandra'])) {
-            $queries = [
-                ...$queries,
-                'M. Rifqi Oktachandra',
-                'Rifqi Oktachandra',
-                'tim awal DEKA',
-            ];
-        }
-
-        if ($this->containsAny($normalized, ['abdul', 'rahman', 'rachman'])) {
-            $queries = [
-                ...$queries,
-                'Abdul Rahman',
-                'tim awal DEKA',
-                'pendiri DEKA',
-            ];
-        }
-
-        if ($this->containsAny($normalized, ['aditya', 'adit', 'cahyadi', 'cahya'])) {
-            $queries = [
-                ...$queries,
-                'Aditya Cahyadi',
-                'tim awal DEKA',
-            ];
-        }
-
-        return $queries;
-    }
-
-    /**
      * @param  array<int, array{role: string, content: string}>  $history
      * @return array<int, string>
      */
     private function contextualFollowUpQueries(string $normalized, array $history): array
     {
-        if (! $this->isShortFollowUp($normalized)) {
+        if (
+            ! $this->isShortFollowUp($normalized)
+            || $this->topicQueries($normalized) !== []
+            || preg_match('/(?:nya)\b|\b(ini|itu|tadi|tersebut|dia|mereka)\b/u', $normalized) !== 1
+        ) {
             return [];
         }
 
@@ -140,27 +154,21 @@ class DekaKnowledgeQueryNormalizer
             return [];
         }
 
-        if ($this->containsAny($normalized, ['nya', 'itu', 'tersebut']) || mb_strlen($normalized) <= 16) {
-            return [
-                ...$this->topicQueries($normalized.' '.$recentContext),
-                ...$this->personAliasQueries($normalized.' '.$recentContext),
-            ];
-        }
-
-        return [];
+        return [
+            ...$this->topicQueries($normalized.' '.$recentContext),
+        ];
     }
 
     private function isAmbiguousDekaQuestion(string $normalized): bool
     {
         return $this->containsAny($normalized, ['siapa deka', 'siapa di deka', 'orang deka', 'pak siapa', 'ibu siapa'])
-            || ($this->containsAny($normalized, ['pak ', 'bu ', 'bapak ', 'ibu '])
-                && ! $this->containsAny($normalized, ['riski', 'risky', 'rizki', 'rizky', 'rifqi', 'rifki', 'abdul', 'rahman', 'aditya']));
+            || preg_match('/\b(pak|bu|bapak|ibu)\s+(siapa|yang mana)\b/u', $normalized) === 1;
     }
 
     private function isShortFollowUp(string $normalized): bool
     {
         return mb_strlen($normalized) <= 32
-            || $this->containsAny($normalized, ['nya', 'itu', 'tersebut']);
+            || preg_match('/(?:nya|itu|tersebut)\b/u', $normalized) === 1;
     }
 
     private function applyTypoFixes(string $question): string
@@ -168,16 +176,36 @@ class DekaKnowledgeQueryNormalizer
         $fixed = preg_replace('/\bdeak\b/i', 'DEKA', $question) ?? $question;
         $fixed = preg_replace('/\bdekaa\b/i', 'DEKA', $fixed) ?? $fixed;
         $fixed = preg_replace('/\bdeka\b/i', 'DEKA', $fixed) ?? $fixed;
+        $fixed = preg_replace('/\bcoab\b/i', 'coba', $fixed) ?? $fixed;
+        $fixed = preg_replace('/\bdiatas\b/i', 'di atas', $fixed) ?? $fixed;
         $fixed = preg_replace('/\bkontakny\b/i', 'kontaknya', $fixed) ?? $fixed;
+        $fixed = preg_replace('/\bnomer\b/i', 'nomor', $fixed) ?? $fixed;
+        $fixed = preg_replace('/\btelpon\b/i', 'telepon', $fixed) ?? $fixed;
+        $fixed = preg_replace('/\bwa\b/i', 'WhatsApp', $fixed) ?? $fixed;
+        $fixed = preg_replace('/\bhp\b/i', 'HP', $fixed) ?? $fixed;
         $fixed = preg_replace('/\bpendiiri\b/i', 'pendiri', $fixed) ?? $fixed;
         $fixed = preg_replace('/\bpendrii\b/i', 'pendiri', $fixed) ?? $fixed;
         $fixed = preg_replace('/\bpendirii\b/i', 'pendiri', $fixed) ?? $fixed;
         $fixed = preg_replace('/\bfounderr\b/i', 'founder', $fixed) ?? $fixed;
-        $fixed = preg_replace('/\brisky\b/i', 'Rizky', $fixed) ?? $fixed;
-        $fixed = preg_replace('/\briski\b/i', 'Rizky', $fixed) ?? $fixed;
-        $fixed = preg_replace('/\brizki\b/i', 'Rizky', $fixed) ?? $fixed;
 
         return $fixed;
+    }
+
+    private function shouldSkipFuzzyTypoCorrection(string $question): bool
+    {
+        $normalized = $this->normalized($question);
+
+        return $this->containsAny($normalized, ['produk', 'produknya', 'katalog', 'inaproc', 'harga'])
+            || preg_match('/\b(selain|di atas|diatas|sebutkan|lain)\b/u', $normalized) === 1;
+    }
+
+    /**
+     * @param  array<int, string>  $topicQueries
+     */
+    private function shouldPrioritizeTopicQueries(string $normalized, array $topicQueries): bool
+    {
+        return $topicQueries !== []
+            && $this->containsAny($normalized, ['produk', 'produknya', 'katalog', 'inaproc', 'harga']);
     }
 
     /**
@@ -186,7 +214,12 @@ class DekaKnowledgeQueryNormalizer
     private function containsAny(string $haystack, array $needles): bool
     {
         foreach ($needles as $needle) {
-            if (str_contains($haystack, $needle)) {
+            $needle = trim($needle);
+
+            if ($needle !== '' && preg_match(
+                '/(?<![\pL\pN])'.preg_quote($needle, '/').'(?![\pL\pN])/u',
+                $haystack,
+            ) === 1) {
                 return true;
             }
         }

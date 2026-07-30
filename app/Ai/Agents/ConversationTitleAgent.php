@@ -22,8 +22,12 @@ class ConversationTitleAgent implements Agent, Conversational, HasTools
 
     public function instructions(): Stringable|string
     {
-        return 'Create a short conversation title in the same language as the user. '
-            .'Keep it under 80 characters. Return only the title text.';
+        return 'You create short conversation titles for a DEKA company chatbot. '
+            .'Write the title in Indonesian, based on the actual topic of the user question (and assistant reply if available). '
+            .'Make it specific and dynamic to the topic, for example: "Layanan utama DEKA", "Lokasi kantor DEKA", "Jam operasional DEKA", "Kontak resmi DEKA", "Apa itu DEKA". '
+            .'Do not use generic titles like "Percakapan", "Chat", "New chat", "Halo", or "Pertanyaan user". '
+            .'Keep it under 60 characters, title case-ish natural Indonesian, no quotes, no trailing punctuation. '
+            .'Return only the title text.';
     }
 
     public function messages(): iterable

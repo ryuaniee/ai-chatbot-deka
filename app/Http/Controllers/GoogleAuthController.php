@@ -7,6 +7,7 @@ use App\Support\EmailAddress;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Laravel\Socialite\AbstractUser as SocialiteUser;
 use Laravel\Socialite\Facades\Socialite;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirectResponse;
 
@@ -30,7 +31,9 @@ class GoogleAuthController extends Controller
                 ->withErrors(['email' => 'Google account did not provide an email address.']);
         }
 
-        if (data_get($googleUser->user, 'verified_email') !== true) {
+        $rawGoogleUser = $googleUser instanceof SocialiteUser ? $googleUser->getRaw() : [];
+
+        if (data_get($rawGoogleUser, 'verified_email') !== true) {
             return redirect()
                 ->route('login')
                 ->withErrors(['email' => 'Google account email is not verified.']);

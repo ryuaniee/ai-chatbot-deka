@@ -25,14 +25,14 @@ class FeedbackImprovementService
         ]);
 
         $message = $feedback->message;
-        $question = $message?->replyToMessage?->content ?? $this->nearestUserMessage($message);
+        $question = $message?->replyToMessage->content ?: $this->nearestUserMessage($message);
         $context = $this->conversationContext($message);
 
         $response = $this->aiRuntimeClient->generateFeedbackImprovement([
             'user' => $feedback->user?->email,
             'conversation' => $message?->conversation?->title,
             'question' => $question ?: '-',
-            'old_answer' => $message?->content ?? '-',
+            'old_answer' => $message?->content ?: '-',
             'feedback_reason' => $feedback->reason ?: 'Tidak ada alasan tertulis.',
             'context' => $context,
         ]);

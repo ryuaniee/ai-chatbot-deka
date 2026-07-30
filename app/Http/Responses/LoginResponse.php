@@ -12,7 +12,7 @@ class LoginResponse implements LoginResponseContract
     public function toResponse($request)
     {
         return $request->wantsJson()
-            ? response()->json(['two_factor' => false])
+            ? response()->json(['authenticated' => true])
             : redirect()->to($this->redirectPathFor($request));
     }
 }

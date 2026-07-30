@@ -1,10 +1,5 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import {
-    Clock,
-    Info,
-    MapPin,
-    MessageSquare,
-} from 'lucide-react';
+import { Clock, Info, MapPin, MessageSquare } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import DekaLogo from '@/components/deka-logo';
 import { login } from '@/routes';
@@ -16,20 +11,20 @@ function InteractiveCanvas() {
         const canvas = canvasRef.current;
 
         if (!canvas) {
-return;
-}
+            return;
+        }
 
         const ctx = canvas.getContext('2d');
 
         if (!ctx) {
-return;
-}
+            return;
+        }
 
         const container = canvas.parentElement;
 
         if (!container) {
-return;
-}
+            return;
+        }
 
         const resizeCanvas = () => {
             const rect = container.getBoundingClientRect();
@@ -64,9 +59,9 @@ return;
         }
 
         const COLORS = [
-            'rgba(37, 99, 235, ',   // Blue
-            'rgba(180, 83, 9, ',    // Coffee Amber
-            'rgba(217, 119, 6, ',   // Rich Gold
+            'rgba(37, 99, 235, ', // Blue
+            'rgba(14, 165, 233, ', // Sky
+            'rgba(79, 70, 229, ', // Indigo
         ];
 
         const particles: Particle[] = [];
@@ -85,7 +80,7 @@ return;
                 color: COLORS[Math.floor(Math.random() * COLORS.length)],
                 baseAlpha: Math.random() * 0.35 + 0.15,
                 alpha: 0,
-                speedMultiplier: Math.random() * 0.6 + 0.4
+                speedMultiplier: Math.random() * 0.6 + 0.4,
             });
         }
 
@@ -120,12 +115,14 @@ return;
                     strokeParticles.push({
                         x: px + (Math.random() - 0.5) * 6,
                         y: py + (Math.random() - 0.5) * 6,
-                        vx: (Math.random() - 0.5) * 0.4 + (dx * 0.02),
-                        vy: (Math.random() - 0.5) * 0.4 + (dy * 0.02),
+                        vx: (Math.random() - 0.5) * 0.4 + dx * 0.02,
+                        vy: (Math.random() - 0.5) * 0.4 + dy * 0.02,
                         radius: Math.random() * 10 + 6,
-                        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                        color: COLORS[
+                            Math.floor(Math.random() * COLORS.length)
+                        ],
                         alpha: 0.6,
-                        decay: Math.random() * 0.012 + 0.008
+                        decay: Math.random() * 0.012 + 0.008,
                     });
                 }
 
@@ -168,12 +165,14 @@ return;
                         strokeParticles.push({
                             x: px + (Math.random() - 0.5) * 6,
                             y: py + (Math.random() - 0.5) * 6,
-                            vx: (Math.random() - 0.5) * 0.4 + (dx * 0.02),
-                            vy: (Math.random() - 0.5) * 0.4 + (dy * 0.02),
+                            vx: (Math.random() - 0.5) * 0.4 + dx * 0.02,
+                            vy: (Math.random() - 0.5) * 0.4 + dy * 0.02,
                             radius: Math.random() * 10 + 6,
-                            color: COLORS[Math.floor(Math.random() * COLORS.length)],
+                            color: COLORS[
+                                Math.floor(Math.random() * COLORS.length)
+                            ],
                             alpha: 0.6,
-                            decay: Math.random() * 0.012 + 0.008
+                            decay: Math.random() * 0.012 + 0.008,
                         });
                     }
 
@@ -185,7 +184,9 @@ return;
 
         container.addEventListener('mousemove', handleMouseMove);
         container.addEventListener('mouseleave', handleMouseLeave);
-        container.addEventListener('touchmove', handleTouchMove, { passive: true });
+        container.addEventListener('touchmove', handleTouchMove, {
+            passive: true,
+        });
         container.addEventListener('touchend', handleMouseLeave);
 
         let animationFrameId: number;
@@ -201,20 +202,20 @@ return;
 
                 // Wrap boundaries
                 if (p.x < -p.radius) {
-p.x = canvas.width + p.radius;
-}
+                    p.x = canvas.width + p.radius;
+                }
 
                 if (p.x > canvas.width + p.radius) {
-p.x = -p.radius;
-}
+                    p.x = -p.radius;
+                }
 
                 if (p.y < -p.radius) {
-p.y = canvas.height + p.radius;
-}
+                    p.y = canvas.height + p.radius;
+                }
 
                 if (p.y > canvas.height + p.radius) {
-p.y = -p.radius;
-}
+                    p.y = -p.radius;
+                }
 
                 // Mouse interaction
                 if (mouse.active) {
@@ -284,7 +285,7 @@ p.y = -p.radius;
     return (
         <canvas
             ref={canvasRef}
-            className="absolute inset-0 z-0 h-full w-full pointer-events-none"
+            className="pointer-events-none absolute inset-0 z-0 h-full w-full"
         />
     );
 }
@@ -294,19 +295,19 @@ const featureItems = [
         icon: Info,
         title: 'Info layanan Deka',
         description:
-            'Tanyakan profil, layanan, fasilitas, dan informasi umum yang dibutuhkan sebelum berkunjung.',
+            'Tanyakan profil perusahaan, layanan IT, solusi AI, dan transformasi digital yang disediakan DEKA.',
     },
     {
         icon: MapPin,
         title: 'Lokasi dan kontak',
         description:
-            'Temukan alamat, kontak resmi, serta arahan informasi yang membantu Anda terhubung lebih cepat.',
+            'Temukan alamat kantor, kontak resmi, serta informasi yang membantu Anda terhubung lebih cepat.',
     },
     {
         icon: Clock,
         title: 'Jadwal dan operasional',
         description:
-            'Dapatkan ringkasan informasi waktu layanan dan ketersediaan fasilitas secara praktis.',
+            'Dapatkan ringkasan jam operasional dan ketersediaan layanan support secara praktis.',
     },
     {
         icon: MessageSquare,
@@ -324,10 +325,8 @@ export default function Welcome() {
             <Head title="Selamat Datang" />
             <div className="min-h-screen bg-[#f7f7f4] font-sans text-slate-950 selection:bg-blue-600/20 selection:text-blue-700">
                 <main>
-                    <section
-                        className="relative overflow-hidden border-b border-slate-200/70 bg-[#f7f7f4] min-h-screen"
-                    >
-                        {/* Latar Belakang Seni Sapuan Kuas Abstrak (Arts Studio Theme) */}
+                    <section className="relative min-h-screen overflow-hidden border-b border-slate-200/70 bg-[#f7f7f4]">
+                        {/* Latar belakang interaktif tema teknologi DEKA */}
                         <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden select-none">
                             {/* Glow radial di tengah untuk kontras teks */}
                             <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.75)_0%,rgba(247,247,244,0.3)_80%)]" />
@@ -338,16 +337,14 @@ export default function Welcome() {
                             <div className="absolute right-0 bottom-0 left-0 h-32 bg-gradient-to-t from-[#f7f7f4] to-transparent" />
                         </div>
 
-                        <div
-                            className="relative mx-auto flex min-h-screen max-w-7xl items-center justify-center px-5 md:px-8"
-                        >
-                            <div className="z-10 flex max-w-3xl flex-col items-center justify-center space-y-8 text-center py-12">
-                                <div className="flex flex-col items-center mb-6 mt-[-2.5rem] md:mt-[-5rem]">
+                        <div className="relative mx-auto flex min-h-screen max-w-7xl items-center justify-center px-5 md:px-8">
+                            <div className="z-10 flex max-w-3xl flex-col items-center justify-center space-y-8 py-12 text-center">
+                                <div className="mt-[-2.5rem] mb-6 flex flex-col items-center md:mt-[-5rem]">
                                     <Link
                                         href="/"
                                         className="flex items-center justify-center overflow-visible transition hover:opacity-90"
                                     >
-                                        <DekaLogo className="h-24 md:h-32 w-auto object-contain" />
+                                        <DekaLogo className="h-24 w-auto object-contain md:h-32" />
                                     </Link>
                                 </div>
 
@@ -367,8 +364,8 @@ export default function Welcome() {
 
                                 <p className="max-w-2xl text-center text-base leading-relaxed text-slate-600 md:text-lg">
                                     Chatbot pintar kami siap memberikan info
-                                    menu, rute lokasi, fasilitas, hingga jadwal
-                                    operasional Deka Coffee & Arts Studio secara
+                                    layanan IT, solusi AI, lokasi kantor, kontak
+                                    resmi, hingga operasional DEKA secara
                                     instan.
                                 </p>
 
@@ -445,8 +442,8 @@ export default function Welcome() {
                 <footer id="kontak" className="bg-[#f7f7f4] py-8">
                     <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-5 text-center md:flex-row md:px-8 md:text-left">
                         <p className="text-xs text-slate-500">
-                            &copy; {new Date().getFullYear()} Deka Coffee & Arts
-                            Studio. All rights reserved.
+                            &copy; {new Date().getFullYear()} DEKA — Solusi AI
+                            &amp; Transformasi Digital. All rights reserved.
                         </p>
                         <p className="text-xs font-medium text-slate-500">
                             Powered by Deka Chatbot AI Engine

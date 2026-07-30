@@ -14,9 +14,9 @@ class AdminUserSeeder extends Seeder
      */
     public function run(): void
     {
-        $name = env('ADMIN_NAME', 'Admin Deka');
-        $email = env('ADMIN_EMAIL', 'admin@deka.dev');
-        $password = env('ADMIN_PASSWORD', 'password');
+        $name = (string) config('admin.seed.name', 'Admin Deka');
+        $email = (string) config('admin.seed.email', 'admin@deka.dev');
+        $password = (string) config('admin.seed.password', 'password');
 
         User::query()->updateOrCreate(
             ['canonical_email' => EmailAddress::canonical($email)],

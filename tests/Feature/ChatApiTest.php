@@ -128,6 +128,26 @@ class ChatApiTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_assistant_reply_leaking_internal_markers_is_replaced_with_safe_fallback(): void
+    {
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['BEGIN_DEKA_CANDIDATES bocor ke user.']);
+        ConversationTitleAgent::fake(['Judul']);
+
+        $user = User::factory()->create();
+        $conversation = Conversation::factory()->for($user)->create();
+
+        $this->actingAs($user)
+            ->postJson(route('api.conversations.messages.store', $conversation), [
+                'content' => 'Ping',
+            ])
+            ->assertCreated()
+            ->assertJsonPath(
+                'assistant_message.content',
+                'Maaf, jawaban tidak dapat ditampilkan. Silakan ajukan pertanyaan Anda kembali.',
+            );
+    }
+
     public function test_user_can_send_a_message_to_an_existing_conversation(): void
     {
         $this->fakeAllowedModeration();
@@ -223,12 +243,66 @@ class ChatApiTest extends TestCase
                 'content' => 'Perlu judul?',
             ])
             ->assertCreated()
-            ->assertJsonPath('conversation.title', null);
+            ->assertJsonPath('conversation.title', 'Perlu judul');
 
         $this->assertDatabaseHas('conversations', [
             'id' => $conversation->id,
-            'title' => null,
+            'title' => 'Perlu judul',
         ]);
+    }
+
+    public function test_conversation_title_is_generated_from_topic_keywords_when_ai_title_fails(): void
+    {
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake(['Berikut layanan DEKA.']);
+        ConversationTitleAgent::fake([
+            fn () => throw new AiException('title failed'),
+        ]);
+
+        $user = User::factory()->create();
+
+        $this->actingAs($user)
+            ->postJson(route('api.conversations.store'), [
+                'content' => 'Apa saja layanan utama DEKA?',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('conversation.title', 'Layanan utama DEKA');
+    }
+
+    public function test_non_location_reply_strips_maps_line_from_assistant_content(): void
+    {
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake([
+            "Kontak resmi DEKA tersedia lewat website.\nMaps: [Buka di Google Maps](https://maps.app.goo.gl/keVnm8RWKmJtrWJR7)",
+        ]);
+        ConversationTitleAgent::fake(['Kontak DEKA']);
+
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->postJson(route('api.conversations.store'), [
+            'content' => 'Bagaimana kontak DEKA?',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('assistant_message.content', 'Kontak resmi DEKA tersedia lewat website.');
+    }
+
+    public function test_non_contact_reply_strips_contact_cta_block_from_assistant_content(): void
+    {
+        $this->fakeAllowedModeration();
+        ConversationReplyAgent::fake([
+            "DEKA menyediakan solusi AI untuk pelayanan publik.\n\nJika Anda ingin mengetahui lebih lanjut, silakan hubungi tim kami melalui kanal resmi berikut:\nWebsite: deka.dev\nWhatsApp / HP: 0822-5505-6566\nTelepon: (0541) 780 7095\nJam operasional: 09.00 - 17.00",
+        ]);
+        ConversationTitleAgent::fake(['Solusi AI DEKA']);
+
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)->postJson(route('api.conversations.store'), [
+            'content' => 'Apa solusi AI DEKA?',
+        ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('assistant_message.content', 'DEKA menyediakan solusi AI untuk pelayanan publik.');
     }
 
     public function test_chat_requests_are_rate_limited(): void
@@ -313,8 +387,7 @@ class ChatApiTest extends TestCase
 
         $this->assertStringContainsString('"type":"conversation_started"', $content);
         $this->assertStringContainsString('"type":"text_delta"', $content);
-        $this->assertStringContainsString('"delta":"Halo"', $content);
-        $this->assertStringContainsString('"delta":" stream."', $content);
+        $this->assertStringContainsString('"delta":"Halo stream."', $content);
         $this->assertStringContainsString('"type":"message_complete"', $content);
         $this->assertStringContainsString('"content":"Halo stream."', $content);
         $this->assertStringContainsString('data: [DONE]', $content);
@@ -354,6 +427,8 @@ class ChatApiTest extends TestCase
         $content = $response->streamedContent();
 
         $this->assertStringContainsString('"type":"conversation_started"', $content);
+        $this->assertStringContainsString('"type":"text_delta"', $content);
+        $this->assertStringContainsString('"delta":"Balasan stream lanjut."', $content);
         $this->assertStringContainsString('"type":"message_complete"', $content);
         $this->assertStringContainsString('"content":"Balasan stream lanjut."', $content);
         $this->assertStringContainsString('data: [DONE]', $content);
@@ -372,6 +447,37 @@ class ChatApiTest extends TestCase
             'id' => $assistantMessage->id,
             'reply_to_message_id' => $conversation->messages()->where('role', 'user')->firstOrFail()->id,
             'content' => 'Balasan stream lanjut.',
+        ]);
+    }
+
+    public function test_buffered_stream_does_not_emit_unguarded_internal_markers(): void
+    {
+        $this->fakeAllowedModeration();
+        config()->set('services.ai_chat.stream_safety_mode', 'buffered');
+        ConversationReplyAgent::fake(['BEGIN_DEKA_CANDIDATES bocor ke user.']);
+        ConversationTitleAgent::fake(['Judul stream']);
+
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)
+            ->withHeaders(['Accept' => 'text/event-stream'])
+            ->postJson(route('api.conversations.stream'), [
+                'content' => 'Ping',
+            ]);
+
+        $response->assertOk()
+            ->assertStreamed();
+
+        $content = $response->streamedContent();
+
+        $this->assertStringNotContainsString('BEGIN_DEKA_CANDIDATES bocor ke user.', $content);
+        $this->assertStringContainsString(
+            'Maaf, jawaban tidak dapat ditampilkan. Silakan ajukan pertanyaan Anda kembali.',
+            $content,
+        );
+        $this->assertDatabaseHas('messages', [
+            'role' => 'assistant',
+            'content' => 'Maaf, jawaban tidak dapat ditampilkan. Silakan ajukan pertanyaan Anda kembali.',
         ]);
     }
 
@@ -652,6 +758,64 @@ class ChatApiTest extends TestCase
             ])
             ->assertStatus(409)
             ->assertJsonPath('code', 'IDEMPOTENCY_KEY_REUSED');
+    }
+
+    public function test_user_can_rename_their_conversation(): void
+    {
+        $user = User::factory()->create();
+        $conversation = Conversation::factory()->for($user)->create([
+            'title' => 'Judul lama',
+        ]);
+
+        $this->actingAs($user)
+            ->patchJson(route('api.conversations.update', $conversation), [
+                'title' => 'Judul baru',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.title', 'Judul baru');
+
+        $this->assertDatabaseHas('conversations', [
+            'id' => $conversation->id,
+            'title' => 'Judul baru',
+        ]);
+    }
+
+    public function test_user_can_delete_their_conversation(): void
+    {
+        $user = User::factory()->create();
+        $conversation = Conversation::factory()->for($user)->create([
+            'title' => 'Akan dihapus',
+        ]);
+        $conversation->messages()->create([
+            'role' => 'user',
+            'content' => 'Halo',
+            'sequence' => 1,
+        ]);
+
+        $this->actingAs($user)
+            ->deleteJson(route('api.conversations.destroy', $conversation))
+            ->assertOk()
+            ->assertJsonPath('data.id', $conversation->id);
+
+        $this->assertDatabaseMissing('conversations', [
+            'id' => $conversation->id,
+        ]);
+        $this->assertDatabaseCount('messages', 0);
+    }
+
+    public function test_user_cannot_delete_another_users_conversation(): void
+    {
+        $owner = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $conversation = Conversation::factory()->for($owner)->create();
+
+        $this->actingAs($otherUser)
+            ->deleteJson(route('api.conversations.destroy', $conversation))
+            ->assertNotFound();
+
+        $this->assertDatabaseHas('conversations', [
+            'id' => $conversation->id,
+        ]);
     }
 
     private function fakeAllowedModeration(): void

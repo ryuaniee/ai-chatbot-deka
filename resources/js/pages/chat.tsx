@@ -7,26 +7,33 @@ import {
     Info,
     MapPin,
     MessageSquare,
-    Mic,
+    MoreHorizontal,
+    Pencil,
     Phone,
     Plus,
+    Search,
     SendHorizontal,
     Sidebar,
     Sparkles,
+    Loader2,
+    AlertCircle,
     ThumbsDown,
     ThumbsUp,
-    Loader2,
+    Trash2,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import DekaLogo from '@/components/deka-logo';
-import SettingsModal from '@/components/settings-modal';
 import LogoutConfirmModal from '@/components/logout-confirm-modal';
+import SettingsModal from '@/components/settings-modal';
 import {
     DropdownMenu,
     DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Skeleton } from '@/components/ui/skeleton';
 import { UserInfo } from '@/components/user-info';
 import { UserMenuContent } from '@/components/user-menu-content';
 import {
@@ -36,17 +43,51 @@ import {
 
 const markdownLinkPattern = /^\[([^\]]+)\]\(([^)]+)\)$/;
 
+/** Official DEKA office location on Google Maps */
+const DEKA_MAPS_URL = 'https://maps.app.goo.gl/keVnm8RWKmJtrWJR7';
+const DEKA_MAPS_EMBED_URL =
+    'https://www.google.com/maps?q=Jl.+Keledang+No.+48,+Gn.+Kelua,+Samarinda+Ulu,+Samarinda,+Kalimantan+Timur&z=16&output=embed';
+const DEKA_MAPS_ADDRESS =
+    'Jl. Keledang No. 48, Gn. Kelua, Samarinda Ulu, Samarinda';
+
 const isGoogleMapsUrl = (href: string): boolean => {
     try {
         const url = new URL(href);
+        const host = url.hostname.toLowerCase();
 
-        return (
-            url.hostname.includes('google.com') &&
-            (url.pathname.startsWith('/maps') || url.searchParams.has('q'))
-        );
+        if (
+            host === 'maps.app.goo.gl' ||
+            host === 'goo.gl' ||
+            host === 'g.page' ||
+            host.endsWith('.goo.gl')
+        ) {
+            return true;
+        }
+
+        if (host === 'maps.google.com' || host === 'maps.google.co.id') {
+            return true;
+        }
+
+        if (host.includes('google.')) {
+            return (
+                url.pathname.startsWith('/maps') ||
+                url.searchParams.has('q') ||
+                url.searchParams.has('query')
+            );
+        }
+
+        return false;
     } catch {
         return false;
     }
+};
+
+const normalizeMapsHref = (href: string): string => {
+    if (!isGoogleMapsUrl(href)) {
+        return href;
+    }
+
+    return DEKA_MAPS_URL;
 };
 
 const extractMarkdownLink = (
@@ -67,30 +108,55 @@ const renderMapsPreview = (
     key: string,
     href: string,
     label = 'Buka di Google Maps',
-) => (
-    <a
-        key={key}
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        className="group my-3 flex w-full max-w-xl items-center justify-between gap-4 rounded-2xl border border-blue-200 bg-linear-to-br from-blue-50 via-white to-sky-50 px-4 py-3 text-left shadow-sm transition hover:border-blue-300 hover:shadow-md"
-    >
-        <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
-                <MapPin className="h-5 w-5" />
+) => {
+    const mapsHref = normalizeMapsHref(href);
+    const previewLabel =
+        label.trim() === '' || /^https?:\/\//i.test(label)
+            ? DEKA_MAPS_ADDRESS
+            : label;
+
+    return (
+        <div
+            key={key}
+            className="my-3 w-full max-w-xl overflow-hidden rounded-2xl border border-blue-200 bg-white shadow-sm"
+        >
+            <div className="relative aspect-[16/9] w-full bg-slate-100">
+                <iframe
+                    title="Lokasi DEKA di Google Maps"
+                    src={DEKA_MAPS_EMBED_URL}
+                    className="absolute inset-0 h-full w-full border-0"
+                    loading="lazy"
+                    referrerPolicy="no-referrer-when-downgrade"
+                    allowFullScreen
+                />
             </div>
-            <div className="min-w-0">
-                <p className="text-sm font-semibold text-slate-900 md:text-[15px]">
-                    Google Maps
-                </p>
-                <p className="truncate text-xs text-slate-500 md:text-sm">
-                    {label}
-                </p>
-            </div>
+            <a
+                href={mapsHref}
+                target="_blank"
+                rel="noreferrer"
+                className="group flex items-center justify-between gap-4 bg-linear-to-br from-blue-50 via-white to-sky-50 px-4 py-3 text-left transition hover:bg-blue-50"
+            >
+                <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex h-11 w-11 flex-none items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                        <MapPin className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-900 md:text-[15px]">
+                            Google Maps · Kantor DEKA
+                        </p>
+                        <p className="truncate text-xs text-slate-500 md:text-sm">
+                            {previewLabel}
+                        </p>
+                        <p className="mt-0.5 truncate text-[11px] text-blue-600">
+                            {mapsHref}
+                        </p>
+                    </div>
+                </div>
+                <ExternalLink className="h-4.5 w-4.5 flex-none text-blue-500 transition group-hover:text-blue-600" />
+            </a>
         </div>
-        <ExternalLink className="h-4.5 w-4.5 flex-none text-blue-500 transition group-hover:text-blue-600" />
-    </a>
-);
+    );
+};
 
 interface ConversationItem {
     id: number;
@@ -182,20 +248,6 @@ const groupConversationsByRecency = (
         .map(([label, conversations]) => ({ label, conversations }));
 };
 
-const formatDuration = (
-    milliseconds: number | null | undefined,
-): string | null => {
-    if (milliseconds === null || milliseconds === undefined) {
-        return null;
-    }
-
-    if (milliseconds < 1000) {
-        return `${Math.round(milliseconds)} ms`;
-    }
-
-    return `${(milliseconds / 1000).toFixed(1)} dtk`;
-};
-
 const dislikeReasonOptions = [
     'Jawaban kurang lengkap',
     'Tidak menjawab pertanyaan',
@@ -203,17 +255,83 @@ const dislikeReasonOptions = [
     'Bahasa sulit dipahami',
 ];
 
+function ConversationListSkeleton() {
+    return (
+        <div className="space-y-3 px-1 py-1">
+            {[0, 1, 2].map((group) => (
+                <div key={group} className="space-y-2">
+                    <Skeleton className="ml-2 h-3 w-20 bg-slate-200/80" />
+                    {[0, 1, 2].map((item) => (
+                        <div
+                            key={item}
+                            className="flex items-center gap-2 rounded-xl px-2.5 py-2"
+                        >
+                            <Skeleton className="h-4 w-4 rounded bg-slate-200/80" />
+                            <Skeleton
+                                className={`h-4 bg-slate-200/80 ${item === 1 ? 'w-28' : 'w-40'}`}
+                            />
+                        </div>
+                    ))}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function ChatMessagesSkeleton() {
+    return (
+        <div className="space-y-7 px-4 pt-8 pb-8 lg:pt-[120px]">
+            <div className="mx-auto flex w-full max-w-[860px] justify-end">
+                <div className="w-full max-w-[58%] space-y-2 rounded-3xl bg-slate-100 px-5 py-4">
+                    <Skeleton className="h-4 w-full bg-slate-200/90" />
+                    <Skeleton className="h-4 w-3/5 bg-slate-200/90" />
+                </div>
+            </div>
+            <div className="mx-auto flex w-full max-w-[860px] items-start gap-4">
+                <Skeleton className="h-9 w-9 rounded-full bg-slate-200/80" />
+                <div className="min-w-0 flex-1 space-y-3">
+                    <Skeleton className="h-4 w-11/12 bg-slate-200/80" />
+                    <Skeleton className="h-4 w-full bg-slate-200/80" />
+                    <Skeleton className="h-4 w-4/5 bg-slate-200/80" />
+                    <Skeleton className="h-4 w-2/5 bg-slate-200/80" />
+                </div>
+            </div>
+            <div className="mx-auto flex w-full max-w-[860px] justify-end">
+                <div className="w-full max-w-[48%] space-y-2 rounded-3xl bg-slate-100 px-5 py-4">
+                    <Skeleton className="h-4 w-full bg-slate-200/90" />
+                    <Skeleton className="h-4 w-1/2 bg-slate-200/90" />
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ChatPage() {
     const { auth } = usePage().props;
     const { submit } = useHttp();
 
     const [conversations, setConversations] = useState<ConversationItem[]>([]);
+    const [isLoadingConversations, setIsLoadingConversations] = useState(true);
+    const [isLoadingConversation, setIsLoadingConversation] = useState(false);
     const [activeConversationId, setActiveConversationId] = useState<
         number | null
     >(null);
     const [messages, setMessages] = useState<MessageItem[]>([]);
     const [inputValue, setInputValue] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
+    const [chatError, setChatError] = useState<string | null>(null);
+    const [deletingConversationId, setDeletingConversationId] = useState<
+        number | null
+    >(null);
+    const [deleteTarget, setDeleteTarget] = useState<ConversationItem | null>(
+        null,
+    );
+    const [renameTarget, setRenameTarget] = useState<ConversationItem | null>(
+        null,
+    );
+    const [renameTitle, setRenameTitle] = useState('');
+    const [isRenaming, setIsRenaming] = useState(false);
+    const [historySearch, setHistorySearch] = useState('');
     const [sidebarOpen, setSidebarOpen] = useState(
         () => typeof window !== 'undefined' && window.innerWidth >= 1024,
     );
@@ -329,6 +447,7 @@ export default function ChatPage() {
         if (type === 'dislike' && nextType === 'dislike') {
             setDislikeDialogMessageId(messageId);
             setDislikeReason(feedbackReasons[messageId] ?? '');
+
             return;
         }
 
@@ -363,12 +482,13 @@ export default function ChatPage() {
         if (
             content.includes('layanan') ||
             content.includes('produk') ||
-            content.includes('menu')
+            content.includes('solusi') ||
+            content.includes('ai')
         ) {
             return [
-                'Harga layanan Deka',
-                'Jam operasional Deka',
-                'Kontak resmi Deka',
+                'Solusi AI DEKA',
+                'Jam operasional DEKA',
+                'Kontak resmi DEKA',
             ];
         }
 
@@ -377,30 +497,47 @@ export default function ChatPage() {
             content.includes('bantu') ||
             content.includes('bisa apa')
         ) {
-            return ['Apa itu Deka?', 'Layanan Deka', 'Kontak & Alamat'];
+            return ['Apa itu DEKA?', 'Layanan IT DEKA', 'Kontak & Alamat'];
         }
 
         return [
-            'Hubungi Customer Service',
-            'Menu Deka Coffee',
-            'Tentang Deka Studio',
+            'Hubungi tim DEKA',
+            'Layanan transformasi digital',
+            'Tentang DEKA',
         ];
     };
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     const streamAbortRef = useRef<AbortController | null>(null);
+    const selectedConversationRequestRef = useRef(0);
     const nextTempIdRef = useRef(-1);
 
     const user = auth.user;
-    const groupedConversations = groupConversationsByRecency(conversations);
+    const normalizedHistorySearch = historySearch.trim().toLowerCase();
+    const visibleConversations =
+        normalizedHistorySearch === ''
+            ? conversations
+            : conversations.filter((conversation) =>
+                  (conversation.title || 'Percakapan Tanpa Judul')
+                      .toLowerCase()
+                      .includes(normalizedHistorySearch),
+              );
+    const groupedConversations =
+        groupConversationsByRecency(visibleConversations);
+    const hasMessages = messages.length > 0;
 
     const fetchConversations = () => {
+        setIsLoadingConversations(true);
         submit(getConversations())
             .then((res: any) => {
                 setConversations(res.data || []);
             })
             .catch((err) => {
                 console.error('Failed to fetch conversations:', err);
+            })
+            .finally(() => {
+                setIsLoadingConversations(false);
             });
     };
 
@@ -419,6 +556,9 @@ export default function ChatPage() {
             })
             .catch((err) => {
                 console.error('Failed to fetch conversations:', err);
+            })
+            .finally(() => {
+                setIsLoadingConversations(false);
             });
     }, [submit]);
 
@@ -433,27 +573,192 @@ export default function ChatPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isGenerating]);
 
+    useEffect(() => {
+        const textarea = inputRef.current;
+
+        if (!textarea) {
+            return;
+        }
+
+        textarea.style.height = 'auto';
+        textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    }, [inputValue]);
+
     const handleSelectConversation = (id: number) => {
         streamAbortRef.current?.abort();
+        const requestId = selectedConversationRequestRef.current + 1;
+
+        selectedConversationRequestRef.current = requestId;
         setActiveConversationId(id);
         setIsGenerating(false);
+        setIsLoadingConversation(true);
+        setChatError(null);
         setSidebarOpen(false);
         submit(getConversation(id))
             .then((res: any) => {
+                if (selectedConversationRequestRef.current !== requestId) {
+                    return;
+                }
+
                 setMessages(res.data?.messages || []);
             })
             .catch((err) => {
                 console.error('Failed to fetch conversation:', err);
+
+                if (selectedConversationRequestRef.current === requestId) {
+                    setChatError(
+                        'Gagal membuka riwayat percakapan. Coba pilih ulang.',
+                    );
+                }
+            })
+            .finally(() => {
+                if (selectedConversationRequestRef.current === requestId) {
+                    setIsLoadingConversation(false);
+                }
             });
     };
 
     const handleNewChat = () => {
         streamAbortRef.current?.abort();
+        selectedConversationRequestRef.current += 1;
         setActiveConversationId(null);
         setMessages([]);
         setInputValue('');
         setIsGenerating(false);
+        setIsLoadingConversation(false);
+        setChatError(null);
         setSidebarOpen(false);
+    };
+
+    const openRenameConversation = (conversation: ConversationItem) => {
+        setRenameTarget(conversation);
+        setRenameTitle(conversation.title || '');
+        setChatError(null);
+    };
+
+    const openDeleteConversation = (conversation: ConversationItem) => {
+        setDeleteTarget(conversation);
+        setChatError(null);
+    };
+
+    const handleRenameConversation = async () => {
+        if (!renameTarget || isRenaming) {
+            return;
+        }
+
+        const title = renameTitle.trim();
+
+        if (title === '') {
+            setChatError('Judul percakapan tidak boleh kosong.');
+
+            return;
+        }
+
+        setIsRenaming(true);
+        setChatError(null);
+
+        try {
+            const csrfToken = document.querySelector<HTMLMetaElement>(
+                'meta[name="csrf-token"]',
+            )?.content;
+
+            const response = await fetch(
+                `/api/conversations/${renameTarget.id}`,
+                {
+                    method: 'PATCH',
+                    credentials: 'same-origin',
+                    headers: {
+                        Accept: 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken ?? '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({ title }),
+                },
+            );
+
+            if (!response.ok) {
+                const payload = await response.json().catch(() => null);
+
+                throw new Error(
+                    payload?.message ?? 'Gagal mengubah judul percakapan.',
+                );
+            }
+
+            const payload = await response.json();
+            const updated = payload.data as ConversationItem;
+
+            setConversations((prev) =>
+                prev.map((conversation) =>
+                    conversation.id === updated.id ? updated : conversation,
+                ),
+            );
+            setRenameTarget(null);
+            setRenameTitle('');
+        } catch (error) {
+            console.error('Failed to rename conversation:', error);
+            setChatError(
+                error instanceof Error
+                    ? error.message
+                    : 'Gagal mengubah judul percakapan. Coba lagi.',
+            );
+        } finally {
+            setIsRenaming(false);
+        }
+    };
+
+    const handleDeleteConversation = async () => {
+        if (!deleteTarget || deletingConversationId !== null) {
+            return;
+        }
+
+        const conversationId = deleteTarget.id;
+        setDeletingConversationId(conversationId);
+        setChatError(null);
+
+        try {
+            const csrfToken = document.querySelector<HTMLMetaElement>(
+                'meta[name="csrf-token"]',
+            )?.content;
+
+            const response = await fetch(
+                `/api/conversations/${conversationId}`,
+                {
+                    method: 'DELETE',
+                    credentials: 'same-origin',
+                    headers: {
+                        Accept: 'application/json',
+                        'X-CSRF-TOKEN': csrfToken ?? '',
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                },
+            );
+
+            if (!response.ok) {
+                throw new Error('Gagal menghapus percakapan.');
+            }
+
+            setConversations((prev) =>
+                prev.filter(
+                    (conversation) => conversation.id !== conversationId,
+                ),
+            );
+
+            if (activeConversationId === conversationId) {
+                handleNewChat();
+            }
+
+            setDeleteTarget(null);
+        } catch (error) {
+            console.error('Failed to delete conversation:', error);
+            setChatError(
+                error instanceof Error
+                    ? error.message
+                    : 'Gagal menghapus percakapan. Coba lagi.',
+            );
+        } finally {
+            setDeletingConversationId(null);
+        }
     };
 
     const handleSendMessage = async (customText?: string) => {
@@ -467,6 +772,7 @@ export default function ChatPage() {
             setInputValue('');
         }
 
+        setChatError(null);
         setIsGenerating(true);
 
         const tempUserMsg: MessageItem = {
@@ -513,6 +819,31 @@ export default function ChatPage() {
             }
 
             console.error('Failed to stream chat response:', err);
+
+            const message =
+                err instanceof Error ? err.message : 'Gagal mengirim pesan.';
+
+            if (message.includes('429') || /rate limit/i.test(message)) {
+                setChatError(
+                    'Terlalu banyak permintaan. Tunggu sebentar lalu coba lagi.',
+                );
+            } else if (/moderat|policy|blocked/i.test(message)) {
+                setChatError(
+                    'Pesan diblokir kebijakan keamanan. Ubah pertanyaan Anda.',
+                );
+            } else if (/network|fetch|Failed to fetch/i.test(message)) {
+                setChatError(
+                    'Koneksi bermasalah. Periksa jaringan lalu coba lagi.',
+                );
+            } else if (/unavailable|misconfigured|502|503/i.test(message)) {
+                setChatError(
+                    'Asisten AI sementara tidak tersedia. Coba beberapa saat lagi.',
+                );
+            } else {
+                setChatError(
+                    'Gagal mendapatkan jawaban. Silakan coba kirim ulang.',
+                );
+            }
         } finally {
             setIsGenerating(false);
         }
@@ -552,14 +883,20 @@ export default function ChatPage() {
 
         if (!response.ok) {
             const contentType = response.headers.get('content-type') ?? '';
+            let detail = `HTTP ${response.status}`;
 
             if (contentType.includes('application/json')) {
                 const payload = await response.json();
+                detail = payload.message ?? detail;
+            } else {
+                const text = await response.text();
 
-                throw new Error(payload.message ?? 'Request failed.');
+                if (text.trim() !== '') {
+                    detail = text;
+                }
             }
 
-            throw new Error(await response.text());
+            throw new Error(`${detail} (${response.status})`);
         }
 
         if (response.body === null) {
@@ -579,7 +916,7 @@ export default function ChatPage() {
             reply_to_message_id: null,
             role: 'assistant',
             content:
-                'Maaf, layanan AI sedang lambat. Coba ulangi beberapa saat lagi.',
+                'Maaf, layanan AI sedang lambat atau tidak merespons. Silakan coba kirim ulang beberapa saat lagi.',
             sequence: messages.length + 2,
             created_at: new Date().toISOString(),
         });
@@ -828,19 +1165,20 @@ export default function ChatPage() {
 
                 {/* Left Sidebar */}
                 <aside
-                    className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200/80 bg-white transition-all duration-300 lg:static lg:h-screen ${sidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full overflow-hidden lg:w-16 lg:translate-x-0'} `}
+                    className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-slate-200/80 bg-slate-50/90 transition-all duration-300 lg:static lg:h-screen ${sidebarOpen ? 'w-72 translate-x-0' : 'w-0 -translate-x-full overflow-hidden lg:w-16 lg:translate-x-0'} `}
                 >
                     {sidebarOpen ? (
-                        <div className="flex h-full w-full flex-col">
+                        <div className="flex h-full min-h-0 w-full flex-col">
                             {/* Sidebar Header */}
-                            <div className="flex h-16 shrink-0 items-center justify-between px-4">
+                            <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/80 px-4">
                                 <div className="flex items-center overflow-visible">
                                     <DekaLogo className="ml-1 h-9 w-auto origin-left scale-[3.6] object-contain" />
                                 </div>
                                 <button
                                     onClick={() => setSidebarOpen(false)}
-                                    className="cursor-pointer rounded-lg p-2 text-slate-500 hover:bg-slate-200/50"
+                                    className="cursor-pointer rounded-lg p-2 text-slate-500 transition hover:bg-white hover:text-slate-800 hover:shadow-sm"
                                     title="Tutup sidebar"
+                                    aria-label="Tutup sidebar"
                                 >
                                     <Sidebar className="h-5 w-5" />
                                 </button>
@@ -850,16 +1188,31 @@ export default function ChatPage() {
                             <div className="p-4">
                                 <button
                                     onClick={handleNewChat}
-                                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-sm transition-all duration-200 hover:bg-blue-700"
+                                    className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-600/15 transition-all duration-200 hover:bg-blue-700 hover:shadow-blue-600/25 active:scale-[0.99]"
                                 >
                                     <Plus className="h-4 w-4 text-white" />
                                     Percakapan Baru
                                 </button>
                             </div>
 
+                            <div className="px-4 pb-3">
+                                <div className="flex min-h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-slate-500 shadow-sm shadow-slate-200/40 transition focus-within:border-blue-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10">
+                                    <Search className="h-4 w-4 shrink-0" />
+                                    <input
+                                        value={historySearch}
+                                        onChange={(event) =>
+                                            setHistorySearch(event.target.value)
+                                        }
+                                        placeholder="Cari riwayat..."
+                                        aria-label="Cari riwayat percakapan"
+                                        className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+                                    />
+                                </div>
+                            </div>
+
                             {/* Conversation History */}
                             <div
-                                className="flex-1 space-y-1 overflow-y-auto px-3 pb-4"
+                                className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-4"
                                 style={{ scrollbarWidth: 'none' }}
                             >
                                 <button
@@ -867,7 +1220,8 @@ export default function ChatPage() {
                                     onClick={() =>
                                         setHistoryOpen((open) => !open)
                                     }
-                                    className="mb-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[11px] font-extrabold tracking-[0.12em] text-slate-500 uppercase transition hover:bg-slate-100 hover:text-slate-700"
+                                    aria-expanded={historyOpen}
+                                    className="mb-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[11px] font-extrabold tracking-[0.12em] text-slate-500 uppercase transition hover:bg-white hover:text-slate-700 hover:shadow-sm"
                                 >
                                     <History className="h-4 w-4 shrink-0" />
                                     <span className="flex-1">Riwayat</span>
@@ -878,10 +1232,15 @@ export default function ChatPage() {
 
                                 {historyOpen && (
                                     <div className="space-y-3">
-                                        {groupedConversations.length === 0 ? (
-                                            <p className="px-3 py-2 text-xs text-slate-400 italic">
-                                                Belum ada percakapan tersimpan
-                                            </p>
+                                        {isLoadingConversations ? (
+                                            <ConversationListSkeleton />
+                                        ) : groupedConversations.length ===
+                                          0 ? (
+                                            <div className="rounded-xl border border-dashed border-slate-200 px-3 py-4 text-xs leading-relaxed text-slate-400">
+                                                {normalizedHistorySearch
+                                                    ? 'Tidak ada riwayat yang cocok.'
+                                                    : 'Belum ada percakapan tersimpan.'}
+                                            </div>
                                         ) : (
                                             groupedConversations.map(
                                                 (group) => (
@@ -895,30 +1254,86 @@ export default function ChatPage() {
 
                                                         {group.conversations.map(
                                                             (conv) => (
-                                                                <button
+                                                                <div
                                                                     key={
                                                                         conv.id
                                                                     }
-                                                                    onClick={() =>
-                                                                        handleSelectConversation(
-                                                                            conv.id,
-                                                                        )
-                                                                    }
-                                                                    className={`flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-l-4 px-3 py-1.5 text-left text-[13px] transition ${
+                                                                    className={`group relative flex w-full items-center gap-1 rounded-xl border pr-1 transition ${
                                                                         activeConversationId ===
                                                                         conv.id
-                                                                            ? 'border-y-transparent border-r-transparent border-l-blue-600 bg-blue-50 font-semibold text-blue-700 shadow-sm ring-1 ring-blue-100'
-                                                                            : 'border-y-transparent border-r-transparent border-l-transparent bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-800'
+                                                                            ? 'border-blue-100 bg-white font-semibold text-blue-700 shadow-sm shadow-blue-950/5'
+                                                                            : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-slate-800 hover:shadow-sm'
                                                                     }`}
                                                                 >
-                                                                    <MessageSquare
-                                                                        className={`h-3.5 w-3.5 shrink-0 ${activeConversationId === conv.id ? 'text-blue-600' : 'text-slate-400'}`}
-                                                                    />
-                                                                    <span className="flex-1 truncate">
-                                                                        {conv.title ||
-                                                                            'Percakapan Tanpa Judul'}
-                                                                    </span>
-                                                                </button>
+                                                                    {activeConversationId ===
+                                                                        conv.id && (
+                                                                        <span className="absolute top-2.5 bottom-2.5 left-0 w-1 rounded-r-full bg-blue-600" />
+                                                                    )}
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() =>
+                                                                            handleSelectConversation(
+                                                                                conv.id,
+                                                                            )
+                                                                        }
+                                                                        className="flex min-h-9 min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-3 py-2 text-left text-[13px] leading-5"
+                                                                    >
+                                                                        <MessageSquare
+                                                                            className={`h-3.5 w-3.5 shrink-0 ${activeConversationId === conv.id ? 'text-blue-600' : 'text-slate-400'}`}
+                                                                        />
+                                                                        <span className="flex-1 truncate">
+                                                                            {conv.title ||
+                                                                                'Percakapan Tanpa Judul'}
+                                                                        </span>
+                                                                    </button>
+                                                                    <DropdownMenu>
+                                                                        <DropdownMenuTrigger
+                                                                            asChild
+                                                                        >
+                                                                            <button
+                                                                                type="button"
+                                                                                title="Opsi percakapan"
+                                                                                aria-label="Opsi percakapan"
+                                                                                className="mr-1 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-slate-400 opacity-0 transition group-hover:opacity-100 hover:bg-slate-200/70 hover:text-slate-700 focus-visible:opacity-100 data-[state=open]:opacity-100"
+                                                                            >
+                                                                                {deletingConversationId ===
+                                                                                conv.id ? (
+                                                                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                                                ) : (
+                                                                                    <MoreHorizontal className="h-4 w-4" />
+                                                                                )}
+                                                                            </button>
+                                                                        </DropdownMenuTrigger>
+                                                                        <DropdownMenuContent
+                                                                            align="end"
+                                                                            className="w-44"
+                                                                        >
+                                                                            <DropdownMenuItem
+                                                                                onSelect={() =>
+                                                                                    openRenameConversation(
+                                                                                        conv,
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                <Pencil className="h-4 w-4" />
+                                                                                Ubah
+                                                                                judul
+                                                                            </DropdownMenuItem>
+                                                                            <DropdownMenuSeparator />
+                                                                            <DropdownMenuItem
+                                                                                variant="destructive"
+                                                                                onSelect={() =>
+                                                                                    openDeleteConversation(
+                                                                                        conv,
+                                                                                    )
+                                                                                }
+                                                                            >
+                                                                                <Trash2 className="h-4 w-4" />
+                                                                                Hapus
+                                                                            </DropdownMenuItem>
+                                                                        </DropdownMenuContent>
+                                                                    </DropdownMenu>
+                                                                </div>
                                                             ),
                                                         )}
                                                     </div>
@@ -931,7 +1346,7 @@ export default function ChatPage() {
 
                             {/* Sidebar Footer */}
                             {user && (
-                                <div className="border-t border-slate-100 bg-white p-3">
+                                <div className="shrink-0 border-t border-slate-200/70 bg-white/80 p-3">
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <button className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-transparent p-2 text-left transition outline-none hover:border-slate-200 hover:bg-slate-50 focus-visible:border-blue-300 focus-visible:ring-2 focus-visible:ring-blue-100">
@@ -967,6 +1382,7 @@ export default function ChatPage() {
                                     onClick={() => setSidebarOpen(true)}
                                     className="cursor-pointer rounded-xl p-1 transition-all duration-200 hover:scale-105 hover:bg-slate-200/50 active:scale-95"
                                     title="Buka sidebar"
+                                    aria-label="Buka sidebar"
                                 >
                                     <DekaLogo className="h-9 w-9 object-contain" />
                                 </button>
@@ -976,6 +1392,7 @@ export default function ChatPage() {
                                     onClick={handleNewChat}
                                     className="mt-2 cursor-pointer rounded-xl border border-slate-200 bg-white p-2.5 text-slate-500 shadow-sm transition-all hover:scale-105 hover:bg-slate-200/50 hover:text-blue-600 active:scale-95"
                                     title="Percakapan Baru"
+                                    aria-label="Buat percakapan baru"
                                 >
                                     <Plus className="h-4 w-4" />
                                 </button>
@@ -988,6 +1405,7 @@ export default function ChatPage() {
                                     }}
                                     className="cursor-pointer rounded-xl p-2.5 text-slate-400 transition-all hover:bg-slate-200/50 hover:text-slate-600"
                                     title="Tampilkan Riwayat Chat"
+                                    aria-label="Tampilkan riwayat chat"
                                 >
                                     <History className="h-4.5 w-4.5" />
                                 </button>
@@ -1027,13 +1445,31 @@ export default function ChatPage() {
                 </aside>
 
                 {/* Main Content Area */}
-                <main className="relative flex h-full flex-1 flex-col overflow-hidden bg-white">
+                <main className="relative flex h-full flex-1 flex-col overflow-hidden bg-[#f8fbff]">
+                    <div
+                        className={`pointer-events-none absolute inset-0 ${hasMessages ? 'opacity-[0.16]' : 'opacity-[0.42]'}`}
+                        style={{
+                            backgroundImage:
+                                'radial-gradient(circle at 1px 1px, rgba(47, 128, 237, 0.2) 1px, transparent 0)',
+                            backgroundSize: '28px 28px',
+                        }}
+                    />
+                    <div
+                        className={`pointer-events-none absolute inset-x-0 top-0 bg-linear-to-b from-white to-transparent ${hasMessages ? 'h-14 from-white/35 via-white/10' : 'h-56 via-white/80'}`}
+                    />
+                    <div
+                        className={`pointer-events-none absolute top-[16%] right-[8%] h-72 w-72 rounded-full bg-blue-200 blur-3xl ${hasMessages ? 'opacity-10' : 'opacity-[0.22]'}`}
+                    />
+                    <div
+                        className={`pointer-events-none absolute bottom-0 left-[20%] h-56 w-[32rem] rounded-full bg-cyan-200 blur-3xl ${hasMessages ? 'opacity-10' : 'opacity-[0.18]'}`}
+                    />
                     {/* Floating Mobile Sidebar Trigger (Logo button) */}
                     {!sidebarOpen && (
                         <button
                             onClick={() => setSidebarOpen(true)}
                             className="fixed top-4 left-4 z-30 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border border-slate-200/85 bg-white shadow-md transition-all hover:scale-105 active:scale-95 lg:hidden"
                             title="Buka sidebar"
+                            aria-label="Buka sidebar"
                         >
                             <DekaLogo className="h-6 w-6 object-contain" />
                         </button>
@@ -1044,90 +1480,117 @@ export default function ChatPage() {
                         className="flex-1 overflow-y-auto"
                         style={{ scrollbarWidth: 'none' }}
                     >
-                        {messages.length === 0 ? (
-                            <div className="mx-auto flex h-full w-full max-w-2xl translate-y-3 flex-col items-center justify-center px-6 py-8 text-center">
-                                <div className="mb-5 rounded-full border border-slate-200/70 bg-white p-3 shadow-sm">
-                                    <DekaLogo className="h-14 w-auto object-contain" />
+                        {isLoadingConversation ? (
+                            <ChatMessagesSkeleton />
+                        ) : messages.length === 0 ? (
+                            <div className="relative mx-auto flex h-full w-full max-w-4xl flex-col items-center justify-start px-6 pt-16 pb-6 text-center md:justify-center md:py-8">
+                                <div className="mb-4 inline-flex items-center gap-2 rounded-2xl border border-slate-200/80 bg-white/85 px-3 py-2 shadow-sm shadow-slate-200/60 backdrop-blur">
+                                    <DekaLogo className="h-8 w-auto object-contain" />
+                                    <span className="text-xs font-bold tracking-[0.16em] text-slate-400 uppercase">
+                                        Chatbot
+                                    </span>
                                 </div>
-                                <h2 className="mb-3 max-w-xl text-4xl leading-[1.08] font-black tracking-normal text-blue-600 md:text-5xl">
-                                    Ada yang bisa saya bantu hari ini?
+                                <h2 className="mb-3 max-w-2xl text-[32px] leading-[1.06] font-black tracking-normal text-slate-950 md:text-5xl">
+                                    Mulai dari satu pertanyaan tentang{' '}
+                                    <span className="text-blue-600">DEKA</span>.
                                 </h2>
-                                <p className="mb-7 max-w-lg text-sm leading-relaxed text-slate-500 md:text-base">
-                                    Tanyakan apa saja seputar Deka, layanan
-                                    kami, alamat, kontak, atau informasi
-                                    lainnya.
+                                <p className="mb-4 max-w-xl text-sm leading-relaxed text-slate-500 md:mb-5 md:text-base">
+                                    Pilih saran cepat atau ketik sendiri.
+                                    Jawaban disimpan di riwayat dan tetap fokus
+                                    pada informasi yang tersedia tentang DEKA.
                                 </p>
+                                <div className="mb-4 flex flex-wrap items-center justify-center gap-2 text-xs font-semibold text-slate-500">
+                                    <span className="rounded-full border border-blue-100 bg-white/80 px-3 py-1.5 shadow-sm shadow-slate-200/40">
+                                        Profil perusahaan
+                                    </span>
+                                    <span className="rounded-full border border-blue-100 bg-white/80 px-3 py-1.5 shadow-sm shadow-slate-200/40">
+                                        Layanan IT & AI
+                                    </span>
+                                    <span className="rounded-full border border-blue-100 bg-white/80 px-3 py-1.5 shadow-sm shadow-slate-200/40">
+                                        Kontak resmi
+                                    </span>
+                                </div>
 
                                 {/* Suggestion Cards */}
-                                <div className="grid w-full max-w-xl grid-cols-1 gap-3.5 md:grid-cols-2">
+                                <div className="flex w-full max-w-full snap-x scrollbar-none gap-2.5 overflow-x-auto pb-2 text-left md:grid md:max-w-2xl md:grid-cols-2 md:overflow-visible md:pb-0">
                                     <button
                                         onClick={() =>
-                                            handleSendMessage('Apa itu Deka?')
+                                            handleSendMessage('Apa itu DEKA?')
                                         }
-                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md"
+                                        className="group flex min-h-[86px] min-w-[260px] cursor-pointer snap-center items-start gap-3 rounded-xl border border-slate-200/80 bg-white/88 px-4 py-3.5 text-left shadow-sm shadow-slate-200/60 backdrop-blur transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-white hover:shadow-md md:min-h-[92px] md:min-w-0"
                                     >
-                                        <HelpCircle className="mb-2.5 h-5 w-5 text-blue-500 transition-transform duration-200 group-hover:scale-110" />
-                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600">
-                                            Apa itu Deka?
-                                        </span>
-                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed">
-                                            Cari tahu informasi dasar mengenai
-                                            Deka.
-                                        </span>
-                                    </button>
-                                    <button
-                                        onClick={() =>
-                                            handleSendMessage('Layanan Deka')
-                                        }
-                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md"
-                                    >
-                                        <Sparkles className="mb-2.5 h-5 w-5 text-indigo-500 transition-transform duration-200 group-hover:scale-110" />
-                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600">
-                                            Layanan Deka
-                                        </span>
-                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed">
-                                            Pelajari layanan dan produk yang
-                                            kami sediakan.
+                                        <HelpCircle className="mt-0.5 h-5 w-5 shrink-0 text-blue-500 transition-transform duration-200 group-hover:scale-110" />
+                                        <span className="min-w-0">
+                                            <span className="block text-sm font-bold text-slate-800 transition-colors group-hover:text-blue-600">
+                                                Apa itu DEKA?
+                                            </span>
+                                            <span className="mt-1 block text-xs leading-relaxed text-slate-500">
+                                                Profil perusahaan dan fokus AI
+                                                DEKA.
+                                            </span>
                                         </span>
                                     </button>
                                     <button
                                         onClick={() =>
                                             handleSendMessage(
-                                                'Kontak dan alamat',
+                                                'Layanan IT dan solusi AI DEKA',
                                             )
                                         }
-                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md"
+                                        className="group flex min-h-[86px] min-w-[260px] cursor-pointer snap-center items-start gap-3 rounded-xl border border-slate-200/80 bg-white/88 px-4 py-3.5 text-left shadow-sm shadow-slate-200/60 backdrop-blur transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-white hover:shadow-md md:min-h-[92px] md:min-w-0"
                                     >
-                                        <Phone className="mb-2.5 h-5 w-5 text-emerald-500 transition-transform duration-200 group-hover:scale-110" />
-                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600">
-                                            Kontak & Alamat
-                                        </span>
-                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed">
-                                            Dapatkan nomor telepon, email, dan
-                                            alamat kantor.
+                                        <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-indigo-500 transition-transform duration-200 group-hover:scale-110" />
+                                        <span className="min-w-0">
+                                            <span className="block text-sm font-bold text-slate-800 transition-colors group-hover:text-blue-600">
+                                                Layanan IT DEKA
+                                            </span>
+                                            <span className="mt-1 block text-xs leading-relaxed text-slate-500">
+                                                Layanan digital dan solusi
+                                                transformasi.
+                                            </span>
                                         </span>
                                     </button>
                                     <button
                                         onClick={() =>
                                             handleSendMessage(
-                                                'Fitur chatbot ini',
+                                                'Kontak dan alamat kantor DEKA',
                                             )
                                         }
-                                        className="group flex min-h-[118px] cursor-pointer flex-col items-start rounded-xl border border-slate-200/80 bg-white px-4 py-4 text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-md"
+                                        className="group flex min-h-[86px] min-w-[260px] cursor-pointer snap-center items-start gap-3 rounded-xl border border-slate-200/80 bg-white/88 px-4 py-3.5 text-left shadow-sm shadow-slate-200/60 backdrop-blur transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-white hover:shadow-md md:min-h-[92px] md:min-w-0"
                                     >
-                                        <Info className="mb-2.5 h-5 w-5 text-purple-500 transition-transform duration-200 group-hover:scale-110" />
-                                        <span className="text-slate-805 text-sm font-bold transition-colors group-hover:text-blue-600">
-                                            Fitur Chatbot
+                                        <Phone className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500 transition-transform duration-200 group-hover:scale-110" />
+                                        <span className="min-w-0">
+                                            <span className="block text-sm font-bold text-slate-800 transition-colors group-hover:text-blue-600">
+                                                Kontak & Alamat
+                                            </span>
+                                            <span className="mt-1 block text-xs leading-relaxed text-slate-500">
+                                                Nomor telepon, email, dan alamat
+                                                kantor.
+                                            </span>
                                         </span>
-                                        <span className="text-slate-450 mt-1.5 text-xs leading-relaxed">
-                                            Ketahui kemampuan asisten AI dalam
-                                            membantu Anda.
+                                    </button>
+                                    <button
+                                        onClick={() =>
+                                            handleSendMessage(
+                                                'Fitur chatbot DEKA',
+                                            )
+                                        }
+                                        className="group flex min-h-[86px] min-w-[260px] cursor-pointer snap-center items-start gap-3 rounded-xl border border-slate-200/80 bg-white/88 px-4 py-3.5 text-left shadow-sm shadow-slate-200/60 backdrop-blur transition-all duration-300 hover:-translate-y-0.5 hover:border-blue-300 hover:bg-white hover:shadow-md md:min-h-[92px] md:min-w-0"
+                                    >
+                                        <Info className="mt-0.5 h-5 w-5 shrink-0 text-purple-500 transition-transform duration-200 group-hover:scale-110" />
+                                        <span className="min-w-0">
+                                            <span className="block text-sm font-bold text-slate-800 transition-colors group-hover:text-blue-600">
+                                                Fitur Chatbot
+                                            </span>
+                                            <span className="mt-1 block text-xs leading-relaxed text-slate-500">
+                                                Kemampuan asisten AI dalam
+                                                membantu Anda.
+                                            </span>
                                         </span>
                                     </button>
                                 </div>
                             </div>
                         ) : (
-                            <div className="space-y-6 px-3 pt-6 pb-6 md:px-4 lg:pt-[130px]">
+                            <div className="flex min-h-full flex-col space-y-5 px-3 pt-5 pb-6 md:px-4 md:pt-8 lg:pt-10">
                                 {messages.map((message, index) => {
                                     const isLastMessage =
                                         index === messages.length - 1;
@@ -1139,7 +1602,7 @@ export default function ChatPage() {
                                         >
                                             {message.role === 'user' ? (
                                                 <div className="flex w-full justify-end">
-                                                    <div className="text-wrap-anywhere max-w-[85%] rounded-3xl border border-slate-200/50 bg-slate-100 px-5 py-2.5 text-base whitespace-pre-wrap text-slate-800 md:text-[18px]">
+                                                    <div className="text-wrap-anywhere max-w-[85%] min-w-0 rounded-3xl border border-slate-200/60 bg-white/90 px-5 py-2.5 text-base [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-slate-800 shadow-sm shadow-slate-200/40 md:text-[17px]">
                                                         {message.content}
                                                     </div>
                                                 </div>
@@ -1149,9 +1612,9 @@ export default function ChatPage() {
                                                     <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-100 bg-white shadow-sm">
                                                         <DekaLogo className="h-6 w-6 object-contain" />
                                                     </div>
-                                                    <div className="text-wrap-anywhere min-w-0 flex-1 text-base leading-relaxed whitespace-pre-wrap text-slate-800 md:text-[18px]">
+                                                    <div className="min-w-0 flex-1 text-base leading-relaxed whitespace-pre-wrap text-slate-800 md:text-[17px]">
                                                         {/* Text content sits directly on the page, no card container */}
-                                                        <div className="prose prose-slate text-wrap-anywhere max-w-none text-base leading-relaxed md:text-[18px]">
+                                                        <div className="prose prose-slate text-wrap-anywhere max-w-none text-base leading-relaxed [overflow-wrap:anywhere] md:text-[17px]">
                                                             <MarkdownRenderer
                                                                 content={
                                                                     message.content
@@ -1172,6 +1635,14 @@ export default function ChatPage() {
                                                                     }
                                                                     className="cursor-pointer rounded-lg p-1.5 text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-emerald-600"
                                                                     title="Suka jawaban ini"
+                                                                    aria-label="Tandai jawaban ini membantu"
+                                                                    aria-pressed={
+                                                                        msgFeedback[
+                                                                            message
+                                                                                .id
+                                                                        ] ===
+                                                                        'like'
+                                                                    }
                                                                 >
                                                                     <ThumbsUp
                                                                         className={`h-4.5 w-4.5 ${
@@ -1194,6 +1665,14 @@ export default function ChatPage() {
                                                                     }
                                                                     className="cursor-pointer rounded-lg p-1.5 text-slate-400 transition-all duration-200 hover:bg-slate-100 hover:text-rose-600"
                                                                     title="Tidak suka jawaban ini"
+                                                                    aria-label="Tandai jawaban ini kurang membantu"
+                                                                    aria-pressed={
+                                                                        msgFeedback[
+                                                                            message
+                                                                                .id
+                                                                        ] ===
+                                                                        'dislike'
+                                                                    }
                                                                 >
                                                                     <ThumbsDown
                                                                         className={`h-4.5 w-4.5 ${
@@ -1223,45 +1702,6 @@ export default function ChatPage() {
                                                                         }
                                                                     </span>
                                                                 )}
-
-                                                            {/* Timing Info */}
-                                                            {(message.response_time_ms !==
-                                                                undefined ||
-                                                                message.first_delta_at_ms !==
-                                                                    undefined) && (
-                                                                <div className="text-[11px] font-medium text-slate-400/80">
-                                                                    {[
-                                                                        (() => {
-                                                                            const firstDelta =
-                                                                                formatDuration(
-                                                                                    message.first_delta_at_ms,
-                                                                                );
-
-                                                                            return firstDelta !==
-                                                                                null
-                                                                                ? `Mulai jawab ${firstDelta}`
-                                                                                : null;
-                                                                        })(),
-                                                                        (() => {
-                                                                            const total =
-                                                                                formatDuration(
-                                                                                    message.response_time_ms,
-                                                                                );
-
-                                                                            return total !==
-                                                                                null
-                                                                                ? `selesai ${total}`
-                                                                                : null;
-                                                                        })(),
-                                                                    ]
-                                                                        .filter(
-                                                                            Boolean,
-                                                                        )
-                                                                        .join(
-                                                                            ' | ',
-                                                                        )}
-                                                                </div>
-                                                            )}
                                                         </div>
 
                                                         {/* Dive Deeper (Follow-up suggestions) */}
@@ -1269,8 +1709,8 @@ export default function ChatPage() {
                                                             !isGenerating && (
                                                                 <div className="animate-fade-in mt-5 border-t border-slate-100/50 pt-4">
                                                                     <span className="mb-2.5 block text-[10px] font-bold tracking-widest text-slate-400/80 uppercase">
-                                                                        DIVE
-                                                                        DEEPER
+                                                                        Pertanyaan
+                                                                        lanjutan
                                                                     </span>
                                                                     <div className="flex flex-wrap gap-2">
                                                                         {getFollowUpSuggestions(
@@ -1312,14 +1752,17 @@ export default function ChatPage() {
                                     messages[messages.length - 1]?.role !==
                                         'assistant' && (
                                         <div className="mx-auto w-full max-w-[860px]">
-                                            <div className="flex w-full items-start gap-4">
-                                                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-100 bg-white shadow-sm">
+                                            <div className="flex w-full items-start gap-3 md:gap-4">
+                                                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-100 bg-white shadow-sm md:h-9 md:w-9">
                                                     <DekaLogo className="h-6 w-6 object-contain" />
                                                 </div>
-                                                <div className="border-slate-150/70 w-fit rounded-2xl rounded-tl-none border bg-white px-5 py-3.5 shadow-sm">
-                                                    <div className="flex items-center gap-2.5 text-[15px] font-medium text-slate-500">
-                                                        <Loader2 className="h-4.5 w-4.5 animate-spin text-slate-400" />
-                                                        <span>Thinking...</span>
+                                                <div className="w-fit rounded-2xl rounded-tl-sm border border-slate-200/75 bg-white/88 px-4 py-3 shadow-sm shadow-slate-200/50 backdrop-blur">
+                                                    <div className="flex items-center gap-2.5 text-sm font-semibold text-slate-500 md:text-[15px]">
+                                                        <Loader2 className="h-4 w-4 animate-spin text-blue-500/70 md:h-4.5 md:w-4.5" />
+                                                        <span>
+                                                            Sedang menyiapkan
+                                                            jawaban...
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1331,35 +1774,56 @@ export default function ChatPage() {
                     </div>
 
                     {/* Input Area */}
-                    <div className="bg-white p-4">
+                    <div className="relative bg-linear-to-t from-[#f8fbff] via-[#f8fbff]/95 to-transparent p-4">
                         <div className="mx-auto w-full max-w-3xl">
-                            <div className="relative flex items-center gap-2 rounded-full border border-slate-200 bg-white p-1.5 shadow-md shadow-slate-100/30 transition-all duration-300 focus-within:border-blue-500/80 focus-within:ring-4 focus-within:ring-blue-500/10">
+                            {chatError && (
+                                <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+                                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-medium">
+                                            {chatError}
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setChatError(null)}
+                                        className="cursor-pointer rounded-md px-2 py-0.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                                        aria-label="Tutup pesan error"
+                                    >
+                                        Tutup
+                                    </button>
+                                </div>
+                            )}
+                            <div className="relative flex min-w-0 items-end gap-2 rounded-[28px] border border-slate-200/90 bg-white/95 p-1.5 shadow-[0_18px_50px_-30px_rgba(15,23,42,0.7),0_1px_0_rgba(255,255,255,0.9)_inset] backdrop-blur transition-all duration-300 focus-within:border-blue-500/80 focus-within:ring-4 focus-within:ring-blue-500/10">
                                 {/* Central textarea */}
                                 <textarea
+                                    ref={inputRef}
                                     value={inputValue}
                                     onChange={(e) =>
                                         setInputValue(e.target.value)
                                     }
                                     onKeyDown={handleKeyDown}
-                                    placeholder="Tulis pertanyaan tentang Deka di sini..."
+                                    placeholder="Tulis pertanyaan tentang DEKA di sini..."
                                     rows={1}
-                                    className="text-wrap-anywhere max-h-24 min-h-[40px] flex-1 resize-none scrollbar-none bg-transparent py-2.5 pr-2 pl-4 text-sm text-slate-800 outline-none md:text-base"
+                                    disabled={isGenerating}
+                                    className="text-wrap-anywhere max-h-[120px] min-h-[40px] min-w-0 flex-1 resize-none scrollbar-none bg-transparent py-2.5 pr-2 pl-4 text-sm leading-5 [overflow-wrap:anywhere] break-words whitespace-pre-wrap text-slate-800 outline-none disabled:cursor-not-allowed disabled:opacity-70 md:text-base md:leading-6"
                                 />
 
                                 {/* Right action buttons: Send button */}
-                                <div className="flex flex-shrink-0 items-center pr-1">
+                                <div className="flex shrink-0 items-end pr-1 pb-0.5">
                                     <button
                                         onClick={() => handleSendMessage()}
                                         disabled={
                                             !inputValue.trim() || isGenerating
                                         }
                                         className="inline-flex h-9.5 w-9.5 cursor-pointer items-center justify-center rounded-full bg-blue-600 text-white shadow-md transition-all duration-200 hover:bg-blue-500 hover:shadow-blue-500/25 active:scale-95 disabled:cursor-not-allowed disabled:bg-blue-600/40 disabled:text-white/60 disabled:shadow-none"
+                                        aria-label="Kirim pesan"
                                     >
                                         <SendHorizontal className="h-4.5 w-4.5" />
                                     </button>
                                 </div>
                             </div>
-                            <p className="mt-2.5 text-center text-[10px] text-slate-400 md:text-xs">
+                            <p className="mt-2.5 text-center text-[10px] font-medium text-slate-500 md:text-xs">
                                 Asisten AI Deka dapat membuat kesalahan.
                                 Pertimbangkan untuk memeriksa informasi penting.
                             </p>
@@ -1434,6 +1898,110 @@ export default function ChatPage() {
                             </div>
                         </div>
                     )}
+                    {renameTarget && (
+                        <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/40 p-4 backdrop-blur-[1.5px] duration-200 fade-in">
+                            <div className="w-full max-w-[420px] animate-in rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-2xl duration-200 zoom-in-95">
+                                <h3 className="text-center text-[20px] font-bold tracking-tight text-slate-900">
+                                    Ubah judul percakapan
+                                </h3>
+                                <p className="mt-2 text-center text-sm text-slate-500">
+                                    Judul ini hanya tampil di riwayat chat Anda.
+                                </p>
+                                <input
+                                    value={renameTitle}
+                                    onChange={(event) =>
+                                        setRenameTitle(event.target.value)
+                                    }
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                            event.preventDefault();
+                                            void handleRenameConversation();
+                                        }
+                                    }}
+                                    maxLength={120}
+                                    autoFocus
+                                    className="mt-5 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 transition outline-none focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-500/10"
+                                    placeholder="Judul percakapan"
+                                />
+                                <div className="mt-5 flex flex-col gap-2.5">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            void handleRenameConversation()
+                                        }
+                                        disabled={
+                                            isRenaming ||
+                                            renameTitle.trim() === ''
+                                        }
+                                        className="w-full cursor-pointer rounded-full bg-blue-600 py-3.5 text-base font-bold text-white shadow-md transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-300"
+                                    >
+                                        {isRenaming
+                                            ? 'Menyimpan...'
+                                            : 'Simpan judul'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setRenameTarget(null);
+                                            setRenameTitle('');
+                                        }}
+                                        disabled={isRenaming}
+                                        className="w-full cursor-pointer rounded-full border border-slate-200 bg-white py-3.5 text-base font-semibold text-slate-700 transition hover:bg-slate-50"
+                                    >
+                                        Batal
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {deleteTarget && (
+                        <div className="fixed inset-0 z-[100] flex animate-in items-center justify-center bg-black/40 p-4 backdrop-blur-[1.5px] duration-200 fade-in">
+                            <div className="w-full max-w-[420px] animate-in rounded-[28px] border border-slate-200/80 bg-white p-6 shadow-2xl duration-200 zoom-in-95">
+                                <h3 className="text-center text-[20px] font-bold tracking-tight text-slate-900">
+                                    Hapus percakapan?
+                                </h3>
+                                <p className="mt-2 text-center text-sm text-slate-500">
+                                    Riwayat dan pesan di percakapan ini akan
+                                    dihapus permanen.
+                                </p>
+                                <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                                    <p className="truncate text-sm font-semibold text-slate-900">
+                                        {deleteTarget.title ||
+                                            'Percakapan Tanpa Judul'}
+                                    </p>
+                                </div>
+                                <div className="mt-5 flex flex-col gap-2.5">
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            void handleDeleteConversation()
+                                        }
+                                        disabled={
+                                            deletingConversationId ===
+                                            deleteTarget.id
+                                        }
+                                        className="w-full cursor-pointer rounded-full bg-rose-600 py-3.5 text-base font-bold text-white shadow-md transition hover:bg-rose-500 disabled:cursor-not-allowed disabled:bg-rose-300"
+                                    >
+                                        {deletingConversationId ===
+                                        deleteTarget.id
+                                            ? 'Menghapus...'
+                                            : 'Ya, hapus'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDeleteTarget(null)}
+                                        disabled={
+                                            deletingConversationId ===
+                                            deleteTarget.id
+                                        }
+                                        className="w-full cursor-pointer rounded-full border border-slate-200 bg-white py-3.5 text-base font-semibold text-slate-700 transition hover:bg-slate-50"
+                                    >
+                                        Batal
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     {user && (
                         <LogoutConfirmModal
                             isOpen={logoutConfirmOpen}
@@ -1449,7 +2017,9 @@ export default function ChatPage() {
 
 const parseInline = (text: string): React.ReactNode[] => {
     // Regex for markdown links, bold (**text**), italic (*text*), and inline code (`code`)
-    const parts = text.split(/(\[[^\]]+\]\([^)]+\)|\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+    const parts = text.split(
+        /(\[[^\]]+\]\([^)]+\)|\*\*.*?\*\*|\*.*?\*|`.*?`)/g,
+    );
 
     return parts.map((part, index) => {
         const markdownLink = extractMarkdownLink(part);
@@ -1521,7 +2091,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <ul
                     key={`ul-${key}`}
-                    className="text-wrap-anywhere my-3 ml-4 list-inside list-disc space-y-1.5 text-base text-slate-800 md:text-[18px]"
+                    className="text-wrap-anywhere my-3 ml-4 list-inside list-disc space-y-1.5 text-base text-slate-800 md:text-[17px]"
                 >
                     {currentList.items}
                 </ul>,
@@ -1530,7 +2100,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
             elements.push(
                 <ol
                     key={`ol-${key}`}
-                    className="text-wrap-anywhere my-3 ml-4 list-inside list-decimal space-y-1.5 text-base text-slate-800 md:text-[18px]"
+                    className="text-wrap-anywhere my-3 ml-4 list-inside list-decimal space-y-1.5 text-base text-slate-800 md:text-[17px]"
                 >
                     {currentList.items}
                 </ol>,
@@ -1690,18 +2260,20 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
 
             flushList(idx);
             elements.push(
-                mapLink
-                    ? renderMapsPreview(
-                          `map-line-${idx}`,
-                          mapLink.href,
-                          mapLink.label,
-                      )
-                    : <p
-                          key={idx}
-                          className="text-wrap-anywhere text-base leading-relaxed text-slate-800 md:text-[18px]"
-                      >
-                          {parseInline(line)}
-                      </p>,
+                mapLink ? (
+                    renderMapsPreview(
+                        `map-line-${idx}`,
+                        mapLink.href,
+                        mapLink.label,
+                    )
+                ) : (
+                    <p
+                        key={idx}
+                        className="text-wrap-anywhere text-base leading-relaxed text-slate-800 md:text-[17px]"
+                    >
+                        {parseInline(line)}
+                    </p>
+                ),
             );
 
             return;
@@ -1710,7 +2282,28 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
         if (lineLink && isGoogleMapsUrl(lineLink.href)) {
             flushList(idx);
             elements.push(
-                renderMapsPreview(`map-line-${idx}`, lineLink.href, lineLink.label),
+                renderMapsPreview(
+                    `map-line-${idx}`,
+                    lineLink.href,
+                    lineLink.label,
+                ),
+            );
+
+            return;
+        }
+
+        const bareMapsUrl = trimmed.match(
+            /^(https:\/\/(?:maps\.app\.goo\.gl|goo\.gl|maps\.google\.com|www\.google\.[^/\s]+\/maps)[^\s]*)$/i,
+        );
+
+        if (bareMapsUrl) {
+            flushList(idx);
+            elements.push(
+                renderMapsPreview(
+                    `map-bare-${idx}`,
+                    bareMapsUrl[1],
+                    'Buka di Google Maps',
+                ),
             );
 
             return;
@@ -1721,7 +2314,7 @@ const MarkdownRenderer = ({ content }: { content: string }) => {
         elements.push(
             <p
                 key={idx}
-                className="text-wrap-anywhere text-base leading-relaxed text-slate-800 md:text-[18px]"
+                className="text-wrap-anywhere text-base leading-relaxed text-slate-800 md:text-[17px]"
             >
                 {parseInline(line)}
             </p>,

@@ -9,6 +9,7 @@ use GuzzleHttp\Psr7\Utils;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Support\Carbon;
@@ -38,6 +39,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureDevCommands();
         $this->configureAntigravityGeminiCompat();
         $this->configureRateLimiting();
         $this->configureMailTemplates();
@@ -111,6 +113,17 @@ class AppServiceProvider extends ServiceProvider
         );
     }
 
+    protected function configureDevCommands(): void
+    {
+        if (! app()->runningInConsole()) {
+            return;
+        }
+
+        $port = parse_url((string) config('app.url'), PHP_URL_PORT) ?: 8000;
+
+        DevCommands::artisan("serve --host=0.0.0.0 --port={$port}", 'server');
+    }
+
     protected function configureRateLimiting(): void
     {
         RateLimiter::for('chat', function (Request $request): Limit {
@@ -126,7 +139,7 @@ class AppServiceProvider extends ServiceProvider
 
     protected function configureMailTemplates(): void
     {
-        VerifyEmail::createUrlUsing(function (object $notifiable): string {
+        VerifyEmail::createUrlUsing(function (User $notifiable): string {
             return URL::temporarySignedRoute(
                 'verification.public.verify',
                 now()->addMinutes(config('auth.verification.expire', 60)),
@@ -137,7 +150,7 @@ class AppServiceProvider extends ServiceProvider
             );
         });
 
-        VerifyEmail::toMailUsing(function (object $notifiable, string $url): MailMessage {
+        VerifyEmail::toMailUsing(function (User $notifiable, string $url): MailMessage {
             return (new MailMessage)
                 ->subject('Verifikasi Email Akun Chatbot Deka')
                 ->view('emails.verify-email', [

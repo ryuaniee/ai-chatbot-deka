@@ -40,13 +40,13 @@ class MessageModerationService
             return;
         }
 
-        if (($result['allowed'] ?? true) === true) {
+        if ($result['allowed'] === true) {
             return;
         }
 
         throw new ModerationException(
-            reasonCode: (string) ($result['reason_code'] ?? 'MODERATION_BLOCKED'),
-            message: (string) ($result['message'] ?? 'Message blocked by moderation policy.'),
+            reasonCode: $result['reason_code'] ?: 'MODERATION_BLOCKED',
+            message: $result['message'] ?: 'Message blocked by moderation policy.',
         );
     }
 }

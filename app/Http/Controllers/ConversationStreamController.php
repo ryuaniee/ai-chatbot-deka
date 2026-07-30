@@ -8,6 +8,7 @@ use App\Exceptions\IdempotencyConflictException;
 use App\Exceptions\ModerationException;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\User;
 use App\Services\ConversationChatService;
 use App\Support\ChatResource;
 use Closure;
@@ -15,6 +16,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Laravel\Ai\Responses\StreamableAgentResponse;
+use stdClass;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
 
@@ -144,7 +146,9 @@ class ConversationStreamController extends Controller
      *     user_message: Message,
      *     assistant_message: Message|null,
      *     stream: StreamableAgentResponse|null,
-     *     state: object
+     *     state: stdClass,
+     *     pending_stream?: bool,
+     *     user?: User
      * }  $result
      */
     private function streamResponse(array $result): StreamedResponse
@@ -160,6 +164,7 @@ class ConversationStreamController extends Controller
             $startedAt = hrtime(true);
             $firstDeltaAt = null;
             $deltaCount = 0;
+            $liveDeltas = $this->usesLiveStreamDeltas();
 
             echo ": stream-start\n\n";
             flush();
@@ -194,11 +199,14 @@ class ConversationStreamController extends Controller
 
                         $deltaCount++;
                         $firstDeltaAt ??= hrtime(true);
+                        $delta = (string) ($payload['delta'] ?? '');
 
-                        $this->emitEvent([
-                            'type' => 'text_delta',
-                            'delta' => (string) ($payload['delta'] ?? ''),
-                        ]);
+                        if ($liveDeltas) {
+                            $this->emitEvent([
+                                'type' => 'text_delta',
+                                'delta' => $delta,
+                            ]);
+                        }
                     }
                 } catch (Throwable $exception) {
                     Log::warning('Chat stream interrupted before completion.', [
@@ -238,7 +246,7 @@ class ConversationStreamController extends Controller
                                 ->fresh();
 
                         $content = (string) $assistantMessage->content;
-                        if ($content !== '' && $assistantMessage->model !== 'deka-provider-fallback') {
+                        if ($content !== '' && data_get($assistantMessage->metadata, 'model') !== 'deka-provider-fallback') {
                             $this->emitEvent([
                                 'type' => 'text_delta',
                                 'delta' => $content,
@@ -254,6 +262,8 @@ class ConversationStreamController extends Controller
                             )
                             ->fresh();
                     }
+
+                    app(ConversationChatService::class)->ensureTitleGenerated($conversation->id);
 
                     $this->emitEvent([
                         'type' => 'message_complete',
@@ -274,9 +284,23 @@ class ConversationStreamController extends Controller
                 }
             }
 
-            if ($assistantMessage === null && isset($state->assistantMessage) && $state->assistantMessage !== null) {
+            if ($assistantMessage === null && isset($state->assistantMessage)) {
                 $assistantMessage = $state->assistantMessage->fresh();
             }
+
+            if (! $liveDeltas && $assistantMessage !== null && $stream !== null) {
+                $guardedContent = (string) $assistantMessage->content;
+
+                if ($guardedContent !== '') {
+                    $this->emitEvent([
+                        'type' => 'text_delta',
+                        'delta' => $guardedContent,
+                    ]);
+                }
+            }
+
+            // Generate topic title before final SSE payload so the client gets it immediately.
+            app(ConversationChatService::class)->ensureTitleGenerated($conversation->id);
 
             $conversation = $conversation->fresh();
             $streamMetrics = [
@@ -306,8 +330,6 @@ class ConversationStreamController extends Controller
             ]);
 
             $this->emitDone();
-
-            app(ConversationChatService::class)->ensureTitleGenerated($conversation->id);
         }, 200, [
             'Cache-Control' => 'no-cache, no-store, must-revalidate',
             'Connection' => 'keep-alive',
@@ -341,6 +363,11 @@ class ConversationStreamController extends Controller
         }
 
         flush();
+    }
+
+    private function usesLiveStreamDeltas(): bool
+    {
+        return strtolower((string) config('services.ai_chat.stream_safety_mode', 'buffered')) === 'live';
     }
 
     private function prepareStreamOutput(): void

@@ -19,12 +19,17 @@ Route::redirect('dashboard', '/chat')->name('dashboard');
 Route::redirect('admin', '/admin/overview')
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin');
+Route::redirect('admin/token-usage', '/admin/analytic')
+    ->middleware(['auth', 'verified', 'admin-user']);
 Route::get('admin/activity-log/items', [AdminDashboardController::class, 'activityLogItems'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.activity-log.items');
 Route::get('admin/activity-log/report', [AdminDashboardController::class, 'activityLogReport'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.activity-log.report');
+Route::post('admin/activity-log/export-log', [AdminDashboardController::class, 'logActivityExport'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.activity-log.export-log');
 Route::patch('admin/feedback-review/{feedback}/status', [AdminDashboardController::class, 'updateFeedbackReviewStatus'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.feedback-review.status');
@@ -34,6 +39,12 @@ Route::post('admin/feedback-review/{feedback}/solve', [AdminDashboardController:
 Route::post('admin/feedback-review/{feedback}/ignore', [AdminDashboardController::class, 'ignoreFeedbackReview'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.feedback-review.ignore');
+Route::patch('admin/feedback-review/{feedback}/improvement', [AdminDashboardController::class, 'updateFeedbackImprovement'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.feedback-review.improvement');
+Route::post('admin/feedback-review/{feedback}/rollback', [AdminDashboardController::class, 'rollbackFeedbackReview'])
+    ->middleware(['auth', 'verified', 'admin-user'])
+    ->name('admin.feedback-review.rollback');
 Route::post('admin/users', [AdminUserController::class, 'store'])
     ->middleware(['auth', 'verified', 'admin-user'])
     ->name('admin.users.store');
@@ -110,6 +121,10 @@ Route::middleware(['auth', 'verified', 'regular-user'])->group(function () {
             ->name('conversations.stream');
         Route::get('conversations/{conversation}', [ConversationController::class, 'show'])
             ->name('conversations.show');
+        Route::patch('conversations/{conversation}', [ConversationController::class, 'update'])
+            ->name('conversations.update');
+        Route::delete('conversations/{conversation}', [ConversationController::class, 'destroy'])
+            ->name('conversations.destroy');
         Route::post(
             'conversations/{conversation}/messages',
             [ConversationMessageController::class, 'store'],

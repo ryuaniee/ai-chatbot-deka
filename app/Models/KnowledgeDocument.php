@@ -2,8 +2,10 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -17,6 +19,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $language
  * @property Carbon|null $last_ingested_at
  * @property array<string, mixed>|null $metadata
+ * @property Collection<int, KnowledgeDocumentVersion> $versions
+ * @property KnowledgeDocumentVersion|null $activeVersion
  */
 class KnowledgeDocument extends Model
 {
@@ -46,5 +50,17 @@ class KnowledgeDocument extends Model
     public function chunks(): HasMany
     {
         return $this->hasMany(KnowledgeChunk::class);
+    }
+
+    /** @return HasMany<KnowledgeDocumentVersion, $this> */
+    public function versions(): HasMany
+    {
+        return $this->hasMany(KnowledgeDocumentVersion::class);
+    }
+
+    /** @return HasOne<KnowledgeDocumentVersion, $this> */
+    public function activeVersion(): HasOne
+    {
+        return $this->hasOne(KnowledgeDocumentVersion::class)->where('status', KnowledgeDocumentVersion::STATUS_ACTIVE);
     }
 }

@@ -80,7 +80,7 @@ class ProfileUpdateTest extends TestCase
             ->assertRedirect('/chat');
     }
 
-    public function test_user_can_deactivate_their_account()
+    public function test_user_can_permanently_delete_their_account()
     {
         $user = User::factory()->create();
 
@@ -95,8 +95,7 @@ class ProfileUpdateTest extends TestCase
             ->assertRedirect(route('home'));
 
         $this->assertGuest();
-        $this->assertSoftDeleted('users', ['id' => $user->id]);
-        $this->assertNotNull(User::withTrashed()->find($user->id));
+        $this->assertDatabaseMissing('users', ['id' => $user->id]);
     }
 
     public function test_correct_password_must_be_provided_to_delete_account()

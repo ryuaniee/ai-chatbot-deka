@@ -1,5 +1,4 @@
 import { ChartPie, TrendingDown, TrendingUp } from 'lucide-react';
-import { Pie, PieChart } from 'recharts';
 import {
     Card,
     CardContent,
@@ -8,12 +7,6 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
-import {
-    ChartContainer,
-    ChartTooltip,
-    ChartTooltipContent,
-} from '@/components/ui/chart';
-import type { ChartConfig } from '@/components/ui/chart';
 import { cn } from '@/lib/utils';
 
 type TokenUsageChartItem = {
@@ -55,23 +48,6 @@ const getTrendLabel = (trend?: TokenUsageTrend) => {
     )}% bulan ini`;
 };
 
-const chartConfig = {
-    tokens: {
-        label: 'Token',
-    },
-} satisfies ChartConfig;
-
-const tokenSegmentColors = [
-    '#2f80ed',
-    '#22c55e',
-    '#f59e0b',
-    '#8b5cf6',
-    '#ef4444',
-    '#14b8a6',
-    '#f97316',
-    '#64748b',
-];
-
 export function AdminTokenUsageChart({
     chartClassName,
     className,
@@ -95,12 +71,13 @@ export function AdminTokenUsageChart({
         (total, item) => total + item.completionTokens,
         0,
     );
-    const chartData = data.map((item, index) => ({
-        fill: tokenSegmentColors[index % tokenSegmentColors.length],
-        name: 'Pemakaian token',
-        tokens: item.totalTokens,
-    }));
     const hasTokenData = totalTokens > 0;
+    const promptTokenShare = Math.round(
+        (promptTokens / Math.max(totalTokens, 1)) * 100,
+    );
+    const completionTokenShare = Math.round(
+        (completionTokens / Math.max(totalTokens, 1)) * 100,
+    );
     const trendLabel = getTrendLabel(trend);
     const TrendIcon =
         trend?.direction === 'up'
@@ -110,14 +87,19 @@ export function AdminTokenUsageChart({
               : null;
 
     return (
-        <Card className={cn('flex h-full flex-col rounded-lg', className)}>
+        <Card
+            className={cn(
+                'flex h-full min-h-[560px] flex-col rounded-lg shadow-sm',
+                className,
+            )}
+        >
             <CardHeader className="shrink-0 items-center pb-3 text-center">
-                <CardTitle>Distribusi Token</CardTitle>
+                <CardTitle>Komposisi Token</CardTitle>
                 <CardDescription>
-                    Porsi pemakaian token antar pengguna aktif.
+                    Perbandingan token input dan output AI.
                 </CardDescription>
             </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden pb-3">
+            <CardContent className="flex min-h-0 flex-1 flex-col gap-4 pb-4">
                 <div className="grid shrink-0 grid-cols-3 gap-2 text-center">
                     <div className="rounded-md border bg-muted/30 px-3 py-2">
                         <p className="text-[11px] text-muted-foreground">
@@ -145,30 +127,55 @@ export function AdminTokenUsageChart({
                     </div>
                 </div>
                 {hasTokenData ? (
-                    <>
-                        <ChartContainer
-                            config={chartConfig}
+                    <div className="grid min-h-0 flex-1 items-center gap-4">
+                        <div
                             className={cn(
-                                'mx-auto aspect-square max-h-[320px] min-h-0 w-full flex-1',
+                                'mx-auto flex h-[180px] max-h-[180px] w-full max-w-[240px] flex-none items-center justify-center',
                                 chartClassName,
                             )}
                         >
-                            <PieChart>
-                                <ChartTooltip
-                                    cursor={false}
-                                    content={<ChartTooltipContent hideLabel />}
-                                />
-                                <Pie
-                                    data={chartData}
-                                    dataKey="tokens"
-                                    nameKey="name"
-                                />
-                            </PieChart>
-                        </ChartContainer>
-                    </>
+                            <div
+                                className="relative h-[160px] w-[160px] rounded-full shadow-sm"
+                                style={{
+                                    background: `conic-gradient(#2f80ed 0deg ${promptTokenShare * 3.6}deg, #22c55e ${promptTokenShare * 3.6}deg 360deg)`,
+                                }}
+                                aria-label={`Input ${promptTokenShare} persen, output ${completionTokenShare} persen`}
+                                role="img"
+                            >
+                                <div className="absolute inset-8 flex flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
+                                    <span className="text-[11px] font-medium text-slate-500">
+                                        Input
+                                    </span>
+                                    <span className="text-2xl font-bold text-slate-950 tabular-nums">
+                                        {promptTokenShare}%
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="grid gap-2 text-sm">
+                            <div className="flex items-center justify-between gap-3 rounded-md bg-blue-50 px-3 py-2 text-blue-950 ring-1 ring-blue-100">
+                                <span className="flex items-center gap-2 font-medium">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-[#2f80ed]" />
+                                    Input
+                                </span>
+                                <span className="font-semibold tabular-nums">
+                                    {promptTokenShare}%
+                                </span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3 rounded-md bg-emerald-50 px-3 py-2 text-emerald-950 ring-1 ring-emerald-100">
+                                <span className="flex items-center gap-2 font-medium">
+                                    <span className="h-2.5 w-2.5 rounded-full bg-[#22c55e]" />
+                                    Output
+                                </span>
+                                <span className="font-semibold tabular-nums">
+                                    {completionTokenShare}%
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 ) : (
                     <div className="flex min-h-[220px] flex-1 flex-col items-center justify-center rounded-md border border-dashed bg-muted/20 px-6 py-8 text-center">
-                        <div className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-50 text-blue-600 ring-1 ring-blue-100   ">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-50 text-blue-600 ring-1 ring-blue-100">
                             <ChartPie className="h-5 w-5" />
                         </div>
                         <p className="mt-4 text-sm font-semibold">
@@ -181,8 +188,8 @@ export function AdminTokenUsageChart({
                     </div>
                 )}
             </CardContent>
-            <CardFooter className="shrink-0 flex-col gap-2 border-t px-4 pt-3 pb-4 text-center text-sm">
-                <div className="flex flex-wrap items-center justify-center gap-2 leading-tight font-medium">
+            <CardFooter className="shrink-0 flex-col gap-2 border-t px-4 py-4 text-center text-sm">
+                <div className="flex flex-wrap items-center justify-center gap-2 leading-5 font-medium">
                     {hasTokenData
                         ? trendLabel
                         : 'Menunggu data pemakaian token'}
@@ -190,7 +197,7 @@ export function AdminTokenUsageChart({
                         <TrendIcon className="h-4 w-4" />
                     )}
                 </div>
-                <div className="flex items-center gap-2 leading-none text-muted-foreground">
+                <div className="flex items-center gap-2 leading-5 text-muted-foreground">
                     {hasTokenData
                         ? 'Berdasarkan pengguna aktif'
                         : 'Berdasarkan percakapan yang sudah tersimpan'}

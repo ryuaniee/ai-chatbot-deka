@@ -2,12 +2,15 @@
 
 namespace App\Services;
 
+use App\Ai\Agents\AssistantOutputModerationAgent;
 use App\Ai\Agents\ConversationReplyAgent;
 use App\Ai\Agents\ConversationTitleAgent;
 use App\Ai\Agents\FeedbackImprovementAgent;
 use App\Ai\Agents\KnowledgeCandidateRerankerAgent;
 use App\Ai\Agents\KnowledgeIntentPlannerAgent;
 use App\Ai\Agents\KnowledgeSearchQueryAgent;
+use App\Ai\Agents\KnowledgeValidationJudgeAgent;
+use App\Ai\Agents\KnowledgeValidationProbeAgent;
 use App\Ai\Agents\MessageModerationAgent;
 use App\Exceptions\AiRuntimeConfigurationException;
 use App\Exceptions\AiRuntimeException;
@@ -21,7 +24,9 @@ use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\StreamableAgentResponse;
+use Laravel\Ai\Responses\StructuredAgentResponse;
 use Laravel\Ai\Streaming\Events\StreamEnd;
+use Laravel\Ai\Streaming\Events\StreamEvent;
 use Laravel\Ai\Streaming\Events\StreamStart;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\TextEnd;
@@ -32,6 +37,21 @@ use Throwable;
 
 class AiRuntimeClient
 {
+    private const KNOWLEDGE_INTENTS = [
+        'person_identity',
+        'company_team',
+        'company_address',
+        'company_services',
+        'company_products',
+        'company_projects',
+        'company_contact',
+        'company_profile',
+        'pricing',
+        'assistant_capability',
+        'other_deka_fact',
+        'out_of_scope',
+    ];
+
     /**
      * @param  array<int, array{role: string, content: string}>  $messages
      * @return array{
@@ -96,11 +116,53 @@ class AiRuntimeClient
             throw $this->mapException($exception);
         }
 
+        $structured = $this->structuredResponseData($response);
+
         return [
-            'allowed' => (bool) Arr::get($response, 'allowed', false),
-            'reason_code' => $this->nullableString(Arr::get($response, 'reason_code')),
-            'message' => $this->nullableString(Arr::get($response, 'message')),
+            'allowed' => (bool) Arr::get($structured, 'allowed', false),
+            'reason_code' => $this->nullableString(Arr::get($structured, 'reason_code')),
+            'message' => $this->nullableString(Arr::get($structured, 'message')),
         ];
+    }
+
+    /**
+     * @return array{allowed: bool, reason_code: string|null, message: string|null}
+     */
+    public function moderateAssistantOutput(string $content): array
+    {
+        try {
+            $response = AssistantOutputModerationAgent::make()->prompt(
+                $content,
+                provider: $this->providerMatrix(
+                    modelOverride: $this->nullableString(config('services.ai_chat.moderation_model')),
+                ),
+                timeout: $this->timeout(),
+            );
+        } catch (Throwable $exception) {
+            throw $this->mapException($exception);
+        }
+
+        $structured = $this->structuredResponseData($response);
+
+        return [
+            'allowed' => (bool) Arr::get($structured, 'allowed', false),
+            'reason_code' => $this->nullableString(Arr::get($structured, 'reason_code')),
+            'message' => $this->nullableString(Arr::get($structured, 'message')),
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function structuredResponseData(AgentResponse $response): array
+    {
+        if ($response instanceof StructuredAgentResponse) {
+            return $response->toArray();
+        }
+
+        $decoded = json_decode($response->text, true);
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     /**
@@ -156,6 +218,7 @@ class AiRuntimeClient
     }
 
     /**
+     * @param  array<int, array{role: string, content: string}>  $history
      * @return array<int, string>
      */
     public function rewriteKnowledgeQueries(string $question, array $history = []): array
@@ -171,7 +234,7 @@ class AiRuntimeClient
         if ($history !== []) {
             $context = collect($history)
                 ->slice(-4)
-                ->map(static fn (array $message): string => sprintf('%s: %s', $message['role'] ?? 'unknown', $message['content'] ?? ''))
+                ->map(static fn (array $message): string => sprintf('%s: %s', $message['role'], $message['content']))
                 ->implode("\n");
 
             $prompt = "Conversation context:\n{$context}\n\nLatest user question:\n{$question}";
@@ -207,7 +270,7 @@ class AiRuntimeClient
         if ($history !== []) {
             $context = collect($history)
                 ->slice(-4)
-                ->map(static fn (array $message): string => sprintf('%s: %s', $message['role'] ?? 'unknown', $message['content'] ?? ''))
+                ->map(static fn (array $message): string => sprintf('%s: %s', $message['role'], $message['content']))
                 ->implode("\n");
 
             $prompt = "Conversation context:\n{$context}\n\nLatest user question:\n{$question}";
@@ -260,6 +323,80 @@ class AiRuntimeClient
         $decoded = json_decode(trim($response->text), true);
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * @return array<int, array{question: string, required_facts: array<int, string>}>
+     */
+    public function generateKnowledgeValidationProbes(string $chunk, int $count = 3): array
+    {
+        $prompt = "KNOWLEDGE_CHUNK_UNTRUSTED_DATA:\n{$chunk}\n\nCreate {$count} probes.";
+
+        try {
+            $response = KnowledgeValidationProbeAgent::make()->prompt(
+                $prompt,
+                provider: $this->providerMatrix(),
+                timeout: (int) config('services.deka_knowledge.validation_timeout', 60),
+            );
+        } catch (Throwable $exception) {
+            throw $this->mapException($exception);
+        }
+
+        $decoded = json_decode(trim($response->text), true);
+
+        return collect(is_array($decoded['probes'] ?? null) ? $decoded['probes'] : [])
+            ->map(static function (array $probe): array {
+                $requiredFacts = is_array($probe['required_facts'] ?? null)
+                    ? $probe['required_facts']
+                    : [];
+
+                return [
+                    'question' => trim((string) ($probe['question'] ?? '')),
+                    'required_facts' => collect($requiredFacts)
+                        ->map(static fn (mixed $fact): string => trim((string) $fact))
+                        ->filter()
+                        ->values()
+                        ->all(),
+                ];
+            })
+            ->filter(static fn (array $probe): bool => $probe['question'] !== '' && $probe['required_facts'] !== [])
+            ->take($count)
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<int, string>  $requiredFacts
+     * @return array{grounded: bool, complete: bool, contradiction: bool, reason: string}
+     */
+    public function judgeKnowledgeValidationAnswer(
+        string $question,
+        array $requiredFacts,
+        string $source,
+        string $answer,
+    ): array {
+        $prompt = "QUESTION:\n{$question}\n\nREQUIRED_FACTS:\n"
+            .json_encode($requiredFacts, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+            ."\n\nSOURCE_CHUNK:\n{$source}\n\nASSISTANT_ANSWER:\n{$answer}";
+
+        try {
+            $response = KnowledgeValidationJudgeAgent::make()->prompt(
+                $prompt,
+                provider: $this->providerMatrix(),
+                timeout: (int) config('services.deka_knowledge.validation_timeout', 60),
+            );
+        } catch (Throwable $exception) {
+            throw $this->mapException($exception);
+        }
+
+        $decoded = json_decode(trim($response->text), true);
+
+        return [
+            'grounded' => (bool) ($decoded['grounded'] ?? false),
+            'complete' => (bool) ($decoded['complete'] ?? false),
+            'contradiction' => (bool) ($decoded['contradiction'] ?? true),
+            'reason' => trim((string) ($decoded['reason'] ?? 'Invalid judge response.')),
+        ];
     }
 
     /**
@@ -368,12 +505,17 @@ class AiRuntimeClient
             $decoded = preg_split('/\R+/', $content) ?: [];
         }
 
-        return collect($decoded)
+        $queries = collect($decoded)
             ->map(static fn (mixed $query): string => trim((string) $query, " \t\n\r\0\x0B-•0123456789."))
             ->filter(static fn (string $query): bool => $query !== '')
-            ->prepend($fallback)
             ->unique(static fn (string $query): string => mb_strtolower($query))
             ->take((int) config('services.deka_knowledge.query_rewrite_limit', 5))
+            ->values()
+            ->all();
+
+        return collect([$fallback, ...$queries])
+            ->filter(static fn (string $query): bool => $query !== '')
+            ->unique(static fn (string $query): string => mb_strtolower($query))
             ->values()
             ->all();
     }
@@ -410,9 +552,14 @@ class AiRuntimeClient
                 $queries = collect($queries)
                     ->map(static fn (mixed $query): string => trim((string) $query))
                     ->filter(static fn (string $query): bool => $query !== '')
-                    ->prepend($question)
                     ->unique(static fn (string $query): string => mb_strtolower($query))
-                    ->take(6)
+                    ->take(5)
+                    ->values()
+                    ->all();
+                $queries = collect([$question, ...$queries])
+                    ->filter(static fn (string $query): bool => $query !== '')
+                    ->unique(static fn (string $query): string => mb_strtolower($query))
+                    ->take(5)
                     ->values()
                     ->all();
 
@@ -420,8 +567,12 @@ class AiRuntimeClient
                     return null;
                 }
 
+                if (! in_array($intent, self::KNOWLEDGE_INTENTS, true)) {
+                    $intent = 'other_deka_fact';
+                }
+
                 return [
-                    'intent' => $intent !== '' ? $intent : 'other_deka_fact',
+                    'intent' => $intent,
                     'question' => $question,
                     'queries' => $queries,
                 ];
@@ -463,6 +614,7 @@ class AiRuntimeClient
         $textStarted = false;
         $streamStarted = false;
         $sseBuffer = '';
+        /** @var array<int, StreamEvent> $eventQueue */
         $eventQueue = [];
         $usage = new Usage;
 
@@ -596,10 +748,6 @@ class AiRuntimeClient
                     curl_multi_select($multi, 0.2);
                 }
             } while ($running && $status === CURLM_OK);
-
-            while ($eventQueue !== []) {
-                yield array_shift($eventQueue);
-            }
 
             $error = curl_error($handle);
             $statusCode = curl_getinfo($handle, CURLINFO_RESPONSE_CODE);

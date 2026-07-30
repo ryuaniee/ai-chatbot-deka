@@ -4,10 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\AdminActivityLog;
 use App\Models\User;
+use App\Services\AccountLifecycleService;
 use App\Support\EmailAddress;
+use Carbon\CarbonInterface;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
@@ -48,7 +49,7 @@ class AdminUserController extends Controller
         return back();
     }
 
-    public function destroy(Request $request, User $user): RedirectResponse
+    public function destroy(Request $request, User $user, AccountLifecycleService $lifecycle): RedirectResponse
     {
         if ($request->user()?->is($user)) {
             return back()->withErrors(['user' => 'Admin tidak bisa menghapus akunnya sendiri.']);
@@ -60,7 +61,7 @@ class AdminUserController extends Controller
 
         $email = $user->email;
 
-        $user->delete();
+        $lifecycle->deletePermanently($user);
 
         $this->log($request, 'Menghapus pengguna', $user, 'Admin menghapus pengguna '.$email.'.');
 
@@ -70,7 +71,7 @@ class AdminUserController extends Controller
     }
 
     /**
-     * @return array{name: string, email: string, role: string, email_verified_at: Carbon|null, password?: string}
+     * @return array{name: string, email: string, canonical_email: string, role: string, email_verified_at: CarbonInterface|null, password?: string}
      */
     private function validatedData(Request $request, bool $creating, ?User $user = null): array
     {
@@ -104,13 +105,24 @@ class AdminUserController extends Controller
 
         $validated = validator($input, $rules)->validate();
         $emailVerified = (bool) $validated['email_verified'];
-        unset($validated['email_verified']);
 
-        $validated['email_verified_at'] = $emailVerified
-            ? ($user?->email_verified_at ?? now())
+        $emailVerifiedAt = $emailVerified
+            ? ($user !== null ? ($user->email_verified_at ?? now()) : now())
             : null;
 
-        return $validated;
+        $result = [
+            'name' => (string) $validated['name'],
+            'email' => (string) $validated['email'],
+            'canonical_email' => (string) $validated['canonical_email'],
+            'role' => (string) $validated['role'],
+            'email_verified_at' => $emailVerifiedAt,
+        ];
+
+        if (array_key_exists('password', $validated)) {
+            $result['password'] = (string) $validated['password'];
+        }
+
+        return $result;
     }
 
     private function adminCount(): int

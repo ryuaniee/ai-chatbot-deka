@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -10,12 +11,15 @@ class WelcomeNotification extends Notification
 {
     use Queueable;
 
-    public function via(object $notifiable): array
+    /**
+     * @return array<int, string>
+     */
+    public function via(User $notifiable): array
     {
         return ['mail'];
     }
 
-    public function toMail(object $notifiable): MailMessage
+    public function toMail(User $notifiable): MailMessage
     {
         return (new MailMessage)
             ->subject('Selamat Datang di Chatbot Deka')

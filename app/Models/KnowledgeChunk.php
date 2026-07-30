@@ -21,6 +21,7 @@ class KnowledgeChunk extends Model
 {
     protected $fillable = [
         'knowledge_document_id',
+        'knowledge_document_version_id',
         'chunk_index',
         'content',
         'content_hash',
@@ -45,5 +46,11 @@ class KnowledgeChunk extends Model
     public function document(): BelongsTo
     {
         return $this->belongsTo(KnowledgeDocument::class, 'knowledge_document_id');
+    }
+
+    /** @return BelongsTo<KnowledgeDocumentVersion, $this> */
+    public function version(): BelongsTo
+    {
+        return $this->belongsTo(KnowledgeDocumentVersion::class, 'knowledge_document_version_id');
     }
 }

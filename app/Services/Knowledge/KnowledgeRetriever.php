@@ -3,6 +3,7 @@
 namespace App\Services\Knowledge;
 
 use App\Models\KnowledgeChunk;
+use App\Models\KnowledgeDocument;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -15,14 +16,16 @@ class KnowledgeRetriever
 
     /**
      * @param  array<int, string>  $alternateQueries
+     * @param  array{version_ids?: array<int, int|string>}  $options
      * @return array{
      *     enabled: bool,
      *     in_context: bool,
      *     context: string,
-     *     sources: array<int, array{id: int, document_id: int, source_uri: string, title: string|null, score: float}>
+     *     sources: array<int, array<string, mixed>>,
+     *     diagnostics: array<string, mixed>
      * }
      */
-    public function retrieve(string $query, array $alternateQueries = []): array
+    public function retrieve(string $query, array $alternateQueries = [], array $options = []): array
     {
         if (! (bool) config('services.deka_knowledge.enabled', false)) {
             return [
@@ -30,6 +33,7 @@ class KnowledgeRetriever
                 'in_context' => true,
                 'context' => '',
                 'sources' => [],
+                'diagnostics' => ['configured_mode' => $this->retrievalMode(), 'used_modes' => []],
             ];
         }
 
@@ -39,12 +43,41 @@ class KnowledgeRetriever
             return $this->emptyEnabledResult();
         }
 
-        $chunks = $this->usesVectorRetrieval()
-            ? $this->retrieveWithVector($query, $alternateQueries)
-            : $this->retrieveWithFullText($query, $alternateQueries);
+        $startedAt = microtime(true);
+        $mode = $this->retrievalMode();
+        $versionIds = collect($options['version_ids'] ?? [])
+            ->map(static fn (int|string $id): int => (int) $id)
+            ->filter()
+            ->all();
+        $fullTextChunks = [];
+        $vectorChunks = [];
+
+        if (in_array($mode, ['fulltext', 'hybrid'], true)) {
+            $fullTextChunks = $this->retrieveWithFullText($query, $alternateQueries, $versionIds);
+        }
+
+        if ($mode === 'vector' || ($mode === 'hybrid' && $this->hasUsableEmbeddings($versionIds))) {
+            $vectorChunks = $this->retrieveWithVector($query, $alternateQueries, $versionIds);
+        }
+
+        $chunks = $mode === 'hybrid'
+            ? $this->fuseRankings($fullTextChunks, $vectorChunks)
+            : ($mode === 'vector' ? $vectorChunks : $fullTextChunks);
+        $chunks = $this->applySourcePriority($chunks);
+
+        $diagnostics = [
+            'configured_mode' => $mode,
+            'used_modes' => array_values(array_filter([
+                $fullTextChunks !== [] ? 'fulltext' : null,
+                $vectorChunks !== [] ? 'vector' : null,
+            ])),
+            'fulltext_candidates' => count($fullTextChunks),
+            'vector_candidates' => count($vectorChunks),
+            'duration_ms' => round((microtime(true) - $startedAt) * 1000, 2),
+        ];
 
         if ($chunks === []) {
-            return $this->emptyEnabledResult();
+            return $this->emptyEnabledResult($diagnostics);
         }
 
         $context = collect($chunks)
@@ -57,6 +90,7 @@ class KnowledgeRetriever
                     ."Title: {$title}\n"
                     ."URI: {$chunk['source_uri']}\n"
                     ."Score: {$chunk['score']}\n"
+                    ."Source priority: {$chunk['source_priority']}\n"
                     ."Content:\n{$content}";
             })
             ->implode("\n\n");
@@ -74,16 +108,21 @@ class KnowledgeRetriever
                     'source_uri' => $chunk['source_uri'],
                     'title' => $chunk['title'],
                     'score' => $chunk['score'],
+                    'source_priority' => $chunk['source_priority'],
+                    'retrieval_modes' => $chunk['retrieval_modes'] ?? [],
                 ],
                 $chunks,
             ),
+            'diagnostics' => $diagnostics,
         ];
     }
 
     /**
+     * @param  array<int, string>  $alternateQueries
+     * @param  array<int, int>  $versionIds
      * @return array<int, array{id: int, document_id: int, source_uri: string, title: string|null, content: string, score: float}>
      */
-    private function retrieveWithVector(string $query, array $alternateQueries = []): array
+    private function retrieveWithVector(string $query, array $alternateQueries = [], array $versionIds = []): array
     {
         try {
             $queries = $this->candidateQueries($query, $alternateQueries);
@@ -104,15 +143,11 @@ class KnowledgeRetriever
         $chunks = [];
 
         foreach ($embeddings as $embedding) {
-            if (! is_array($embedding)) {
-                continue;
-            }
-
             $chunks = [
                 ...$chunks,
                 ...(DB::getDriverName() === 'pgsql'
-                    ? $this->retrieveWithPgvector($embedding)
-                    : $this->retrieveWithPhpCosine($embedding)),
+                    ? $this->retrieveWithPgvector($embedding, $versionIds)
+                    : $this->retrieveWithPhpCosine($embedding, $versionIds)),
             ];
         }
 
@@ -121,83 +156,79 @@ class KnowledgeRetriever
 
     /**
      * @param  array<int, string>  $alternateQueries
-     * @return array<int, array{id: int, document_id: int, source_uri: string, title: string|null, content: string, score: float}>
+     * @param  array<int, int>  $versionIds
+     * @return array<int, array<string, mixed>>
      */
-    private function retrieveWithFullText(string $query, array $alternateQueries = []): array
+    private function retrieveWithFullText(string $query, array $alternateQueries = [], array $versionIds = []): array
     {
         if (DB::getDriverName() !== 'pgsql') {
-            return $this->retrieveWithLike($query, $alternateQueries);
+            return $this->retrieveWithLike($query, $alternateQueries, $versionIds);
         }
 
         $limit = $this->candidateLimit();
         $minScore = (float) config('services.deka_knowledge.min_fulltext_score', 0.01);
-        $chunks = [];
+        $rankings = [];
 
         foreach ($this->candidateQueries($query, $alternateQueries) as $searchQuery) {
-            $chunks = [
-                ...$chunks,
-                ...DB::table('knowledge_chunks')
+            $ranking = DB::table('knowledge_chunks')
+                ->join('knowledge_documents', 'knowledge_documents.id', '=', 'knowledge_chunks.knowledge_document_id')
+                ->join('knowledge_document_versions', 'knowledge_document_versions.id', '=', 'knowledge_chunks.knowledge_document_version_id')
+                ->when(
+                    $versionIds !== [],
+                    fn ($builder) => $builder->whereIn('knowledge_document_versions.id', $versionIds),
+                    fn ($builder) => $builder->where('knowledge_document_versions.status', 'active'),
+                )
+                ->select([
+                    'knowledge_chunks.id',
+                    'knowledge_chunks.knowledge_document_id as document_id',
+                    'knowledge_documents.source_uri',
+                    'knowledge_documents.title',
+                    'knowledge_chunks.content',
+                    'knowledge_chunks.chunk_index',
+                ])
+                ->selectRaw(
+                    "ts_rank_cd(to_tsvector('simple', knowledge_chunks.content), websearch_to_tsquery('simple', ?)) as score",
+                    [$searchQuery],
+                )
+                ->whereRaw(
+                    "to_tsvector('simple', knowledge_chunks.content) @@ websearch_to_tsquery('simple', ?)",
+                    [$searchQuery],
+                )
+                ->whereRaw(
+                    "ts_rank_cd(to_tsvector('simple', knowledge_chunks.content), websearch_to_tsquery('simple', ?)) >= ?",
+                    [$searchQuery, $minScore],
+                )
+                ->orderByDesc('score')
+                ->orderBy('knowledge_chunks.chunk_index')
+                ->limit($limit)
+                ->get()
+                ->map(static fn (object $row): array => [
+                    'id' => (int) $row->id,
+                    'document_id' => (int) $row->document_id,
+                    'source_uri' => (string) $row->source_uri,
+                    'title' => $row->title !== null ? (string) $row->title : null,
+                    'content' => (string) $row->content,
+                    'chunk_index' => (int) $row->chunk_index,
+                    'score' => round((float) $row->score, 6),
+                ])
+                ->all();
+
+            if ($ranking === []) {
+                $terms = $this->normalizedSearchTerms($searchQuery);
+
+                if ($terms === []) {
+                    continue;
+                }
+
+                $tsQuery = implode(' | ', $terms);
+                $ranking = DB::table('knowledge_chunks')
                     ->join('knowledge_documents', 'knowledge_documents.id', '=', 'knowledge_chunks.knowledge_document_id')
-                    ->where('knowledge_documents.status', 'active')
-                    ->select([
-                        'knowledge_chunks.id',
-                        'knowledge_chunks.knowledge_document_id as document_id',
-                        'knowledge_documents.source_uri',
-                        'knowledge_documents.title',
-                        'knowledge_chunks.content',
-                        'knowledge_chunks.chunk_index',
-                    ])
-                    ->selectRaw(
-                        "ts_rank_cd(to_tsvector('simple', knowledge_chunks.content), websearch_to_tsquery('simple', ?)) as score",
-                        [$searchQuery],
+                    ->join('knowledge_document_versions', 'knowledge_document_versions.id', '=', 'knowledge_chunks.knowledge_document_version_id')
+                    ->when(
+                        $versionIds !== [],
+                        fn ($builder) => $builder->whereIn('knowledge_document_versions.id', $versionIds),
+                        fn ($builder) => $builder->where('knowledge_document_versions.status', 'active'),
                     )
-                    ->whereRaw(
-                        "to_tsvector('simple', knowledge_chunks.content) @@ websearch_to_tsquery('simple', ?)",
-                        [$searchQuery],
-                    )
-                    ->whereRaw(
-                        "ts_rank_cd(to_tsvector('simple', knowledge_chunks.content), websearch_to_tsquery('simple', ?)) >= ?",
-                        [$searchQuery, $minScore],
-                    )
-                    ->orderByDesc('score')
-                    ->orderBy('knowledge_chunks.chunk_index')
-                    ->limit($limit)
-                    ->get()
-                    ->map(static fn (object $row): array => [
-                        'id' => (int) $row->id,
-                        'document_id' => (int) $row->document_id,
-                        'source_uri' => (string) $row->source_uri,
-                        'title' => $row->title !== null ? (string) $row->title : null,
-                        'content' => (string) $row->content,
-                        'chunk_index' => (int) $row->chunk_index,
-                        'score' => round((float) $row->score, 6),
-                    ])
-                    ->all(),
-            ];
-        }
-
-        $chunks = $this->rankUniqueChunks($chunks);
-
-        if ($chunks !== []) {
-            return $this->expandCandidateWindows($chunks);
-        }
-
-        $chunks = [];
-
-        foreach ($this->candidateQueries($query, $alternateQueries) as $searchQuery) {
-            $terms = $this->normalizedSearchTerms($searchQuery);
-
-            if ($terms === []) {
-                continue;
-            }
-
-            $tsQuery = implode(' | ', $terms);
-
-            $chunks = [
-                ...$chunks,
-                ...DB::table('knowledge_chunks')
-                    ->join('knowledge_documents', 'knowledge_documents.id', '=', 'knowledge_chunks.knowledge_document_id')
-                    ->where('knowledge_documents.status', 'active')
                     ->select([
                         'knowledge_chunks.id',
                         'knowledge_chunks.knowledge_document_id as document_id',
@@ -231,18 +262,73 @@ class KnowledgeRetriever
                         'chunk_index' => (int) $row->chunk_index,
                         'score' => round((float) $row->score, 6),
                     ])
-                    ->all(),
-            ];
+                    ->all();
+            }
+
+            if ($ranking !== []) {
+                $rankings[] = $ranking;
+            }
         }
 
-        return $this->expandCandidateWindows($this->rankUniqueChunks($chunks));
+        return $this->fuseQueryRankings($rankings);
+    }
+
+    /**
+     * PostgreSQL text ranks are not comparable across different query shapes.
+     * Reciprocal-rank fusion keeps broad rewrites from drowning out exact facts.
+     *
+     * @param  array<int, array<int, array<string, mixed>>>  $rankings
+     * @return array<int, array<string, mixed>>
+     */
+    private function fuseQueryRankings(array $rankings): array
+    {
+        $fused = [];
+
+        foreach ($rankings as $ranking) {
+            foreach ($ranking as $index => $chunk) {
+                $id = (int) $chunk['id'];
+
+                if (! isset($fused[$id])) {
+                    $fused[$id] = $chunk;
+                    $fused[$id]['score'] = 0.0;
+                }
+
+                $fused[$id]['score'] += 1 / (60 + $index + 1);
+            }
+        }
+
+        $ranked = collect($fused)
+            ->map(function (array $chunk): array {
+                $chunk['score'] = round((float) $chunk['score'], 6);
+
+                return $chunk;
+            })
+            ->sortByDesc('score');
+        $reserved = collect($rankings)
+            ->flatMap(fn (array $ranking, int $index): array => array_slice($ranking, 0, $index === 0 ? 2 : 1))
+            ->unique('id')
+            ->take($this->candidateLimit())
+            ->map(function (array $chunk) use ($ranked): array {
+                $chunk = $ranked->firstWhere('id', $chunk['id']) ?? $chunk;
+                $chunk['score'] = round((float) $chunk['score'] + 1.0, 6);
+
+                return $chunk;
+            });
+
+        return $reserved
+            ->concat($ranked)
+            ->unique('id')
+            ->take($this->candidateLimit())
+            ->values()
+            ->all();
     }
 
     /**
      * @param  array<int, string>  $alternateQueries
+     * @param  array<int, int>  $versionIds
      * @return array<int, array{id: int, document_id: int, source_uri: string, title: string|null, content: string, score: float}>
      */
-    private function retrieveWithLike(string $query, array $alternateQueries = []): array
+    private function retrieveWithLike(string $query, array $alternateQueries = [], array $versionIds = []): array
     {
         $terms = collect($this->candidateQueries($query, $alternateQueries))
             ->flatMap(fn (string $searchQuery): array => preg_split('/[^\pL\pN]+/u', mb_strtolower($searchQuery)) ?: [])
@@ -257,7 +343,11 @@ class KnowledgeRetriever
 
         $chunks = KnowledgeChunk::query()
             ->with('document')
-            ->whereHas('document', fn ($builder) => $builder->where('status', 'active'))
+            ->when(
+                $versionIds !== [],
+                fn ($builder) => $builder->whereIn('knowledge_document_version_id', $versionIds),
+                fn ($builder) => $builder->whereHas('version', fn ($version) => $version->where('status', 'active')),
+            )
             ->where(function ($builder) use ($terms): void {
                 foreach ($terms as $term) {
                     $builder->orWhereRaw('LOWER(content) LIKE ?', ['%'.$term.'%']);
@@ -277,10 +367,11 @@ class KnowledgeRetriever
             ->values()
             ->all();
 
-        return $this->expandCandidateWindows($chunks);
+        return $this->rankUniqueChunks($chunks);
     }
 
     /**
+     * @param  array<int, string>  $alternateQueries
      * @return array<int, string>
      */
     private function candidateQueries(string $query, array $alternateQueries): array
@@ -310,9 +401,10 @@ class KnowledgeRetriever
 
     /**
      * @param  array<int, float>  $embedding
+     * @param  array<int, int>  $versionIds
      * @return array<int, array{id: int, document_id: int, source_uri: string, title: string|null, content: string, score: float}>
      */
-    private function retrieveWithPgvector(array $embedding): array
+    private function retrieveWithPgvector(array $embedding, array $versionIds = []): array
     {
         $limit = $this->candidateLimit();
         $minSimilarity = (float) config('services.deka_knowledge.min_similarity', 0.72);
@@ -320,7 +412,14 @@ class KnowledgeRetriever
 
         return DB::table('knowledge_chunks')
             ->join('knowledge_documents', 'knowledge_documents.id', '=', 'knowledge_chunks.knowledge_document_id')
-            ->where('knowledge_documents.status', 'active')
+            ->join('knowledge_document_versions', 'knowledge_document_versions.id', '=', 'knowledge_chunks.knowledge_document_version_id')
+            ->when(
+                $versionIds !== [],
+                fn ($builder) => $builder->whereIn('knowledge_document_versions.id', $versionIds),
+                fn ($builder) => $builder->where('knowledge_document_versions.status', 'active'),
+            )
+            ->where('knowledge_chunks.embedding_provider', '!=', 'none')
+            ->where('knowledge_chunks.embedding_model', '!=', 'fulltext')
             ->select([
                 'knowledge_chunks.id',
                 'knowledge_chunks.knowledge_document_id as document_id',
@@ -346,16 +445,23 @@ class KnowledgeRetriever
 
     /**
      * @param  array<int, float>  $embedding
+     * @param  array<int, int>  $versionIds
      * @return array<int, array{id: int, document_id: int, source_uri: string, title: string|null, content: string, score: float}>
      */
-    private function retrieveWithPhpCosine(array $embedding): array
+    private function retrieveWithPhpCosine(array $embedding, array $versionIds = []): array
     {
         $limit = $this->candidateLimit();
         $minSimilarity = (float) config('services.deka_knowledge.min_similarity', 0.72);
 
         return KnowledgeChunk::query()
             ->with('document')
-            ->whereHas('document', fn ($query) => $query->where('status', 'active'))
+            ->when(
+                $versionIds !== [],
+                fn ($query) => $query->whereIn('knowledge_document_version_id', $versionIds),
+                fn ($query) => $query->whereHas('version', fn ($version) => $version->where('status', 'active')),
+            )
+            ->where('embedding_provider', '!=', 'none')
+            ->where('embedding_model', '!=', 'fulltext')
             ->get()
             ->map(function (KnowledgeChunk $chunk) use ($embedding): array {
                 $chunkEmbedding = is_array($chunk->embedding)
@@ -379,21 +485,118 @@ class KnowledgeRetriever
     }
 
     /**
-     * @return array{enabled: true, in_context: false, context: string, sources: array<int, array{id: int, document_id: int, source_uri: string, title: string|null, score: float}>}
+     * @param  array<string, mixed>  $diagnostics
+     * @return array{enabled: true, in_context: false, context: string, sources: array<int, array<string, mixed>>, diagnostics: array<string, mixed>}
      */
-    private function emptyEnabledResult(): array
+    private function emptyEnabledResult(array $diagnostics = []): array
     {
         return [
             'enabled' => true,
             'in_context' => false,
             'context' => '',
             'sources' => [],
+            'diagnostics' => $diagnostics + ['configured_mode' => $this->retrievalMode(), 'used_modes' => []],
         ];
     }
 
-    private function usesVectorRetrieval(): bool
+    private function retrievalMode(): string
     {
-        return config('services.deka_knowledge.retrieval_mode', 'vector') === 'vector';
+        $mode = strtolower((string) config('services.deka_knowledge.retrieval_mode', 'fulltext'));
+
+        return in_array($mode, ['fulltext', 'vector', 'hybrid'], true) ? $mode : 'fulltext';
+    }
+
+    /**
+     * @param  array<int, int>  $versionIds
+     */
+    private function hasUsableEmbeddings(array $versionIds = []): bool
+    {
+        try {
+            return KnowledgeChunk::query()
+                ->when(
+                    $versionIds !== [],
+                    fn ($query) => $query->whereIn('knowledge_document_version_id', $versionIds),
+                    fn ($query) => $query->whereHas('version', fn ($version) => $version->where('status', 'active')),
+                )
+                ->where('embedding_provider', '!=', 'none')
+                ->where('embedding_model', '!=', 'fulltext')
+                ->exists();
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * Reciprocal-rank fusion keeps lexical and semantic scores comparable.
+     *
+     * @param  array<int, array<string, mixed>>  $fullText
+     * @param  array<int, array<string, mixed>>  $vector
+     * @return array<int, array<string, mixed>>
+     */
+    private function fuseRankings(array $fullText, array $vector): array
+    {
+        $fused = [];
+
+        foreach (['fulltext' => $fullText, 'vector' => $vector] as $retrievalMode => $ranking) {
+            foreach ($ranking as $index => $chunk) {
+                $id = (int) $chunk['id'];
+
+                if (! isset($fused[$id])) {
+                    $fused[$id] = $chunk + ['retrieval_modes' => []];
+                    $fused[$id]['score'] = 0.0;
+                }
+
+                $fused[$id]['score'] += 1 / (60 + $index + 1);
+                $fused[$id]['retrieval_modes'][] = $retrievalMode;
+            }
+        }
+
+        return collect($fused)
+            ->map(function (array $chunk): array {
+                $chunk['score'] = round((float) $chunk['score'], 6);
+                $chunk['retrieval_modes'] = array_values(array_unique($chunk['retrieval_modes']));
+
+                return $chunk;
+            })
+            ->sortByDesc('score')
+            ->take($this->candidateLimit())
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Curated files outrank crawled pages when otherwise similarly relevant.
+     *
+     * @param  array<int, array<string, mixed>>  $chunks
+     * @return array<int, array<string, mixed>>
+     */
+    private function applySourcePriority(array $chunks): array
+    {
+        if ($chunks === []) {
+            return [];
+        }
+
+        $documents = KnowledgeDocument::query()
+            ->whereIn('id', collect($chunks)->pluck('document_id')->unique()->all())
+            ->get()
+            ->keyBy('id');
+
+        return collect($chunks)
+            ->map(function (array $chunk) use ($documents): array {
+                $document = $documents->get($chunk['document_id']);
+                $configured = data_get($document?->metadata, 'source_priority');
+                $priority = is_numeric($configured)
+                    ? (int) $configured
+                    : ($document->source_type === 'file' ? 100 : 50);
+
+                $chunk['source_priority'] = max(0, min(1000, $priority));
+
+                return $chunk;
+            })
+            ->sortByDesc(fn (array $chunk): float => (float) $chunk['score'] + ($chunk['source_priority'] / 10000))
+            ->take($this->candidateLimit())
+            ->values()
+            ->all();
     }
 
     private function candidateLimit(): int
@@ -401,82 +604,13 @@ class KnowledgeRetriever
         return max(1, (int) config('services.deka_knowledge.candidate_limit', 20));
     }
 
-    /**
-     * @param  array<int, array{id: int, document_id: int, source_uri: string, title: string|null, content: string, chunk_index?: int, score: float}>  $chunks
-     * @return array<int, array{id: int, document_id: int, source_uri: string, title: string|null, content: string, score: float}>
-     */
-    private function expandCandidateWindows(array $chunks): array
-    {
-        if ($chunks === []) {
-            return [];
-        }
-
-        $limit = $this->candidateLimit();
-        $expanded = [];
-        $seen = [];
-
-        foreach ($chunks as $chunk) {
-            $this->addCandidate($expanded, $seen, $chunk);
-
-            if (! isset($chunk['chunk_index'])) {
-                continue;
-            }
-
-            $neighbors = KnowledgeChunk::query()
-                ->with('document')
-                ->where('knowledge_document_id', $chunk['document_id'])
-                ->whereBetween('chunk_index', [$chunk['chunk_index'] - 2, $chunk['chunk_index'] + 2])
-                ->orderBy('chunk_index')
-                ->get();
-
-            foreach ($neighbors as $neighbor) {
-                $distance = abs($neighbor->chunk_index - $chunk['chunk_index']);
-
-                $this->addCandidate($expanded, $seen, [
-                    'id' => $neighbor->id,
-                    'document_id' => $neighbor->knowledge_document_id,
-                    'source_uri' => (string) $neighbor->document?->source_uri,
-                    'title' => $neighbor->document?->title,
-                    'content' => $neighbor->content,
-                    'score' => round(max(0.000001, ((float) $chunk['score'] * 0.92) - ($distance * 0.01)), 6),
-                ]);
-            }
-
-            if (count($expanded) >= ($limit * 2)) {
-                break;
-            }
-        }
-
-        return array_slice(array_values($expanded), 0, $limit);
-    }
-
-    /**
-     * @param  array<int, array{id: int, document_id: int, source_uri: string, title: string|null, content: string, score: float}>  $expanded
-     * @param  array<int, true>  $seen
-     * @param  array{id: int, document_id: int, source_uri: string, title: string|null, content: string, score: float}  $chunk
-     */
-    private function addCandidate(array &$expanded, array &$seen, array $chunk): void
-    {
-        if (isset($seen[$chunk['id']])) {
-            return;
-        }
-
-        $seen[$chunk['id']] = true;
-        $expanded[] = [
-            'id' => $chunk['id'],
-            'document_id' => $chunk['document_id'],
-            'source_uri' => $chunk['source_uri'],
-            'title' => $chunk['title'],
-            'content' => $chunk['content'],
-            'score' => $chunk['score'],
-        ];
-    }
-
     private function excerpt(string $content): string
     {
         $content = trim(preg_replace('/\s+/', ' ', $content) ?? $content);
 
-        return mb_substr($content, 0, 900);
+        $limit = max(1200, (int) config('services.deka_knowledge.chunk_size', 1200) + 200);
+
+        return mb_substr($content, 0, $limit);
     }
 
     /**
@@ -486,8 +620,11 @@ class KnowledgeRetriever
     {
         $stopwords = [
             'apa',
+            'aja',
+            'saja',
             'itu',
             'ini',
+            'di',
             'dan',
             'atau',
             'yang',
@@ -500,6 +637,8 @@ class KnowledgeRetriever
             'mengapa',
             'dimana',
             'kapan',
+            'ngapain',
+            'deka',
         ];
 
         return collect(preg_split('/[^\pL\pN]+/u', mb_strtolower($query)) ?: [])

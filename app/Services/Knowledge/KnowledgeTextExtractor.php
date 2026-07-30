@@ -4,6 +4,7 @@ namespace App\Services\Knowledge;
 
 use DOMDocument;
 use DOMElement;
+use DOMNode;
 use DOMXPath;
 use Illuminate\Support\Facades\File;
 use PhpOffice\PhpWord\IOFactory;
@@ -48,14 +49,21 @@ class KnowledgeTextExtractor
 
         $xpath = new DOMXPath($document);
 
-        foreach ($xpath->query('//script|//style|//noscript|//svg|//nav|//footer|//header|//form') ?: [] as $node) {
-            $node->parentNode?->removeChild($node);
+        $removableNodes = $xpath->query('//script|//style|//noscript|//svg|//nav|//footer|//header|//form');
+
+        if ($removableNodes !== false) {
+            foreach ($removableNodes as $node) {
+                if ($node instanceof DOMNode && $node->parentNode instanceof DOMNode) {
+                    $node->parentNode->removeChild($node);
+                }
+            }
         }
 
-        $title = trim((string) ($xpath->query('//title')->item(0)?->textContent ?? '')) ?: null;
-        $main = $xpath->query('//main')->item(0)
-            ?? $xpath->query('//*[@role="main"]')->item(0)
-            ?? $xpath->query('//article')->item(0)
+        $titleNode = $this->firstXpathNode($xpath, '//title');
+        $title = trim($titleNode instanceof DOMNode ? $titleNode->textContent : '') ?: null;
+        $main = $this->firstXpathNode($xpath, '//main')
+            ?? $this->firstXpathNode($xpath, '//*[@role="main"]')
+            ?? $this->firstXpathNode($xpath, '//article')
             ?? $document->getElementsByTagName('body')->item(0);
 
         $content = $main instanceof DOMElement
@@ -76,6 +84,14 @@ class KnowledgeTextExtractor
         $text = preg_replace('/\R{3,}/u', "\n\n", $text) ?? $text;
 
         return trim($text);
+    }
+
+    private function firstXpathNode(DOMXPath $xpath, string $query): ?DOMNode
+    {
+        $nodes = $xpath->query($query);
+        $node = $nodes !== false ? $nodes->item(0) : null;
+
+        return $node instanceof DOMNode ? $node : null;
     }
 
     /**
