@@ -481,6 +481,32 @@ class ChatApiTest extends TestCase
         ]);
     }
 
+    public function test_gemini_stream_requests_fall_back_to_non_stream_responses(): void
+    {
+        $this->fakeAllowedModeration();
+        config()->set('services.ai_chat.provider', 'gemini');
+        config()->set('services.ai_chat.streaming_enabled', true);
+        ConversationReplyAgent::fake(['Kontak dan alamat kantor resmi DEKA tersedia di kanal resmi.']);
+        ConversationTitleAgent::fake(['Kontak DEKA']);
+
+        $user = User::factory()->create();
+
+        $response = $this->actingAs($user)
+            ->withHeaders(['Accept' => 'text/event-stream'])
+            ->postJson(route('api.conversations.stream'), [
+                'content' => 'Kontak dan alamat kantor DEKA',
+            ]);
+
+        $response->assertOk()
+            ->assertStreamed();
+
+        $content = $response->streamedContent();
+
+        $this->assertStringNotContainsString('"type":"text_delta"', $content);
+        $this->assertStringContainsString('"type":"message_complete"', $content);
+        $this->assertStringContainsString('Kontak dan alamat kantor resmi DEKA tersedia di kanal resmi.', $content);
+    }
+
     public function test_blocked_message_is_rejected_before_persistence(): void
     {
         MessageModerationAgent::fake([[

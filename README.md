@@ -1,81 +1,51 @@
 # Chatbot Deka
 
-Aplikasi Laravel tunggal untuk chatbot informasi **DEKA** (perusahaan IT / solusi AI & transformasi digital).
+[![tests](https://github.com/darksoul729/chatbot-deka/actions/workflows/tests.yml/badge.svg)](https://github.com/darksoul729/chatbot-deka/actions/workflows/tests.yml)
+[![linter](https://github.com/darksoul729/chatbot-deka/actions/workflows/lint.yml/badge.svg)](https://github.com/darksoul729/chatbot-deka/actions/workflows/lint.yml)
 
-Fitur utama:
+Aplikasi Laravel + Inertia React untuk chatbot informasi DEKA, dengan auth session, chat AI, retrieval knowledge, dan dashboard admin.
 
-- auth session (cookie), role `admin` dan `user`
-- chat runtime via `laravel/ai` (non-stream + SSE streaming)
-- moderation, rate limit, dan idempotency
-- retrieval knowledge DEKA (PostgreSQL full-text + AI reranker)
-- dashboard admin: overview, token usage, feedback review, users, roles, activity log + export
+## Fitur Utama
+
+- Auth session cookie untuk role `user` dan `admin`.
+- Chat user dengan non-stream request dan SSE streaming.
+- Safety layer: moderation, output guard, rate limit, dan idempotency.
+- Knowledge DEKA berbasis PostgreSQL, full-text search, embedding, dan validasi versi knowledge.
+- Dashboard admin: overview, token usage, feedback review, users, roles, activity log, export PDF, dan export Excel.
+- Browser smoke test untuk login admin, dashboard activity log, export, dan admin blocking dari chat.
 
 ## Stack
 
-- Laravel + Inertia React (frontend di repo yang sama)
-- Database: PostgreSQL via Docker Compose
-- Runtime AI: Laravel AI SDK
+- Laravel 13, PHP `^8.3`
+- Inertia React, Vite, Tailwind CSS
+- PostgreSQL 17 + pgvector via Docker Compose
+- Laravel AI SDK
+- GitHub Actions untuk lint, static analysis, PHPUnit, build, dan browser smoke test
 
 ## Dokumentasi
 
 - [Setup Local](docs/setup-local.md)
 - [Frontend Chat API](docs/frontend-chat-api.md)
 - [Arsitektur Backend](docs/deka-chatbot-backend-architecture.md)
-- [Ringkasan Progres Backend](docs/backend-progress-summary.md)
-
-## Endpoint Utama
-
-Auth:
-
-- `GET /api/auth/csrf`
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-- `POST /api/auth/logout`
-
-Chat (role `user`, verified):
-
-- `GET /api/conversations`
-- `POST /api/conversations`
-- `POST /api/conversations/stream`
-- `GET /api/conversations/{conversation}`
-- `DELETE /api/conversations/{conversation}`
-- `POST /api/conversations/{conversation}/messages`
-- `POST /api/conversations/{conversation}/messages/stream`
-- `POST /api/conversations/{conversation}/messages/{message}/feedback`
-
-Admin (role `admin`, verified):
-
-- `GET /admin` → redirect ke `/admin/overview`
-- `GET /admin/{section}` section: `overview`, `token-usage`, `feedback-review`, `users`, `roles`, `activity-log`
-- `GET /admin/activity-log/items`
-- `GET /admin/activity-log/report` (export PDF / print)
-- `POST /admin/activity-log/export-log` (catat export Excel/PDF ke activity log)
-- CRUD Inertia form: `/admin/users`, `/admin/roles`
-- feedback review: status / solve / ignore
-
-UI:
-
-- welcome: `/`
-- login: `/login`
-- register: `/register`
-- chat user: `/chat` (hanya role `user`)
-- admin dashboard: `/admin/overview` (hanya role `admin`)
-
-Catatan akses:
-
-- admin **tidak** bisa mengakses `/chat` (403 `ADMIN_ACCESS_DENIED`)
-- user biasa **tidak** bisa mengakses `/admin/*` (redirect ke `/chat`)
+- [Workflow Backend-Frontend](docs/workflow-backend-frontend.md)
+- [Production Security Checklist](docs/production-security-checklist.md)
 
 ## Quick Start
 
-### 1. Nyalakan database
+Prasyarat:
+
+- Docker dan Docker Compose
+- PHP 8.3+
+- Composer
+- Node.js 22+ dan npm
+
+Jalankan PostgreSQL:
 
 ```bash
 docker compose up -d
 ```
 
-### 2. Setup app Laravel
+Install dan setup aplikasi:
 
 ```bash
 cp .env.example .env
@@ -88,9 +58,21 @@ npm run build
 php artisan serve
 ```
 
-### 3. Konfigurasi `.env`
+URL lokal:
 
-Minimal sesuaikan:
+- app: `http://127.0.0.1:8000`
+- login: `http://127.0.0.1:8000/login`
+- chat user: `http://127.0.0.1:8000/chat`
+- admin dashboard: `http://127.0.0.1:8000/admin/overview`
+
+Default admin dari seeder:
+
+- email: `admin@deka.dev`
+- password: `password`
+
+## Environment
+
+Database lokal mengikuti `docker-compose.yml`:
 
 ```env
 DB_CONNECTION=pgsql
@@ -99,19 +81,24 @@ DB_PORT=5433
 DB_DATABASE=chatbot_deka
 DB_USERNAME=chatbot_deka
 DB_PASSWORD=secret
-
-OPENAI_API_KEY=your-key
-OPENAI_URL=https://codex.deka.dev/v1
-
-AI_CHAT_PROVIDER=openai
-AI_CHAT_MODEL=gpt-5.4-mini
-AI_CHAT_MODERATION_ENABLED=true
-AI_CHAT_MODERATION_FAIL_CLOSED=true
-AI_CHAT_OUTPUT_MODERATION_ENABLED=true
-AI_CHAT_STREAM_SAFETY_MODE=buffered
 ```
 
-Untuk email production/staging:
+AI provider minimal:
+
+```env
+OPENAI_API_KEY=your-key
+OPENAI_URL=https://codex.deka.dev/v1
+AI_CHAT_PROVIDER=openai
+AI_CHAT_MODEL=gpt-5.4-mini
+```
+
+Untuk local development tanpa email real:
+
+```env
+MAIL_MAILER=log
+```
+
+Untuk production/staging dengan Resend:
 
 ```env
 MAIL_MAILER=resend
@@ -120,23 +107,79 @@ MAIL_FROM_NAME="Chatbot Deka"
 RESEND_API_KEY=your-resend-api-key
 ```
 
-Untuk local tanpa email real:
+Setelah mengubah `.env`, jalankan:
 
-```env
-MAIL_MAILER=log
+```bash
+php artisan optimize:clear
 ```
 
-## Akses Lokal
+## Akses dan Endpoint
 
-- app: `http://127.0.0.1:8000`
-- login: `http://127.0.0.1:8000/login`
-- chat user: `http://127.0.0.1:8000/chat`
-- admin: `http://127.0.0.1:8000/admin/overview`
+Aturan akses:
 
-## Akses melalui ngrok
+- `user` verified mengakses `/chat`.
+- `admin` verified mengakses `/admin/overview`.
+- Admin tidak boleh memakai halaman chat user.
+- User biasa diarahkan dari area admin ke `/chat`.
+- Auth API memakai session cookie dan CSRF, bukan bearer token.
 
-Untuk membagikan aplikasi tanpa hot reload, gunakan hasil build agar CSS/JS
-dilayani Laravel dari tunnel yang sama:
+Endpoint utama:
+
+- Auth: `GET /api/auth/csrf`, `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/logout`
+- Chat: `GET /api/conversations`, `POST /api/conversations`, `POST /api/conversations/stream`, `GET /api/conversations/{conversation}`, `POST /api/conversations/{conversation}/messages`, `POST /api/conversations/{conversation}/messages/stream`
+- Admin UI: `GET /admin`, `GET /admin/{section}`
+- Admin activity: `GET /admin/activity-log/items`, `GET /admin/activity-log/report`, `POST /admin/activity-log/export-log`
+
+Admin users/roles memakai Inertia form POST/PUT/DELETE dengan session dan CSRF. Jangan panggil endpoint CRUD admin sebagai JSON API murni tanpa session Inertia.
+
+## Testing
+
+Jalankan quality gate lokal:
+
+```bash
+composer test
+npm run lint:check
+npm run format:check
+npm run types:check
+npm run build
+```
+
+Browser smoke test membutuhkan aplikasi berjalan dan admin sudah diseed:
+
+```bash
+php artisan serve --host=127.0.0.1 --port=8000
+BASE_URL=http://127.0.0.1:8000 npm run test:e2e
+```
+
+GitHub Actions menjalankan:
+
+- `linter`: Pint, Prettier, ESLint
+- `tests`: build frontend, PHPStan, PHPUnit matrix PHP 8.3/8.4/8.5, dan browser smoke test
+
+## Knowledge DEKA
+
+Knowledge memakai dokumen berversi, chunks, ingestion runs, dan validation probes. Dokumen dapat berasal dari file PDF/teks atau crawl website. Chat hanya memakai versi aktif yang sudah lulus validasi.
+
+Contoh ingest file:
+
+```bash
+php artisan knowledge:ingest-file "storage/app/private/docs/DEKA Knowledge Base Draft Rekap.pdf" \
+    --title="DEKA Knowledge Base Draft Rekap" \
+    --source="file://DEKA Knowledge Base Draft Rekap.pdf" \
+    --priority=100
+```
+
+Contoh crawl:
+
+```bash
+php artisan knowledge:crawl --base=https://deka.dev --limit=50
+```
+
+Aktifkan crawl harian dengan `DEKA_KNOWLEDGE_SCHEDULED_CRAWL_ENABLED=true` dan pastikan Laravel scheduler berjalan.
+
+## Ngrok
+
+Untuk share aplikasi tanpa hot reload:
 
 ```bash
 npm run build
@@ -145,92 +188,19 @@ php artisan serve --host=0.0.0.0 --port=8000
 ngrok http 8000
 ```
 
-Set `APP_URL` di `.env` ke URL HTTPS ngrok, lalu jalankan
-`php artisan config:clear`. Jangan jalankan `npm run dev` pada mode ini karena
-file `public/hot` akan membuat browser publik mencoba mengambil aset dari Vite.
+Set `APP_URL` ke URL HTTPS ngrok, lalu jalankan `php artisan config:clear`.
 
-Untuk hot reload, Laravel dan Vite memerlukan tunnel masing-masing. Arahkan
-tunnel aplikasi ke port `8000` dan tunnel Vite ke port `5173`, lalu isi `.env`:
+Untuk hot reload, Laravel dan Vite butuh tunnel terpisah. Isi:
 
 ```env
 APP_URL=https://url-aplikasi.ngrok-free.app
 VITE_DEV_SERVER_URL=https://url-vite.ngrok-free.app
 ```
 
-Setelah kedua URL terisi, restart server dengan:
+Lalu restart:
 
 ```bash
 php artisan config:clear
 php artisan serve --host=0.0.0.0 --port=8000
 npm run dev
 ```
-
-Default admin dari seeder / `.env.example`:
-
-- email: `admin@deka.dev`
-- password: `password`
-
-## Catatan Frontend & CSRF
-
-- auth memakai **session cookie**, bukan bearer token
-- ambil `GET /api/auth/csrf` sebelum flow auth/API jika cookie XSRF belum ada
-- gunakan `role` dan `redirect_to` dari response auth
-- user biasa → `/chat` (atau `/email/verify` jika belum verified)
-- admin → `/admin`
-- kontrak chat: [Frontend Chat API](docs/frontend-chat-api.md)
-
-### Admin users/roles (bukan JSON API murni)
-
-Create/update/delete user & role memakai **Inertia form POST/PUT/DELETE** (session + CSRF cookie/`X-XSRF-TOKEN`), lalu `back()` + flash toast.
-
-Jangan memanggil endpoint admin CRUD sebagai pure JSON API tanpa session Inertia; request tanpa CSRF valid akan gagal (419 / redirect). UI admin sudah mengirim form lewat `useForm` Inertia.
-
-Field penting create user:
-
-- `name`, `email`, `role`, `password`, `password_confirmation`
-- `email_verified` (boolean) — wajib
-
-## Testing
-
-Feature/unit:
-
-```bash
-php artisan test --filter='ChatApiTest|AiRuntimeClientTest|AdminDashboardBackendTest'
-```
-
-Browser smoke (butuh app running di `http://127.0.0.1:8000`):
-
-```bash
-npm run test:e2e
-```
-
-## Knowledge DEKA
-
-Knowledge memakai dokumen berversi, chunks, dan ingestion runs. Dokumen diingest dari PDF/teks atau crawl website, lalu chat hanya mengambil versi aktif yang sudah lulus validasi.
-
-Konfigurasi standar memakai retrieval hybrid: PostgreSQL full-text menjaga exact match dan embedding Gemini menangani parafrasa semantik. Jika embedding sedang gagal, hybrid tetap dapat memakai full-text, tetapi versi baru tidak menggantikan versi aktif sebelum seluruh probe retrieval dan jawaban Gemini lulus.
-
-Akurasi jawaban tetap bergantung pada kelengkapan data aktif. Sebelum mengaktifkan knowledge di production, pastikan dokumen resmi sudah diingest, versi aktif punya chunk yang cukup, dan validasi/probe knowledge lulus. Dashboard admin menampilkan readiness knowledge secara konservatif agar sistem tidak terlihat siap ketika sumber datanya masih kurang.
-
-Fakta bisnis seperti alamat, kontak, nama tim, dan jam operasional harus berada di knowledge, bukan di prompt atau source code. File kurasi memiliki prioritas default `100`, sedangkan halaman website `50`; gunakan `--priority` untuk override dokumen tertentu.
-
-Contoh ingest:
-
-```bash
-php artisan knowledge:ingest-file "storage/app/private/docs/DEKA Knowledge Base Draft Rekap.pdf" \
-    --title="DEKA Knowledge Base Draft Rekap" \
-    --source="file://DEKA Knowledge Base Draft Rekap.pdf" \
-    --priority=100
-
-php artisan knowledge:crawl --base=https://deka.dev --limit=50
-```
-
-Setiap chunk yang berubah menghasilkan tiga probe (literal, parafrasa, dan bahasa percakapan). Output command menampilkan status versi dan hasil probe. Exit code gagal berarti versi kandidat disimpan sebagai `failed`; versi aktif sebelumnya tetap digunakan chatbot.
-
-Aktifkan crawl harian melalui `DEKA_KNOWLEDGE_SCHEDULED_CRAWL_ENABLED=true` dan pastikan Laravel scheduler berjalan. Kualitas pemahaman typo dan konteks dapat diperiksa tanpa memanggil provider:
-
-```bash
-php artisan chat:eval --skip-retrieval
-```
-
-Jalankan tanpa `--skip-retrieval` setelah knowledge terisi untuk ikut mengukur retrieval cases yang ditandai pada dataset.

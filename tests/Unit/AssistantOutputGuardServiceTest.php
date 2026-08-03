@@ -39,6 +39,16 @@ class AssistantOutputGuardServiceTest extends TestCase
         }
     }
 
+    public function test_reply_containing_prompt_leakage_is_replaced_with_safe_fallback(): void
+    {
+        $guard = app(AssistantOutputGuardService::class);
+
+        $this->assertSame(
+            $guard->safeFallbackAnswer(),
+            $guard->guard('2-4 sentences or short bullets? Yes (bullets allowed for contact/address questions).'),
+        );
+    }
+
     public function test_output_moderation_blocks_flagged_reply_when_enabled(): void
     {
         config()->set('services.ai_chat.moderation_enabled', true);

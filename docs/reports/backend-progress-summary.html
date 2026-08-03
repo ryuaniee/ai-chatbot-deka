@@ -173,7 +173,7 @@
 <body>
     <section class="page cover">
         <h1>Laporan Progress Backend<br>Chatbot Deka</h1>
-        <p class="subtitle">Pembaruan Dokumen Berdasarkan Implementasi Backend yang Tersedia pada Repository Aktif per 22 Juli 2026</p>
+        <p class="subtitle">Pembaruan Dokumen Berdasarkan Implementasi Backend yang Tersedia pada Repository Aktif per 3 Agustus 2026</p>
 
         <div class="meta">
             <p><strong>Jenis dokumen:</strong> Ringkasan progress backend menyeluruh</p>
@@ -195,8 +195,9 @@
             <h2>Ringkasan Status Akhir</h2>
             <ul>
                 <li>Autentikasi pengguna telah mendukung register, login, logout, pemeriksaan sesi, verifikasi email, reset password, dan Google OAuth.</li>
-                <li>Alur chat telah mendukung pembuatan percakapan, penyimpanan message, balasan JSON, serta balasan streaming berbasis Server-Sent Events.</li>
-                <li>Runtime AI telah mencakup pembuatan jawaban, moderasi konten, pembuatan judul percakapan, perencanaan intent knowledge, penulisan query knowledge, dan perbaikan jawaban dari feedback dislike.</li>
+                <li>Alur chat telah mendukung pembuatan percakapan, penyimpanan message, balasan JSON, serta Server-Sent Events; provider yang tidak mendukung stream native, termasuk Gemini, memakai respons final non-stream dalam kontrak SSE yang sama.</li>
+                <li>Runtime AI telah mencakup pembuatan jawaban, moderasi konten, pembuatan judul percakapan, perencanaan intent knowledge, penulisan query knowledge, perbaikan jawaban dari feedback dislike, dan konfigurasi model Gemini.</li>
+                <li>Guardrail output memblokir marker internal dan pola kebocoran instruksi prompt sebelum jawaban dikirim ke pengguna.</li>
                 <li>Knowledge base telah memiliki skema dokumen, chunk, ingestion run, proses ingest file dan crawl website, serta retrieval dengan mode <span class="mono">pgvector</span> maupun <span class="mono">fulltext</span>.</li>
                 <li>Fitur feedback sudah tersimpan per pesan assistant dan telah terhubung ke alur review admin, keputusan solve atau ignore, serta rekomendasi improvement berbasis AI.</li>
                 <li>Backend admin telah mencakup dashboard ringkasan, statistik token, tren chat, grafik feedback, daftar pengguna, daftar role, dan log aktivitas admin.</li>
@@ -256,8 +257,13 @@
                     </tr>
                     <tr>
                         <td>22 Juli 2026</td>
-                        <td>Kondisi repository saat ini</td>
+                        <td>Integrasi backend</td>
                         <td>Backend telah terintegrasi ke dashboard admin, alur RAG, feedback review, serta pengujian fitur utama yang mewakili operasi backend inti.</td>
+                    </tr>
+                    <tr>
+                        <td>3 Agustus 2026</td>
+                        <td>Kompatibilitas runtime dan guardrail</td>
+                        <td>Konfigurasi contoh menyediakan model Gemini. Request SSE saat provider Gemini dipakai diselesaikan melalui respons non-stream agar alur chat tetap stabil, dan guardrail output diperluas untuk menahan kebocoran scaffolding prompt.</td>
                     </tr>
                 </tbody>
             </table>
@@ -358,7 +364,7 @@
                         <tr>
                             <td>Autentikasi dan sesi</td>
                             <td>Selesai dan aktif</td>
-                            <td>Register, login, logout, <span class="mono">me</span>, CSRF endpoint, verifikasi email, reset password, dan 2FA sudah tersedia pada backend.</td>
+                            <td>Register, login, logout, <span class="mono">me</span>, CSRF endpoint, verifikasi email, reset password, dan Google OAuth sudah tersedia pada backend.</td>
                         </tr>
                         <tr>
                             <td>Conversation API</td>
@@ -368,12 +374,12 @@
                         <tr>
                             <td>Streaming SSE</td>
                             <td>Selesai dan aktif</td>
-                            <td>Balasan assistant dapat dikirim bertahap melalui endpoint stream untuk percakapan baru maupun percakapan berjalan.</td>
+                            <td>Endpoint stream tersedia untuk percakapan baru maupun berjalan. Provider yang mendukung stream dapat mengirim delta; Gemini dikembalikan sebagai respons final non-stream melalui SSE.</td>
                         </tr>
                         <tr>
                             <td>Moderasi dan idempotency</td>
                             <td>Selesai dan aktif</td>
-                            <td>Backend sudah memoderasi input user, mencegah duplikasi request dengan <span class="mono">idempotency key</span>, dan memberi fallback saat provider gagal.</td>
+                            <td>Backend memoderasi input user, mencegah duplikasi request dengan <span class="mono">idempotency key</span>, memberi fallback saat provider gagal, dan menyaring kebocoran marker atau instruksi internal dari output assistant.</td>
                         </tr>
                         <tr>
                             <td>Knowledge base RAG</td>
@@ -418,7 +424,7 @@
 
         <h3>3. Runtime AI</h3>
         <p>
-            Runtime AI dipusatkan pada <span class="mono">AiRuntimeClient</span> yang menangani reply chat, streaming, moderasi, pembuatan judul, perencanaan intent knowledge, penulisan query knowledge, reranking kandidat knowledge, dan pembuatan usulan improvement dari feedback dislike. Pola ini menunjukkan backend sudah memakai pemisahan tanggung jawab yang cukup baik, karena controller tidak berhubungan langsung dengan detail provider AI.
+            Runtime AI dipusatkan pada <span class="mono">AiRuntimeClient</span> yang menangani reply chat, streaming, moderasi, pembuatan judul, perencanaan intent knowledge, penulisan query knowledge, reranking kandidat knowledge, dan pembuatan usulan improvement dari feedback dislike. Konfigurasi contoh kini menyediakan model Gemini. Saat provider Gemini dipakai, request ke endpoint stream diselesaikan sebagai respons final non-stream agar kontrak SSE tetap konsisten tanpa bergantung pada stream native provider. Pola ini menunjukkan backend sudah memakai pemisahan tanggung jawab yang cukup baik, karena controller tidak berhubungan langsung dengan detail provider AI.
         </p>
 
         <h3>4. Knowledge Base dan RAG</h3>
@@ -545,7 +551,7 @@
                     </tr>
                     <tr>
                         <td><span class="mono">tests/Feature/ChatApiTest.php</span></td>
-                        <td>Memverifikasi alur endpoint percakapan dan message pada sisi pengguna.</td>
+                        <td>Memverifikasi alur endpoint percakapan dan message pada sisi pengguna, termasuk guardrail output dan fallback respons non-stream saat provider Gemini menerima request SSE.</td>
                     </tr>
                     <tr>
                         <td><span class="mono">tests/Feature/AdminDashboardBackendTest.php</span></td>
@@ -559,6 +565,10 @@
                         <td><span class="mono">tests/Unit/AiRuntimeClientTest.php</span></td>
                         <td>Memverifikasi perilaku unit pada runtime AI dan penanganan data hasil agent.</td>
                     </tr>
+                    <tr>
+                        <td><span class="mono">tests/Unit/AssistantOutputGuardServiceTest.php</span></td>
+                        <td>Memverifikasi bahwa marker internal dan pola kebocoran instruksi prompt diganti dengan jawaban fallback yang aman.</td>
+                    </tr>
                 </tbody>
             </table>
         </div>
@@ -566,7 +576,7 @@
         <div class="section">
             <h2>Kesimpulan</h2>
             <p>
-                Berdasarkan kondisi repository per 22 Juli 2026, backend Chatbot Deka telah mencapai progress yang signifikan dan telah melampaui tahap fondasi. Sistem sudah memiliki autentikasi yang lengkap, penyimpanan percakapan, integrasi runtime AI, alur streaming, knowledge base RAG, feedback review, dashboard admin, audit log, dan manajemen role berbasis tabel khusus. Dengan demikian, backend saat ini dapat dinilai telah memasuki tahap implementasi operasional inti dengan beberapa area lanjutan yang masih dapat diperkuat, terutama pada pengayaan aturan per-permission dan perluasan cakupan pengujian lanjutan.
+                Berdasarkan kondisi repository per 3 Agustus 2026, backend Chatbot Deka telah mencapai progress yang signifikan dan telah melampaui tahap fondasi. Sistem sudah memiliki autentikasi yang lengkap, penyimpanan percakapan, integrasi runtime AI, alur streaming dengan fallback kompatibilitas Gemini, knowledge base RAG, feedback review, dashboard admin, audit log, guardrail output, dan manajemen role berbasis tabel khusus. Dengan demikian, backend saat ini dapat dinilai telah memasuki tahap implementasi operasional inti dengan beberapa area lanjutan yang masih dapat diperkuat, terutama pada pengayaan aturan per-permission dan perluasan cakupan pengujian lanjutan.
         </p>
         <p>
             Dokumen ini dapat dipakai sebagai ringkasan resmi progress backend terkini karena seluruh poin utamanya disusun dari artefak implementasi yang tersedia langsung pada kode sumber aktif project.

@@ -592,7 +592,7 @@ class AiRuntimeClient
     private function streamWithCurl(array $messages): StreamableAgentResponse
     {
         $invocationId = (string) Str::uuid();
-        $model = $this->nullableString(config('services.ai_chat.model')) ?? 'gpt-4o-mini';
+        $model = $this->nullableString(config('services.ai_chat.model')) ?? 'gemini-2.5-flash';
 
         return new StreamableAgentResponse(
             $invocationId,
