@@ -9,8 +9,10 @@ Backend utama sudah bisa dipakai untuk alur chat dan sudah mulai masuk tahap kno
 - auth user, login, logout, cek sesi, dan halaman chat
 - conversation dan message tersimpan di PostgreSQL
 - assistant reply dibuat lewat runtime AI Laravel
-- chat berjalan lewat response JSON dan streaming SSE
+- chat berjalan lewat response JSON dan streaming SSE; untuk provider Gemini, endpoint SSE mengirim respons final non-stream agar alur tetap stabil
 - moderation, throttle, idempotency, ownership check, dan error mapping sudah aktif
+- guardrail output memblokir marker internal dan pola kebocoran instruksi prompt sebelum respons dikirim ke user
+- konfigurasi contoh runtime AI menyediakan model Gemini; fallback model stream juga menggunakan `gemini-2.5-flash`
 - manajemen role backend sudah memakai tabel `roles` tersendiri dan tidak lagi hanya bergantung pada default string role di `users`
 - CRUD role admin sudah tersedia untuk tambah, ubah, dan hapus role melalui route admin terproteksi
 - assignment role pada CRUD pengguna sekarang tervalidasi ke tabel `roles`
@@ -30,7 +32,7 @@ Progress backend dikerjakan bertahap dari fondasi aplikasi sampai persiapan know
 | Auth | Session auth API untuk register, login, logout, cek user, dan Google OAuth |
 | Role | Tabel `roles`, seed role bawaan, CRUD role admin, dan validasi assignment role pada user |
 | Chat | Tabel conversation/message, endpoint chat JSON, endpoint streaming SSE, dan idempotency |
-| Runtime AI | Integrasi Laravel AI SDK untuk reply, moderation, title agent, provider config, dan error mapping |
+| Runtime AI | Integrasi Laravel AI SDK untuk reply, moderation, title agent, konfigurasi Gemini, fallback streaming, dan error mapping |
 | Knowledge RAG | Reset knowledge lama, persiapan pgvector, ingestion file/website, retrieval pgvector/full-text, dan test RAG |
 
 ## Arsitektur Saat Ini
@@ -62,9 +64,10 @@ Alur chat streaming:
 
 1. User mengirim pesan melalui endpoint streaming.
 2. Backend menyimpan user message dan mengambil context knowledge.
-3. Runtime AI mengirim balasan secara bertahap melalui SSE.
-4. Frontend menerima event `conversation_started`, `text_delta`, dan `message_complete`.
-5. Setelah stream selesai, backend menyimpan final assistant message beserta metadata.
+3. Untuk provider yang mendukung stream, runtime AI mengirim balasan secara bertahap melalui SSE.
+4. Bila provider adalah Gemini, backend menyiapkan respons final non-stream lalu tetap mengirimkannya dalam kontrak SSE.
+5. Frontend menerima event `conversation_started`, `text_delta` bila ada stream native, dan `message_complete`.
+6. Setelah respons selesai, backend menyimpan final assistant message beserta metadata.
 
 ## Komponen Backend
 
@@ -159,6 +162,8 @@ Catatan perubahan terbaru:
 - context knowledge sekarang masuk sebagai message tambahan `DEKA_KNOWLEDGE_CONTEXT`
 - prompt agent diarahkan untuk menjawab fakta Deka hanya dari context tersebut
 - kalau context tidak cukup, agent diminta mengikuti fallback wording yang diberikan service
+- konfigurasi contoh menyediakan model `gemini-2.5-flash`; saat provider Gemini dipilih, request stream tidak memaksa stream native
+- `AssistantOutputGuardService` juga mendeteksi pola kebocoran scaffolding prompt seperti aturan panjang jawaban dan instruksi bullet, lalu mengembalikan fallback aman
 
 ## Knowledge Base dan RAG
 
@@ -306,12 +311,14 @@ Lingkup test yang sudah ada:
 - send message JSON
 - stream first message
 - stream message lanjutan
+- request SSE dengan provider Gemini menggunakan respons final non-stream dan tetap mengirim event `message_complete`
 - moderation blocked message
 - idempotency replay
 - idempotency conflict
 - retry failure behavior
 - runtime AI error mapping
 - unit test `AiRuntimeClient`
+- unit test guardrail untuk marker internal dan kebocoran instruksi prompt
 - ingest knowledge menjadi document dan chunk
 - retrieval `pgvector` di atas threshold
 - retrieval `pgvector` di bawah threshold

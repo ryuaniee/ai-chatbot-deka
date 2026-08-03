@@ -454,7 +454,7 @@ class ConversationChatService
             ];
         }
 
-        if (! (bool) config('services.ai_chat.streaming_enabled', true)) {
+        if (! $this->shouldUseStreamingResponses()) {
             return $this->prepareNonStreamAssistantReply($conversation, $user, $userMessage, $state);
         }
 
@@ -712,6 +712,21 @@ class ConversationChatService
             'pending_stream' => false,
             'user' => $user,
         ];
+    }
+
+    private function shouldUseStreamingResponses(): bool
+    {
+        if (! (bool) config('services.ai_chat.streaming_enabled', true)) {
+            return false;
+        }
+
+        $provider = strtolower(trim((string) config('services.ai_chat.provider', '')));
+
+        if ($provider === 'gemini') {
+            return false;
+        }
+
+        return true;
     }
 
     private function persistUserMessage(

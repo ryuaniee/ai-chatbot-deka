@@ -16,6 +16,11 @@ class AssistantOutputGuardService
         'END_DEKA_CANDIDATES',
         'BEGIN_FEEDBACK_IMPROVEMENTS',
         'END_FEEDBACK_IMPROVEMENTS',
+        '2-4 sentences',
+        'short bullets',
+        'bullets allowed for contact',
+        'answer length',
+        'contact/address questions',
     ];
 
     public function __construct(
