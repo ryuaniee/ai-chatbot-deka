@@ -84,7 +84,20 @@ class AiRuntimeClient
     {
         [$history, $prompt] = $this->splitConversationContext($messages);
 
-        if ((bool) config('services.ai_chat.curl_streaming_enabled', false)) {
+        if (
+            strtolower((string) config('services.ai_chat.provider')) === 'gemini'
+            && (bool) config('services.ai_chat.curl_streaming_enabled', false)
+        ) {
+            return $this->streamWithGeminiCurl([...$history, ['role' => 'user', 'content' => $prompt]]);
+        }
+
+        // The Laravel AI gateway has a native Gemini SSE implementation
+        // (models/{model}:streamGenerateContent). The custom cURL path uses
+        // the OpenAI /responses protocol and must not be used for Gemini.
+        if (
+            (bool) config('services.ai_chat.curl_streaming_enabled', false)
+            && strtolower((string) config('services.ai_chat.provider')) !== 'gemini'
+        ) {
             return $this->streamWithCurl([...$history, ['role' => 'user', 'content' => $prompt]]);
         }
 
@@ -601,6 +614,56 @@ class AiRuntimeClient
             },
             new Meta('openai', $model),
         );
+    }
+
+    private function streamWithGeminiCurl(array $messages): StreamableAgentResponse
+    {
+        $invocationId = (string) Str::uuid();
+        $model = $this->nullableString(config('services.ai_chat.model')) ?? 'gemini-2.5-flash';
+
+        return new StreamableAgentResponse($invocationId, function () use ($invocationId, $messages, $model) {
+            yield from $this->geminiCurlEvents($invocationId, $messages, $model);
+        }, new Meta('gemini', $model));
+    }
+
+    private function geminiCurlEvents(string $invocationId, array $messages, string $model): \Generator
+    {
+        $url = rtrim((string) config('ai.providers.gemini.url'), '/').'/models/'.rawurlencode($model).':streamGenerateContent?alt=sse';
+        $key = (string) config('ai.providers.gemini.key');
+        $contents = array_map(static fn (array $message): array => [
+            'role' => $message['role'] === 'assistant' ? 'model' : 'user',
+            'parts' => [['text' => $message['content']]],
+        ], $messages);
+        $body = json_encode([
+            'contents' => $contents,
+            'system_instruction' => ['parts' => [['text' => (string) ConversationReplyAgent::make()->instructions()]]],
+            'generationConfig' => ['maxOutputTokens' => ConversationReplyAgent::make()->maxTokens()],
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        $messageId = (string) Str::uuid();
+        $started = false;
+        $buffer = '';
+        $queue = [];
+        $parse = function (string $chunk) use (&$buffer, &$queue, &$started, $messageId, $invocationId, $model): void {
+            $buffer .= str_replace("\r\n", "\n", $chunk);
+            while (($pos = strpos($buffer, "\n\n")) !== false) {
+                $event = substr($buffer, 0, $pos); $buffer = substr($buffer, $pos + 2);
+                $json = '';
+                foreach (explode("\n", $event) as $line) if (str_starts_with($line, 'data:')) $json .= ltrim(substr($line, 5));
+                $data = json_decode(trim($json), true);
+                $text = (string) data_get($data, 'candidates.0.content.parts.0.text', '');
+                if ($text !== '') {
+                    if (! $started) { $started = true; $queue[] = (new TextStart((string) Str::uuid(), $messageId, time()))->withInvocationId($invocationId); }
+                    $queue[] = (new TextDelta((string) Str::uuid(), $messageId, $text, time()))->withInvocationId($invocationId);
+                }
+            }
+        };
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_HTTPHEADER => ['x-goog-api-key: '.$key, 'Content-Type: application/json', 'Accept: text/event-stream'], CURLOPT_POSTFIELDS => $body, CURLOPT_TIMEOUT => $this->timeout(), CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use ($parse): int { $parse($chunk); return strlen($chunk); }]);
+        $mh = curl_multi_init(); curl_multi_add_handle($mh, $ch);
+        do { do { $status = curl_multi_exec($mh, $running); } while ($status === CURLM_CALL_MULTI_PERFORM); while ($queue !== []) yield array_shift($queue); if ($running) curl_multi_select($mh, 0.2); } while ($running && $status === CURLM_OK);
+        if (curl_errno($ch) || curl_getinfo($ch, CURLINFO_RESPONSE_CODE) >= 400) throw AiRuntimeException::unavailable(curl_error($ch) ?: 'Gemini streaming request failed.');
+        if ($started) { yield (new TextEnd((string) Str::uuid(), $messageId, time()))->withInvocationId($invocationId); yield (new StreamEnd((string) Str::uuid(), 'stop', new Usage, time()))->withInvocationId($invocationId); }
+        curl_multi_remove_handle($mh, $ch); curl_multi_close($mh); curl_close($ch);
     }
 
     /**

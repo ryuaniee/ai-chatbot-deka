@@ -4,6 +4,7 @@ namespace App\Services\Knowledge;
 
 use App\Models\KnowledgeChunk;
 use App\Models\KnowledgeDocument;
+use App\Models\KnowledgeDocumentVersion;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
@@ -80,7 +81,8 @@ class KnowledgeRetriever
             return $this->emptyEnabledResult($diagnostics);
         }
 
-        $context = collect($chunks)
+        $catalogList = $this->catalogListForRequestedProductCount($query, $alternateQueries, $chunks, $versionIds);
+        $context = $catalogList.collect($chunks)
             ->map(function (array $chunk, int $index): string {
                 $candidateNumber = $index + 1;
                 $title = $chunk['title'] ?: 'Deka Knowledge';
@@ -115,6 +117,101 @@ class KnowledgeRetriever
             ),
             'diagnostics' => $diagnostics,
         ];
+    }
+
+    /**
+     * Product details are deliberately chunked for prices and variants. For a numbered
+     * catalogue request, compact their headings back into one list before model context.
+     * This also supports catalogues ingested before the separate catalogue-index document.
+     *
+     * @param  array<int, string>  $alternateQueries
+     * @param  array<int, array<string, mixed>>  $chunks
+     * @param  array<int, int>  $versionIds
+     */
+    private function catalogListForRequestedProductCount(string $query, array $alternateQueries, array $chunks, array $versionIds): string
+    {
+        $requestedCount = $this->requestedProductCount($query, $alternateQueries);
+
+        if ($requestedCount === null) {
+            return '';
+        }
+
+        // A catalogue list request must not depend on the small, ranked candidate
+        // window: the index document may rank below product-detail chunks.
+        $documentIds = KnowledgeDocument::query()
+            ->where('source_type', 'inaproc')
+            ->where('status', KnowledgeDocumentVersion::STATUS_ACTIVE)
+            ->pluck('id');
+
+        if ($documentIds->isEmpty()) {
+            $documentIds = collect($chunks)
+                ->pluck('document_id')
+                ->filter()
+                ->unique()
+                ->values();
+        }
+
+        if ($documentIds->isEmpty()) {
+            return '';
+        }
+
+        $catalogChunks = KnowledgeChunk::query()
+            ->with('document')
+            ->whereIn('knowledge_document_id', $documentIds)
+            ->when(
+                $versionIds !== [],
+                fn ($builder) => $builder->whereIn('knowledge_document_version_id', $versionIds),
+                fn ($builder) => $builder->whereHas('version', fn ($version) => $version->where('status', 'active')),
+            )
+            ->whereHas('document', fn ($document) => $document->where('source_type', 'inaproc'))
+            ->orderBy('knowledge_document_id')
+            ->orderBy('chunk_index')
+            ->get();
+
+        $products = [];
+
+        foreach ($catalogChunks as $catalogChunk) {
+            preg_match_all('/^(?:##\s+)?(\d{1,3})\.\s+(.+?)(?:\s+\|\s+URL:\s+.*)?$/mu', $catalogChunk->content, $matches, PREG_SET_ORDER);
+
+            foreach ($matches as $match) {
+                $number = (int) $match[1];
+                $name = trim($match[2]);
+
+                if ($number < 1 || $name === '' || isset($products[$number])) {
+                    continue;
+                }
+
+                $products[$number] = $name;
+            }
+        }
+
+        if (count($products) < $requestedCount) {
+            return '';
+        }
+
+        ksort($products);
+        $list = collect($products)
+            ->take($requestedCount)
+            ->map(static fn (string $name, int $number): string => "{$number}. {$name}")
+            ->implode("\n");
+
+        return "DAFTAR PRODUK INAPROC LENGKAP UNTUK PERMINTAAN USER:\n"
+            ."User meminta tepat {$requestedCount} produk. Jawab dengan tepat {$requestedCount} nama berbeda berikut, tanpa menyatakan data kurang.\n"
+            .$list."\n\n";
+    }
+
+    /**
+     * @param  array<int, string>  $alternateQueries
+     */
+    private function requestedProductCount(string $query, array $alternateQueries): ?int
+    {
+        $queries = implode(' ', [$query, ...$alternateQueries]);
+
+        if (preg_match('/\b([1-9]\d?)\s+(?:nama\s+)?(?:produk|katalog)\b/iu', $queries, $matches) !== 1) {
+            return null;
+        }
+
+        return (int) $matches[1];
     }
 
     /**
