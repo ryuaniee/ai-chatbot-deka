@@ -1313,8 +1313,9 @@ class ConversationChatService
         if ($this->questionContainsAnyTerm($query, ['produk', 'produknya', 'katalog', 'inaproc', 'harga'])) {
             $intents[] = [
                 'intent' => 'company_products',
-                'question' => 'produk DEKA di INAPROC Katalog Elektronik',
+                'question' => $question,
                 'queries' => [
+                    $question,
                     'Produk DEKA di INAPROC Katalog Elektronik',
                     'produk DEKA INAPROC',
                     'daftar produk DEKA di INAPROC',
@@ -1575,7 +1576,7 @@ class ConversationChatService
             ? 'Jika user menanyakan satu nama atau satu role/jabatan tertentu di DEKA, jawab langsung hanya orang dan jabatan yang cocok dari kandidat. Jika user meminta struktur, daftar, atau siapa saja anggota tim, sebutkan semua nama dan jabatan yang tersedia. Jangan mengatakan informasi tim belum tersedia ketika kandidat memuat jawabannya. Jika user menegaskan bahwa daftar sebelumnya adalah tim DEKA, akui secara singkat dan konsisten dengan fakta yang sudah tersedia. '
             : '';
         $productPrecisionInstruction = str_contains($retrieval['context'], 'INTENT: company_products')
-            ? 'Jika user menanyakan produk, daftar produk, produk lain, katalog, INAPROC, atau harga produk DEKA, prioritaskan kandidat berjudul "Produk DEKA di INAPROC Katalog Elektronik" dan sebutkan nama produk yang tersedia dari kandidat. Jangan mengganti jawaban produk katalog menjadi kategori layanan umum jika kandidat produk INAPROC tersedia. Jika user meminta produk lain setelah daftar sebelumnya, berikan nama produk tambahan dari kandidat dan jangan hanya mengarahkan user ke URL katalog. '
+            ? 'Jika user menanyakan produk, daftar produk, produk lain, katalog, INAPROC, atau harga produk DEKA, prioritaskan kandidat berjudul "Indeks Produk DEKA di INAPROC Katalog Elektronik" untuk permintaan daftar dan kandidat "Produk DEKA di INAPROC Katalog Elektronik" untuk detail produk. Sebutkan nama produk yang tersedia dari kandidat. Bila user menyebut jumlah pasti, misalnya 10 produk, berikan tepat sejumlah itu dengan nama yang berbeda selama indeks memuat cukup entri; jangan menyatakan data belum lengkap atau hanya memberi sebagian contoh. Jangan mengganti jawaban produk katalog menjadi kategori layanan umum jika kandidat produk INAPROC tersedia. Jika user meminta produk lain setelah daftar sebelumnya, berikan nama produk tambahan dari kandidat dan jangan hanya mengarahkan user ke URL katalog. '
             : '';
 
         return "DEKA_KNOWLEDGE_CANDIDATES_UNTRUSTED_DATA:\n"

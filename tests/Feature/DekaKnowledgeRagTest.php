@@ -153,6 +153,32 @@ class DekaKnowledgeRagTest extends TestCase
         $this->assertSame([], $result['sources']);
     }
 
+    public function test_compact_inaproc_catalog_index_keeps_an_exact_product_list_in_one_retrievable_context(): void
+    {
+        $this->configureKnowledge();
+        config()->set('services.deka_knowledge.retrieval_mode', 'fulltext');
+        Embeddings::fake()->preventStrayEmbeddings();
+
+        $products = collect(range(1, 10))
+            ->map(fn (int $number): string => "{$number}. Produk DEKA {$number} | URL: https://katalog.inaproc.id/deka/produk-{$number}")
+            ->implode("\n");
+
+        app(KnowledgeIngestor::class)->ingestText(
+            sourceType: 'inaproc',
+            sourceUri: 'https://katalog.inaproc.id/deka/catalog-index',
+            content: "# Indeks Produk DEKA di INAPROC Katalog Elektronik\n\nTotal produk tersimpan: 10\n\nDaftar lengkap produk:\n{$products}",
+            title: 'Indeks Produk DEKA di INAPROC Katalog Elektronik',
+            metadata: ['source_priority' => 121, 'document_kind' => 'catalog_index'],
+        );
+
+        $result = app(KnowledgeRetriever::class)->retrieve('sebutkan tepat 10 produk DEKA di INAPROC');
+
+        $this->assertTrue($result['in_context']);
+        $this->assertStringContainsString('1. Produk DEKA 1', $result['context']);
+        $this->assertStringContainsString('10. Produk DEKA 10', $result['context']);
+        $this->assertSame('https://katalog.inaproc.id/deka/catalog-index', $result['sources'][0]['source_uri']);
+    }
+
     public function test_fulltext_fallback_keeps_specific_fact_among_broad_rewritten_queries(): void
     {
         $this->configureKnowledge();

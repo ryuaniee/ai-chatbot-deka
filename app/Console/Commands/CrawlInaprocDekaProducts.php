@@ -91,6 +91,7 @@ class CrawlInaprocDekaProducts extends Command
             }
 
             $products = array_values($products);
+            $catalogIndex = $this->formatCatalogIndexContent($products, $sourceUri, $total);
             $content = $this->formatProductsContent($products, $sourceUri, $total);
 
             if ((bool) $this->option('dry-run')) {
@@ -111,6 +112,24 @@ class CrawlInaprocDekaProducts extends Command
                 return self::SUCCESS;
             }
 
+            // Keep an intentionally compact index separate from product details. A list request
+            // can then retrieve the complete catalogue without losing entries to chunk ranking.
+            $indexStored = $ingestor->ingestText(
+                sourceType: 'inaproc',
+                sourceUri: "{$sourceUri}/catalog-index",
+                content: $catalogIndex,
+                title: 'Indeks Produk DEKA di INAPROC Katalog Elektronik',
+                canonicalUri: $sourceUri,
+                metadata: [
+                    'seller_id' => $sellerId,
+                    'seller_slug' => $sellerSlug,
+                    'product_count' => count($products),
+                    'reported_total' => $total,
+                    'document_kind' => 'catalog_index',
+                    'source_priority' => max(0, (int) $this->option('priority')) + 1,
+                ],
+            );
+
             $stored = $ingestor->ingestText(
                 sourceType: 'inaproc',
                 sourceUri: $sourceUri,
@@ -126,26 +145,28 @@ class CrawlInaprocDekaProducts extends Command
                 ],
             );
 
-            if (($stored['status'] ?? null) === 'failed') {
+            if (($indexStored['status'] ?? null) === 'failed' || ($stored['status'] ?? null) === 'failed') {
                 throw new RuntimeException('Knowledge validation failed for INAPROC products; previous active version remains in use.');
             }
 
             $run->forceFill([
                 'status' => 'completed',
                 'pages_seen' => $pagesFetched,
-                'documents_stored' => 1,
-                'chunks_stored' => $stored['chunks_stored'],
+                'documents_stored' => 2,
+                'chunks_stored' => $indexStored['chunks_stored'] + $stored['chunks_stored'],
                 'finished_at' => now(),
                 'metadata' => ($run->metadata ?? []) + [
                     'document_id' => $stored['document_id'],
                     'version_id' => $stored['version_id'],
+                    'catalog_index_document_id' => $indexStored['document_id'],
+                    'catalog_index_version_id' => $indexStored['version_id'],
                     'products_seen' => count($products),
                     'reported_total' => $total,
                     'validation' => $stored['validation'],
                 ],
             ])->save();
 
-            $this->info('Stored '.count($products)." products from {$sourceUri} ({$stored['chunks_stored']} chunks).");
+            $this->info('Stored '.count($products)." products from {$sourceUri} (".($indexStored['chunks_stored'] + $stored['chunks_stored']).' chunks).');
 
             return self::SUCCESS;
         } catch (Throwable $exception) {
@@ -328,6 +349,31 @@ GRAPHQL;
             $lines[] = 'Gambar: '.$this->formatImages((array) ($product['images'] ?? []));
             $lines[] = 'Varian: '.$this->formatVariants((array) ($product['variants'] ?? []));
             $lines[] = '';
+        }
+
+        return implode("\n", $lines);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $products
+     */
+    private function formatCatalogIndexContent(array $products, string $sourceUri, ?int $reportedTotal): string
+    {
+        $lines = [
+            '# Indeks Produk DEKA di INAPROC Katalog Elektronik',
+            '',
+            "Sumber: {$sourceUri}",
+            'Total produk menurut INAPROC: '.($reportedTotal ?? count($products)),
+            'Total produk tersimpan: '.count($products),
+            '',
+            'Daftar lengkap produk:',
+        ];
+
+        foreach ($products as $index => $product) {
+            $number = $index + 1;
+            $name = trim((string) ($product['name'] ?? 'Produk tanpa nama'));
+
+            $lines[] = "{$number}. {$name} | URL: ".$this->productUrl($product);
         }
 
         return implode("\n", $lines);
