@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Chatbot Deka
 
 [![tests](https://github.com/darksoul729/chatbot-deka/actions/workflows/tests.yml/badge.svg)](https://github.com/darksoul729/chatbot-deka/actions/workflows/tests.yml)
@@ -204,3 +205,6 @@ php artisan config:clear
 php artisan serve --host=0.0.0.0 --port=8000
 npm run dev
 ```
+=======
+# ai-chatbot-deka
+>>>>>>> a1e92d37bf1842959811a06ba8b2a340193eabee
